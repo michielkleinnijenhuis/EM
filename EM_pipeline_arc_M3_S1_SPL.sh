@@ -38,3 +38,23 @@ sed "s?DATADIR?$datadir?g" \
     > $datadir/EM_tiles2tif_submit.sh
 
 qsub $datadir/EM_tiles2tif_submit.sh
+
+###======================###
+### stitch slice montage ###
+###======================###
+
+mkdir -p $datadir/stitched
+
+sed "s?INPUTDIR?$datadir/tifs?;\
+    s?OUTPUTDIR?$datadir/stitched?;\
+    s?Z_START?$z?;\
+    s?Z_END?$Z?g" \
+    $scriptdir/EM_montage2stitched.py \
+    > $datadir/EM_montage2stitched.py
+
+sed "s?DATADIR?$datadir?g" \
+    $scriptdir/EM_montage2stitched_submit.sh \
+    > $datadir/EM_montage2stitched_submit.sh
+
+qsub $datadir/EM_montage2stitched_submit.sh
+
