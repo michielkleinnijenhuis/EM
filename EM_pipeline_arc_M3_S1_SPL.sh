@@ -8,7 +8,7 @@ ssh -Y ndcn0180@arcus.oerc.ox.ac.uk
 ### prepare environment ###
 ###=====================###
 
-scriptdir=/home/ndcn-fmrib-water-brain/ndcn0180/workspace/EMseg
+scriptdir=/home/ndcn-fmrib-water-brain/ndcn0180/workspace/EM
 oddir=/data/ndcn-fmrib-water-brain/ndcn0180/EM/M3/17Feb15/montage/Montage_
 datadir=/data/ndcn-fmrib-water-brain/ndcn0180/EM/M3/M3_S1_SPL
 reference_name=0000.tif
@@ -72,6 +72,23 @@ sed "s?INPUTDIR?$datadir/stitched?;\
     > $datadir/EM_register.py
 
 sed "s?DATADIR?$datadir?g" \
+    $scriptdir/EM_register_submit.sh \
+    > $datadir/EM_register.sh
+
+qsub $datadir/EM_regsiter_submit.sh
+
+###==========================================###
+### downsample registered slices for viewing ###
+###==========================================###
+
+mkdir -p $datadir/reg_ds
+
+sed "s?SCRIPTDIR?$scriptdir?;\
+    s?INPUTDIR?$datadir/reg?;\
+    s?OUTPUTDIR?$datadir/reg_ds?;\
+    s?DS_FACTOR?10?;" \
+    s?Z_START?$z?;\
+    s?Z_END?$Z?g" \
     $scriptdir/EM_register_submit.sh \
     > $datadir/EM_register.sh
 
