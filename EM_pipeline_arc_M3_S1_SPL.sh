@@ -11,6 +11,7 @@ ssh -Y ndcn0180@arcus.oerc.ox.ac.uk
 scriptdir=/home/ndcn-fmrib-water-brain/ndcn0180/workspace/EMseg
 oddir=/data/ndcn-fmrib-water-brain/ndcn0180/EM/M3/17Feb15/montage/Montage_
 datadir=/data/ndcn-fmrib-water-brain/ndcn0180/EM/M3/M3_S1_SPL
+reference_name=0000.tif
 x=0
 X=4000
 y=0
@@ -57,4 +58,22 @@ sed "s?DATADIR?$datadir?g" \
     > $datadir/EM_montage2stitched_submit.sh
 
 qsub $datadir/EM_montage2stitched_submit.sh
+
+###=================###
+### register slices ###
+###=================###
+
+mkdir -p $datadir/reg/trans
+
+sed "s?INPUTDIR?$datadir/stitched?;\
+    s?OUTPUTDIR?$datadir/reg?;\
+    s?REFNAME?$reference_name?g" \
+    $scriptdir/EM_register.py \
+    > $datadir/EM_register.py
+
+sed "s?DATADIR?$datadir?g" \
+    $scriptdir/EM_register_submit.sh \
+    > $datadir/EM_register.sh
+
+qsub $datadir/EM_regsiter_submit.sh
 
