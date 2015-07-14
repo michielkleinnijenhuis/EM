@@ -1,7 +1,9 @@
 ###==========================###
 ### copy the data and ssh in ###
 ###==========================###
-rsync -avz /Users/michielk/oxdata/originaldata/P01/EM/M3/17Feb15 ndcn0180@arcus.oerc.ox.ac.uk:/data/ndcn-fmrib-water-brain/ndcn0180/EM/M3
+local_datadir=/Users/michielk/oxdata/P01/EM/M3/M3_S1_SPL
+local_oddir=/Users/michielk/oxdata/originaldata/P01/EM/M3/17Feb15
+rsync -avz $local_oddir ndcn0180@arcus.oerc.ox.ac.uk:/data/ndcn-fmrib-water-brain/ndcn0180/EM/M3
 ssh -Y ndcn0180@arcus.oerc.ox.ac.uk
 
 ###=====================###
@@ -29,7 +31,7 @@ mkdir -p $datadir/tifs
 for montage in 000 001 002 003; do
 sed "s?INPUTDIR?$oddir$montage?;\
     s?OUTPUTDIR?$datadir/tifs?;\
-    s?OUTPUTPOSTFIX?m_$montage?g" \
+    s?OUTPUT_POSTFIX?m_$montage?g" \
     $scriptdir/EM_tiles2tif.py \
     > $datadir/EM_tiles2tif_m$montage.py
 done
@@ -38,7 +40,7 @@ sed "s?DATADIR?$datadir?g" \
     $scriptdir/EM_tiles2tif_submit.sh \
     > $datadir/EM_tiles2tif_submit.sh
 
-qsub $datadir/EM_tiles2tif_submit.sh
+qsub -t 0-3 $datadir/EM_tiles2tif_submit.sh
 
 ###======================###
 ### stitch slice montage ###
@@ -65,15 +67,15 @@ qsub $datadir/EM_montage2stitched_submit.sh
 
 mkdir -p $datadir/reg/trans
 
-sed "s?INPUTDIR?$datadir/stitched?;\
-    s?OUTPUTDIR?$datadir/reg?;\
+sed "s?SOURCE_DIR?$datadir/stitched?;\
+    s?TARGET_DIR?$datadir/reg?;\
     s?REFNAME?$reference_name?g" \
     $scriptdir/EM_register.py \
     > $datadir/EM_register.py
 
 sed "s?DATADIR?$datadir?g" \
     $scriptdir/EM_register_submit.sh \
-    > $datadir/EM_register.sh
+    > $datadir/EM_register_submit.sh
 
 qsub $datadir/EM_regsiter_submit.sh
 
@@ -87,10 +89,16 @@ sed "s?SCRIPTDIR?$scriptdir?;\
     s?INPUTDIR?$datadir/reg?;\
     s?OUTPUTDIR?$datadir/reg_ds?;\
     s?DS_FACTOR?10?;" \
+    s?X_START?$x?;\
+    s?X_END?$X?;\
+    s?Y_START?$y?;\
+    s?Y_END?$Y?;\
     s?Z_START?$z?;\
     s?Z_END?$Z?g" \
-    $scriptdir/EM_register_submit.sh \
-    > $datadir/EM_register.sh
+    $scriptdir/EM_downsample_submit.sh \
+    > $datadir/EM_downsample_submit.sh
 
-qsub $datadir/EM_regsiter_submit.sh
+qsub $datadir/EM_downsample_submit.sh
+
+#rsync -avz ndcn0180@arcus.oerc.ox.ac.uk:$datadir/reg_ds $local_datadir/reg_ds
 

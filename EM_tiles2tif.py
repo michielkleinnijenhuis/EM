@@ -22,7 +22,7 @@ def main(argv):
         imp = BF.openImagePlus(infile)
         head, tail = path.split(infile)
         filename, ext = path.splitext(tail)
-        IJ.save(imp[0], path.join(outputdir, filename + output_postfix + ext))
+        IJ.save(imp[0], path.join(outputdir, filename[-4:] + output_postfix + '.tif'))
 
 if __name__ == "__main__":
     main(sys.argv[1:])

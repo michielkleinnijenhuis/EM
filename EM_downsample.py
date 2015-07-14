@@ -54,7 +54,8 @@ def main(argv):
     
     for slc in range(z_start, z_end):
         original = io.imread(path.join(inputdir, str(slc).zfill(4) + '.tif'))
-        sub = original[x_start:x_end,y_start:y_end]
+        #sub = original[x_start:x_end,y_start:y_end]
+        sub = original
         ds_sub = resize(sub, (sub.shape[0] / ds_factor, 
                                    sub.shape[1] / ds_factor))
         io.imsave(path.join(outputdir, str(slc).zfill(4) + '.tif'), ds_sub)

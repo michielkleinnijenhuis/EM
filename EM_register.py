@@ -10,11 +10,11 @@ from register_virtual_stack import Register_Virtual_Stack_MT
 
 def main(argv):
     
-    source_dir = 'SOURCE_DIR'
-    target_dir = 'TARGET_DIR'
-    transf_dir = 'TRANSF_DIR'
+    source_dir = 'SOURCE_DIR/'
+    target_dir = 'TARGET_DIR/'
+    transf_dir = 'TARGET_DIR/trans/'
+    reference_name = 'REFNAME'
     
-    reference_name = '0000.tif'
     use_shrinking_constraint = 0
     p = Register_Virtual_Stack_MT.Param()
     p.sift.maxOctaveSize = 1024

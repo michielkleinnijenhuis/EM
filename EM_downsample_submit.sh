@@ -6,4 +6,4 @@
 #PBS -V
 cd $PBS_O_WORKDIR
 
-python SCRIPTDIR/EM_downsample.py -i INPUTDIR/reg -o OUTPUTDIR/reg_ds -d DS_FACTOR -z Z_START -Z Z_END
+python SCRIPTDIR/EM_downsample.py -i INPUTDIR -o OUTPUTDIR -d DS_FACTOR -x X_START -X X_END -y Y_START -Y Y_END -z Z_START -Z Z_END
