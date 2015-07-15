@@ -1,8 +1,8 @@
 ###==========================###
 ### copy the data and ssh in ###
 ###==========================###
-local_datadir=/Users/michielk/oxdata/P01/EM/M3/M3_S1_SPL
-local_oddir=/Users/michielk/oxdata/originaldata/P01/EM/M3/17Feb15
+local_datadir=/Users/michielk/oxdata/P01/EM/M3/M3_S1_GNU
+local_oddir=/Users/michielk/oxdata/originaldata/P01/EM/M3/20Mar15
 rsync -avz $local_oddir ndcn0180@arcus.oerc.ox.ac.uk:/data/ndcn-fmrib-water-brain/ndcn0180/EM/M3
 ssh -Y ndcn0180@arcus.oerc.ox.ac.uk
 
@@ -11,15 +11,15 @@ ssh -Y ndcn0180@arcus.oerc.ox.ac.uk
 ###=====================###
 
 scriptdir=/home/ndcn-fmrib-water-brain/ndcn0180/workspace/EM
-oddir=/data/ndcn-fmrib-water-brain/ndcn0180/EM/M3/17Feb15/montage/Montage_
-datadir=/data/ndcn-fmrib-water-brain/ndcn0180/EM/M3/M3_S1_SPL
+oddir=/data/ndcn-fmrib-water-brain/ndcn0180/EM/M3/20Mar15/montage/Montage_
+datadir=/data/ndcn-fmrib-water-brain/ndcn0180/EM/M3/M3_S1_GNU
 reference_name=0000.tif
 x=0
 X=4000
 y=0
 Y=4000
 z=0
-Z=500
+Z=460
 mkdir -p $datadir && cd $datadir
 
 module load python/2.7
