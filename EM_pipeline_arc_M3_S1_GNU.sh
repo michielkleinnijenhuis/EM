@@ -50,18 +50,22 @@ qsub -t 0-3 $datadir/EM_tiles2tif_submit.sh
 
 mkdir -p $datadir/stitched
 
+jobstring=''
+for slc in `seq 0 20 $((Z-20))`; do
 sed "s?INPUTDIR?$datadir/tifs?;\
     s?OUTPUTDIR?$datadir/stitched?;\
-    s?Z_START?$z?;\
-    s?Z_END?$Z?g" \
+    s?Z_START?$slc?;\
+    s?Z_END?$((slc+19))?g" \
     $scriptdir/EM_montage2stitched.py \
-    > $datadir/EM_montage2stitched.py
+    > $datadir/EM_montage2stitched_`printf %03d $slc`.py
+    jobstring="$jobstring$slc,"
+done
 
 sed "s?DATADIR?$datadir?g" \
     $scriptdir/EM_montage2stitched_submit.sh \
     > $datadir/EM_montage2stitched_submit.sh
 
-qsub $datadir/EM_montage2stitched_submit.sh
+qsub -t $jobstring $datadir/EM_montage2stitched_submit.sh
 
 ###=================###
 ### register slices ###
