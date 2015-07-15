@@ -22,6 +22,8 @@ z=0
 Z=500
 mkdir -p $datadir && cd $datadir
 
+module load python/2.7
+
 ###=====================###
 ### convert DM3 to tifs ###
 ###=====================###
@@ -31,7 +33,7 @@ mkdir -p $datadir/tifs
 for montage in 000 001 002 003; do
 sed "s?INPUTDIR?$oddir$montage?;\
     s?OUTPUTDIR?$datadir/tifs?;\
-    s?OUTPUT_POSTFIX?m_$montage?g" \
+    s?OUTPUT_POSTFIX?_m$montage?g" \
     $scriptdir/EM_tiles2tif.py \
     > $datadir/EM_tiles2tif_m$montage.py
 done
@@ -77,7 +79,7 @@ sed "s?DATADIR?$datadir?g" \
     $scriptdir/EM_register_submit.sh \
     > $datadir/EM_register_submit.sh
 
-qsub $datadir/EM_regsiter_submit.sh
+qsub $datadir/EM_register_submit.sh
 
 ###==========================================###
 ### downsample registered slices for viewing ###
@@ -88,7 +90,7 @@ mkdir -p $datadir/reg_ds
 sed "s?SCRIPTDIR?$scriptdir?;\
     s?INPUTDIR?$datadir/reg?;\
     s?OUTPUTDIR?$datadir/reg_ds?;\
-    s?DS_FACTOR?10?;" \
+    s?DS_FACTOR?10?; \
     s?X_START?$x?;\
     s?X_END?$X?;\
     s?Y_START?$y?;\
