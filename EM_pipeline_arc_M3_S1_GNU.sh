@@ -55,7 +55,7 @@ for slc in `seq 0 20 $((Z-20))`; do
 sed "s?INPUTDIR?$datadir/tifs?;\
     s?OUTPUTDIR?$datadir/stitched?;\
     s?Z_START?$slc?;\
-    s?Z_END?$((slc+19))?g" \
+    s?Z_END?$((slc+20))?g" \
     $scriptdir/EM_montage2stitched.py \
     > $datadir/EM_montage2stitched_`printf %03d $slc`.py
     jobstring="$jobstring$slc,"
@@ -65,7 +65,7 @@ sed "s?DATADIR?$datadir?g" \
     $scriptdir/EM_montage2stitched_submit.sh \
     > $datadir/EM_montage2stitched_submit.sh
 
-qsub -t $jobstring $datadir/EM_montage2stitched_submit.sh
+qsub -t ${jobstring%,} $datadir/EM_montage2stitched_submit.sh
 
 ###=================###
 ### register slices ###
@@ -108,3 +108,23 @@ qsub $datadir/EM_downsample_submit.sh
 
 #rsync -avz ndcn0180@arcus.oerc.ox.ac.uk:$datadir/reg_ds $local_datadir/reg_ds
 
+###====================================###
+### convert image series to hdf5 stack ###
+###====================================###
+
+echo '#!/bin/bash' > $datadir/EM_series2stack_submit.sh
+echo "#PBS -l nodes=1:ppn=1" >> $datadir/EM_series2stack_submit.sh
+echo "#PBS -l walltime=01:00:00" >> $datadir/EM_series2stack_submit.sh
+echo "#PBS -N em_s2s_ds" >> $datadir/EM_series2stack_submit.sh
+echo "#PBS -V" >> $datadir/EM_series2stack_submit.sh
+echo "cd \$PBS_O_WORKDIR" >> $datadir/EM_series2stack_submit.sh
+echo ". enable_arcus_mpi.sh" >> $datadir/EM_series2stack_submit.sh
+echo "mpirun \$MPI_HOSTS python $scriptdir/EM_series2stack.py \
+'$datadir/reg_ds' \
+'$datadir/reg_ds.h5' \
+-o \
+-f 'reg_ds' \
+-e 0.073 0.073 0.05 \
+-x 0 -X 900 -y 0 -Y 860 -z 0 -Z 400" >> $datadir/EM_series2stack_submit.sh
+
+qsub $datadir/EM_series2stack_submit.sh
