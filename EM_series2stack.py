@@ -95,18 +95,11 @@ def main(argv):
     
     nblocks = int(ceil((Z-z) / float(slicechunksize)))
     blocks = np.linspace(z, Z, nblocks, endpoint=False, dtype=int)
-    nblocks_per_rank = int(ceil(nblocks / float(size)))
-    nblocks_last_rank = nblocks - (size - 1) * nblocks_per_rank
-    
-    if rank == size - 1:
-        local_blocks = np.zeros([nblocks_last_rank], dtype=int)
-    else:
-        local_blocks = np.zeros([nblocks_per_rank], dtype=int)
-    
-    sendcounts = tuple(nblocks_last_rank if r==size-1 else nblocks_per_rank 
-                       for r in range(0,size))
-    displacements = tuple(r*nblocks_per_rank for r in range(0,size))
-    comm.Scatterv([blocks, sendcounts, displacements, 
+    local_nblocks = np.ones(size, dtype=int) * nblocks / size
+    local_nblocks[0:nblocks % size] += 1
+    local_blocks = np.zeros(local_nblocks[rank], dtype=int)
+    displacements = tuple(sum(local_nblocks[0:r]) for r in range(0,size))
+    comm.Scatterv([blocks, tuple(local_nblocks), displacements, 
                    MPI.SIGNED_LONG_LONG], local_blocks, root=0)
     
     
