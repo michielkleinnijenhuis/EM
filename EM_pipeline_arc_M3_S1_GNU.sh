@@ -22,7 +22,7 @@ z=0
 Z=460
 mkdir -p $datadir && cd $datadir
 
-module load python/2.7
+module load python/2.7 mpi4py/1.3.1 hdf5-parallel/1.8.14_mvapich2
 
 ###=====================###
 ### convert DM3 to tifs ###
@@ -113,7 +113,7 @@ qsub $datadir/EM_downsample_submit.sh
 ###====================================###
 
 echo '#!/bin/bash' > $datadir/EM_series2stack_submit.sh
-echo "#PBS -l nodes=1:ppn=1" >> $datadir/EM_series2stack_submit.sh
+echo "#PBS -l nodes=1:ppn=16" >> $datadir/EM_series2stack_submit.sh
 echo "#PBS -l walltime=01:00:00" >> $datadir/EM_series2stack_submit.sh
 echo "#PBS -N em_s2s_ds" >> $datadir/EM_series2stack_submit.sh
 echo "#PBS -V" >> $datadir/EM_series2stack_submit.sh
@@ -122,9 +122,10 @@ echo ". enable_arcus_mpi.sh" >> $datadir/EM_series2stack_submit.sh
 echo "mpirun \$MPI_HOSTS python $scriptdir/EM_series2stack.py \
 '$datadir/reg_ds' \
 '$datadir/reg_ds.h5' \
--o \
 -f 'reg_ds' \
--e 0.073 0.073 0.05 \
--x 0 -X 900 -y 0 -Y 860 -z 0 -Z 400" >> $datadir/EM_series2stack_submit.sh
+-o \
+-e 0.073 0.073 0.05" >> $datadir/EM_series2stack_submit.sh
 
 qsub $datadir/EM_series2stack_submit.sh
+
+#rsync -avz ndcn0180@arcus.oerc.ox.ac.uk:$datadir/reg_ds.h5 $local_datadir

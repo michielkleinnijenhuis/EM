@@ -5,6 +5,7 @@ import glob
 import argparse
 from os import path
 import numpy as np
+from math import ceil
 from skimage import io
 from mpi4py import MPI
 import h5py
@@ -78,9 +79,6 @@ def main(argv):
     rank = comm.Get_rank()
     size = comm.Get_size()
     
-    nblocks = (Z-z) / slicechunksize
-    blocks = np.linspace(z, Z, nblocks, endpoint=False, dtype=int)
-    local_nblocks = np.array([0])
     
     if rank == 0:
         # FIXME: somehow 'a' doesn't work if file doesnt exist
@@ -94,13 +92,25 @@ def main(argv):
             dset.dims[i].label = dimlabels[i]
         f.close()
     
-    f = h5py.File(outputfile, 'r+', driver='mpio', comm=MPI.COMM_WORLD)
     
-    if rank == 0:
-        local_nblocks = np.array([nblocks/size])
-    comm.Bcast(local_nblocks, root=0)
-    local_blocks = np.zeros(local_nblocks, dtype=int)
-    comm.Scatter(blocks, local_blocks, root=0)
+    nblocks = int(ceil((Z-z) / float(slicechunksize)))
+    blocks = np.linspace(z, Z, nblocks, endpoint=False, dtype=int)
+    nblocks_per_rank = int(ceil(nblocks / float(size)))
+    nblocks_last_rank = nblocks - (size - 1) * nblocks_per_rank
+    
+    if rank == size - 1:
+        local_blocks = np.zeros([nblocks_last_rank], dtype=int)
+    else:
+        local_blocks = np.zeros([nblocks_per_rank], dtype=int)
+    
+    sendcounts = tuple(nblocks_last_rank if r==size-1 else nblocks_per_rank 
+                       for r in range(0,size))
+    displacements = tuple(r*nblocks_per_rank for r in range(0,size))
+    comm.Scatterv([blocks, sendcounts, displacements, 
+                   MPI.SIGNED_LONG_LONG], local_blocks, root=0)
+    
+    
+    f = h5py.File(outputfile, 'r+', driver='mpio', comm=MPI.COMM_WORLD)
     
     print('process {0} will process blocks {1}'.format(rank, local_blocks))
     for startslice in local_blocks:
