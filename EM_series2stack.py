@@ -21,6 +21,8 @@ def main(argv):
                         help='the number of characters at the end that define z')
     parser.add_argument('-r', '--regex', default='*.tif', 
                         help='regular expression to select files with')
+    parser.add_argument('-m', '--usempi', action='store_true', 
+                        help='use parallel hdf5 with mpi4py')
     parser.add_argument('-f', '--fieldname', default='stack', 
                         help='hdf5 fieldname <stack>')
     parser.add_argument('-d', '--datatype', 
@@ -73,55 +75,58 @@ def main(argv):
     else:
         dimlabels = 'xyz'
         datalayout = (X-x, Y-y, Z-z)
+    usempi = args.usempi
     
-    
-    comm = MPI.COMM_WORLD
-    rank = comm.Get_rank()
-    size = comm.Get_size()
-    
-    
-    if rank == 0:
-        # FIXME: somehow 'a' doesn't work if file doesnt exist
-        otype = 'a' if path.isfile(outputfile) else 'w'
-        f = h5py.File(outputfile, otype)
-        dset = f.create_dataset(fieldname, datalayout, 
-                                chunks=tuple(chunksize), dtype=datatype)
-        if all(element_size_um):
-            dset.attrs['element_size_um'] = element_size_um
-        for i in range(0,3):
-            dset.dims[i].label = dimlabels[i]
-        f.close()
     
     
     nblocks = int(ceil((Z-z) / float(slicechunksize)))
     blocks = np.linspace(z, Z, nblocks, endpoint=False, dtype=int)
-    local_nblocks = np.ones(size, dtype=int) * nblocks / size
-    local_nblocks[0:nblocks % size] += 1
-    local_blocks = np.zeros(local_nblocks[rank], dtype=int)
-    displacements = tuple(sum(local_nblocks[0:r]) for r in range(0,size))
-    comm.Scatterv([blocks, tuple(local_nblocks), displacements, 
-                   MPI.SIGNED_LONG_LONG], local_blocks, root=0)
     
     
-    f = h5py.File(outputfile, 'r+', driver='mpio', comm=MPI.COMM_WORLD)
-    
+    # FIXME: somehow 'a' doesn't work if file doesnt exist
+    otype = 'a' if path.isfile(outputfile) else 'w'
+    if usempi:
+        comm = MPI.COMM_WORLD
+        rank = comm.Get_rank()
+        size = comm.Get_size()
+        local_nblocks = np.ones(size, dtype=int) * nblocks / size
+        local_nblocks[0:nblocks % size] += 1
+        local_blocks = np.zeros(local_nblocks[rank], dtype=int)
+        displacements = tuple(sum(local_nblocks[0:r]) for r in range(0,size))
+        comm.Scatterv([blocks, tuple(local_nblocks), displacements, 
+                       MPI.SIGNED_LONG_LONG], local_blocks, root=0)
+        f = h5py.File(outputfile, otype, driver='mpio', comm=MPI.COMM_WORLD)
+    else:
+        rank = 0
+        size = 1
+        local_blocks = blocks
+        f = h5py.File(outputfile, otype)
     print('process {0} will process blocks {1}'.format(rank, local_blocks))
+    
+    dset = f.create_dataset(fieldname, datalayout, 
+                            chunks=tuple(chunksize), dtype=datatype)
+    if all(element_size_um):
+        dset.attrs['element_size_um'] = element_size_um
+    for i in range(0,3):
+        dset.dims[i].label = dimlabels[i]
+    
+    
     for startslice in local_blocks:
         print('process {0} is processing block {1}'.format(rank, startslice))
         endslice = startslice + slicechunksize
+        blz = startslice - z
+        blZ = endslice - z
         block = []
         for imno in range(startslice, endslice):
             input_image = path.join(head, 
                                     prefix + str(imno).zfill(nzfills) + ext)
-            original = io.imread(input_image).transpose([1,0])
-            block.append(original[x:X,y:Y])
-        blz = startslice - z
-        blZ = endslice - z
+            block.append(io.imread(input_image)[y:Y,x:X])
+        
         if ordercstyle:
-            f[fieldname][blz:blZ,:,:] = np.array(block).transpose([0,2,1]).\
+            f[fieldname][blz:blZ,:,:] = np.array(block).\
                 astype(datatype,copy=False)
         else:
-            f[fieldname][:,:,blz:blZ] = np.array(block).transpose([1,2,0]).\
+            f[fieldname][:,:,blz:blZ] = np.array(block).transpose([2,1,0]).\
                 astype(datatype,copy=False)
     
     f.close()
