@@ -83,7 +83,7 @@ def main(argv):
     
     if args.chunksize:
         chunksize = args.chunksize
-    elif all(inds.chunks):
+    elif inds.chunks:
         chunksize = [inds.chunks[i] for i in in2out]
     
     datatype = args.datatype if args.datatype else inds.dtype
@@ -180,8 +180,12 @@ def main(argv):
         otype = 'a' if path.isfile(outputfile) else 'w'
         g = h5py.File(outhdf5, otype)
         datalayout = tuple(stdsel[i][1]-stdsel[i][0] for i in std2out)
-        outds = g.create_dataset(outfield, datalayout, 
-                                chunks=tuple(chunksize), dtype=datatype)
+        if all(chunksize):
+            outds = g.create_dataset(outfield, datalayout, 
+                                     chunks=tuple(chunksize), 
+                                     dtype=datatype)
+        else:
+            outds = g.create_dataset(outfield, datalayout, dtype=datatype)
         outds[:] = img
         if all(element_size_um):
             outds.attrs['element_size_um'] = element_size_um
