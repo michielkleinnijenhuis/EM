@@ -16,7 +16,7 @@ def main(argv):
         'Convert a directory of tifs to an hdf5 stack.')
     
     parser.add_argument('inputdir', help='a directory with images')
-    parser.add_argument('outputfile', help='the hdf5 outputfile <*.h5>')
+    parser.add_argument('outputfile', help='the hdf5 outputfile')
     parser.add_argument('-n', '--nzfills', type=int, default=4, 
                         help='the number of characters at the end that define z')
     parser.add_argument('-r', '--regex', default='*.tif', 
@@ -118,8 +118,8 @@ def main(argv):
         blZ = endslice - z
         block = []
         for imno in range(startslice, endslice):
-#            input_image = path.join(head, 
-#                                    prefix + str(imno).zfill(nzfills) + ext)
+#             input_image = path.join(head, 
+#                                     prefix + str(imno).zfill(nzfills) + ext)
             input_image = files[imno]
             block.append(io.imread(input_image)[y:Y,x:X])
         
