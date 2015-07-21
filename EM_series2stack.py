@@ -118,8 +118,9 @@ def main(argv):
         blZ = endslice - z
         block = []
         for imno in range(startslice, endslice):
-            input_image = path.join(head, 
-                                    prefix + str(imno).zfill(nzfills) + ext)
+#            input_image = path.join(head, 
+#                                    prefix + str(imno).zfill(nzfills) + ext)
+            input_image = files[imno]
             block.append(io.imread(input_image)[y:Y,x:X])
         
         if ordercstyle:
