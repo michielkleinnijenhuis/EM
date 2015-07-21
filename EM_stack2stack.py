@@ -182,11 +182,11 @@ def main(argv):
         datalayout = tuple(stdsel[i][1]-stdsel[i][0] for i in std2out)
         outds = g.create_dataset(outfield, datalayout, 
                                 chunks=tuple(chunksize), dtype=datatype)
+        outds[:] = img
         if all(element_size_um):
             outds.attrs['element_size_um'] = element_size_um
         for i,l in enumerate(outlayout):
             outds.dims[i].label = l
-        outds = img
         g.close()
     
     
