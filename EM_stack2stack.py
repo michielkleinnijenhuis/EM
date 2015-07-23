@@ -4,12 +4,14 @@ import sys
 import argparse
 from os import path
 from nibabel import Nifti1Image
+from skimage.io import imsave
+from skimage.transform import downscale_local_mean
+from os import path, makedirs
 import h5py
 
 def main(argv):
     
-    parser = argparse.ArgumentParser(description=
-        'Juggle around with hdf5 stacks.')
+    parser = argparse.ArgumentParser(description='Juggle around stacks.')
     
     parser.add_argument('inputfile', help='the inputfile')
     parser.add_argument('outputfile', help='the outputfile')
@@ -19,14 +21,20 @@ def main(argv):
                         help='output hdf5 fieldname <stack>')
     parser.add_argument('-d', '--datatype', 
                         help='the numpy-style output datatype')
-    parser.add_argument('-l', '--layout', 
+    parser.add_argument('-i', '--inlayout', 
+                        help='the data layout of the input')
+    parser.add_argument('-l', '--outlayout', 
                         help='the data layout for output')
     parser.add_argument('-s', '--chunksize', type=int, nargs='*', 
-                        help='hdf5 chunk sizes in order of layout')
+                        help='hdf5 chunk sizes (in order of outlayout)')
     parser.add_argument('-e', '--element_size_um', type=float, nargs='*', 
-                        help='dataset element sizes in order of layout')
-    parser.add_argument('-n', '--enable_duo', action='store_true', 
-                        help='output the stack in nifti and hdf5')
+                        help='dataset element sizes (in order of outlayout)')
+    parser.add_argument('-n', '--nzfills', type=int, default=4, 
+                        help='number of characters at the end that define z')
+    parser.add_argument('-m', '--enable_multi_output', nargs='*', default=[], 
+                        help='output the stack in jpg,png,tif,nii,h5')
+    parser.add_argument('-r', '--downscale', type=int, nargs='*', default=[], 
+                        help='factors to downscale (in order of outlayout)')
     parser.add_argument('-x', default=0, type=int, help='first x-index')
     parser.add_argument('-X', type=int, help='last x-index')
     parser.add_argument('-y', default=0, type=int, help='first y-index')
@@ -61,10 +69,15 @@ def main(argv):
     inds = f[infield]
     inshape = inds.shape
     indim = len(inds.dims)
-    inlayout = [d.label for d in inds.dims]
-    # TODO!: handle case when no inlayout labels are present
     
-    if args.layout:
+    if inds.dims[0].label:
+        inlayout = [d.label for d in inds.dims]
+    elif args.inlayout:
+        inlayout = args.inlayout
+    else:
+        inlayout = 'xyzct'[0:indim]
+    
+    if args.outlayout:
         outlayout = args.layout
     elif inlayout:
         outlayout = inlayout
@@ -77,9 +90,11 @@ def main(argv):
     
     if args.element_size_um:
         element_size_um = args.element_size_um
-    elif all(inds.attrs['element_size_um']):
+    elif 'element_size_um' in inds.attrs.keys():
         element_size_um = [inds.attrs['element_size_um'][i] 
                            for i in in2out]
+    else:
+        element_size_um = None
     
     if args.chunksize:
         chunksize = args.chunksize
@@ -126,17 +141,19 @@ def main(argv):
     stdsel = [[x,X],[y,Y],[z,Z],[c,C],[t,T]]
     insel = [stdsel[i] for i in std2in]
     
-    b,e = path.splitext(outputfile)
-    if '.nii' in outputfile:
-        enable_nifti = True
-        enable_hdf5 = args.enable_duo
-        outhdf5 = b + '.h5'
-        outnifti = outputfile
+    downscale = tuple(args.downscale)
+    
+    b, e1 = path.splitext(outputfile)
+    b, e2 = path.splitext(b)  # catch double extension (e.g., .nii.gz)
+    outexts = args.enable_multi_output
+    outexts.append(e1 + e2)
+    outexts = list(set(outexts))
+    nzfills = args.nzfills
+    if b[-nzfills:].isdigit():
+        slcoffset = int(b[-nzfills:])
+        b = b[:-nzfills]
     else:
-        enable_hdf5 = True
-        enable_nifti = args.enable_duo
-        outhdf5 = outputfile
-        outnifti = b + '_' + outfield + '.nii.gz'
+        slcoffset = 0
     
     
     
@@ -160,41 +177,60 @@ def main(argv):
                    insel[3][0]:insel[3][1],
                    insel[4][0]:insel[4][1]]
     f.close()
-    if datatype != inds.dtype:
-        img = img.astype(datatype,copy=False)
+    
     if outlayout != inlayout:
         img = img.transpose(in2out)
+    if downscale:
+        img = downscale_local_mean(img, downscale)
+        if element_size_um is not None:
+            element_size_um = [el * downscale[i] 
+                               for i,el in enumerate(element_size_um)]
+    if datatype != img.dtype:
+        img = img.astype(datatype,copy=False)
     
-    
-    
-    if enable_nifti:
-        mat = [[1, 0, 0, 0],[0, 1, 0, 0],[0, 0, 1, 0],[0, 0, 0, 1]]
-        if all(element_size_um):
-            mat[0][0] = element_size_um[0]
-            mat[1][1] = element_size_um[1]
-            mat[2][2] = element_size_um[2]
-        Nifti1Image(img, mat).to_filename(outnifti)
-    
-    if enable_hdf5:
-        # FIXME: somehow 'a' doesn't work if file doesnt exist
-        otype = 'a' if path.isfile(outputfile) else 'w'
-        g = h5py.File(outhdf5, otype)
-        datalayout = tuple(stdsel[i][1]-stdsel[i][0] for i in std2out)
-        if all(chunksize):
-            outds = g.create_dataset(outfield, datalayout, 
-                                     chunks=tuple(chunksize), 
-                                     dtype=datatype)
-        else:
-            outds = g.create_dataset(outfield, datalayout, dtype=datatype)
-        outds[:] = img
-        if all(element_size_um):
-            outds.attrs['element_size_um'] = element_size_um
-        for i,l in enumerate(outlayout):
-            outds.dims[i].label = l
-        g.close()
-    
-    
+    for ext in outexts:
+        if '.nii' in ext:
+            mat = [[1, 0, 0, 0],[0, 1, 0, 0],[0, 0, 1, 0],[0, 0, 0, 1]]
+            if all(element_size_um):
+                mat[0][0] = element_size_um[0]
+                mat[1][1] = element_size_um[1]
+                mat[2][2] = element_size_um[2]
+            Nifti1Image(img, mat).to_filename(b + '.nii.gz')
+        
+        if '.h5' in ext:
+            # FIXME: somehow 'a' doesn't work if file doesnt exist
+            otype = 'a' if path.isfile(outputfile) else 'w'
+            g = h5py.File(b + '.h5', otype)
+#             datalayout = tuple(stdsel[i][1]-stdsel[i][0] for i in std2out)
+            if all(chunksize):
+                outds = g.create_dataset(outfield, img.shape, 
+                                         chunks=tuple(chunksize), 
+                                         dtype=datatype)
+            else:
+                outds = g.create_dataset(outfield, img.shape, dtype=datatype)
+            outds[:] = img
+            if element_size_um is not None:
+                outds.attrs['element_size_um'] = element_size_um
+            for i,l in enumerate(outlayout):
+                outds.dims[i].label = l
+            g.close()
+        
+        if (('.tif' in ext) | ('.png' in ext) | ('.jpg' in ext)) & (indim == 3):  # only 3D for now
+            if not path.exists(b):
+                makedirs(b)
+            for slc in range(0, img.shape[outlayout.index('z')]):
+                slcno = slc + slcoffset
+                if outlayout.index('z') == 0:
+                    slcdata = img[slc,:,:]
+                elif outlayout.index('z') == 1:
+                    slcdata = img[:,slc,:]
+                elif outlayout.index('z') == 2:
+                    slcdata = img[:,:,slc]
+                imsave(path.join(b, str(slcno).zfill(nzfills) + ext), 
+                          slcdata)
     
 
 if __name__ == "__main__":
     main(sys.argv)
+
+

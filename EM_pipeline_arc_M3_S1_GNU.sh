@@ -115,22 +115,24 @@ qsub $datadir/EM_downsample_submit.sh
 ### convert image series to hdf5 stack ###
 ###====================================###
 
-echo '#!/bin/bash' > $datadir/EM_series2stack_submit.sh
-echo "#PBS -l nodes=1:ppn=16" >> $datadir/EM_series2stack_submit.sh
-echo "#PBS -l walltime=01:00:00" >> $datadir/EM_series2stack_submit.sh
-echo "#PBS -N em_s2s_ds" >> $datadir/EM_series2stack_submit.sh
-echo "#PBS -V" >> $datadir/EM_series2stack_submit.sh
-echo "cd \$PBS_O_WORKDIR" >> $datadir/EM_series2stack_submit.sh
-echo ". enable_arcus_mpi.sh" >> $datadir/EM_series2stack_submit.sh
+qsubfile=$datadir/EM_series2stack_submit.sh
+
+echo '#!/bin/bash' > $qsubfile
+echo "#PBS -l nodes=1:ppn=16" >> $qsubfile
+echo "#PBS -l walltime=01:00:00" >> $qsubfile
+echo "#PBS -N em_s2s_ds" >> $qsubfile
+echo "#PBS -V" >> $qsubfile
+echo "cd \$PBS_O_WORKDIR" >> $qsubfile
+echo ". enable_arcus_mpi.sh" >> $qsubfile
 echo "mpirun \$MPI_HOSTS python $scriptdir/EM_series2stack.py \
 '$datadir/reg_ds' \
 '$datadir/reg_ds.h5' \
 -f 'reg_ds' \
 -m \
 -o \
--e 0.073 0.073 0.05" >> $datadir/EM_series2stack_submit.sh
+-e 0.073 0.073 0.05" >> $qsubfile
 
-qsub $datadir/EM_series2stack_submit.sh
+qsub $qsubfile
 
 #rsync -avz ndcn0180@arcus.oerc.ox.ac.uk:$datadir/reg_ds.h5 $local_datadir
 
@@ -138,19 +140,98 @@ qsub $datadir/EM_series2stack_submit.sh
 ### convert image series to hdf5 stack ###
 ###====================================###
 
-echo '#!/bin/bash' > $datadir/EM_series2stack_submit.sh
-echo "#PBS -l nodes=1:ppn=1" >> $datadir/EM_series2stack_submit.sh
-echo "#PBS -l walltime=01:00:00" >> $datadir/EM_series2stack_submit.sh
-echo "#PBS -N em_s2s" >> $datadir/EM_series2stack_submit.sh
-echo "#PBS -V" >> $datadir/EM_series2stack_submit.sh
-echo "cd \$PBS_O_WORKDIR" >> $datadir/EM_series2stack_submit.sh
-echo "mpirun \$MPI_HOSTS python $scriptdir/EM_series2stack.py \
+qsubfile=$datadir/EM_series2stack_submit.sh
+
+echo '#!/bin/bash' > $qsubfile
+echo "#PBS -l nodes=1:ppn=1" >> $qsubfile
+echo "#PBS -l walltime=01:00:00" >> $qsubfile
+echo "#PBS -N em_s2s" >> $qsubfile
+echo "#PBS -V" >> $qsubfile
+echo "cd \$PBS_O_WORKDIR" >> $qsubfile
+echo "python $scriptdir/EM_series2stack.py \
 '$datadir/reg' \
 '$datadir/reg.h5' \
 -f 'reg' \
 -o \
--e 0.0073 0.0073 0.05" >> $datadir/EM_series2stack_submit.sh
+-e 0.0073 0.0073 0.05" >> $qsubfile
 
-qsub $datadir/EM_series2stack_submit.sh
+qsub $qsubfile
 
 #rsync -avz ndcn0180@arcus.oerc.ox.ac.uk:$datadir/reg.h5 $local_datadir
+
+
+
+###===============================###
+### Ilastik segmentation training ###
+###===============================###
+
+### create training dataset
+qsubfile=$datadir/EM_stack2stack_submit.sh
+echo '#!/bin/bash' > $qsubfile
+echo "#PBS -l nodes=1:ppn=1" >> $qsubfile
+echo "#PBS -l walltime=00:10:00" >> $qsubfile
+echo "#PBS -N em_s2s" >> $qsubfile
+echo "#PBS -V" >> $qsubfile
+echo "cd \$PBS_O_WORKDIR" >> $qsubfile
+echo "python $scriptdir/EM_stack2stack.py \
+$datadir/reg.h5 \
+$datadir/training.h5 \
+-f 'reg' -g 'stack' \
+-e 0.05 0.0073 0.0073 \
+-x 7000 -X 7500 -y 2000 -Y 2500 -z 250 -Z 350 -n" >> $qsubfile
+qsub -q develq $qsubfile
+#rsync -avz ndcn0180@arcus.oerc.ox.ac.uk:$datadir/training* $local_datadir
+
+### perform interactive prediction
+#...
+rsync -avz $local_datadir/pixclass.ilp ndcn0180@arcus.oerc.ox.ac.uk:$datadir
+
+###===================================###
+### apply Ilastik classifier to stack ###
+###===================================###
+
+qsubfile=$datadir/EM_applyclassifier2stack_submit.sh
+
+echo '#!/bin/bash' > $qsubfile
+echo "#PBS -l nodes=1:ppn=1" >> $qsubfile
+echo "#PBS -l walltime=01:00:00" >> $qsubfile
+echo "#PBS -N em_ac2s" >> $qsubfile
+echo "#PBS -V" >> $qsubfile
+echo "cd \$PBS_O_WORKDIR" >> $qsubfile
+echo "python ilastik.py --headless \
+--project=$datadir/pixclass.ilp \
+--output_internal_path=/probs \
+$datadir/reg.h5/reg" >> $qsubfile
+
+qsub $qsubfile
+
+
+
+qsubfile=$datadir/EM_slic_submit.sh
+echo '#!/bin/bash' > $qsubfile
+echo "#PBS -l nodes=1:ppn=1" >> $qsubfile
+echo "#PBS -l walltime=00:10:00" >> $qsubfile
+echo "#PBS -N em_slic" >> $qsubfile
+echo "#PBS -V" >> $qsubfile
+echo "cd \$PBS_O_WORKDIR" >> $qsubfile
+echo "python $scriptdir/EM_slicvoxels.py \
+-i $datadir/training.h5 \
+-o $datadir/training_slic.h5 \
+-f 'stack' -g 'stack' -s 500" >> $qsubfile
+qsub -q develq $qsubfile
+
+qsubfile=$datadir/EM_stack2stack_submit.sh
+echo '#!/bin/bash' > $qsubfile
+echo "#PBS -l nodes=1:ppn=1" >> $qsubfile
+echo "#PBS -l walltime=00:10:00" >> $qsubfile
+echo "#PBS -N em_s2s" >> $qsubfile
+echo "#PBS -V" >> $qsubfile
+echo "cd \$PBS_O_WORKDIR" >> $qsubfile
+echo "python $scriptdir/EM_stack2stack.py \
+$datadir/training_slic.h5 \
+$datadir/training_slic.nii.gz \
+-e 0.05 0.0073 0.0073 \
+-d int32 -f stack -g stack" >> $qsubfile
+qsub -q develq $qsubfile
+
+#rsync -avz ndcn0180@arcus.oerc.ox.ac.uk:$datadir/training_slic.nii.gz $local_datadir
