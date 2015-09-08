@@ -37,6 +37,8 @@ def main(argv):
                         default=[0.1,0.1], help='section overlap in [y,x]')
     parser.add_argument('-k', '--n_keypoints', type=int, default=10000, 
                         help='the number of initial keypoints to generate')
+    parser.add_argument('-p', '--plotpairs', action='store_true', 
+                        help='create plots of point-pairs')
     parser.add_argument('-m', '--usempi', action='store_true', 
                         help='use mpi4py')
     args = parser.parse_args()
@@ -48,6 +50,7 @@ def main(argv):
     overlap_fraction = args.overlap_fraction
     n_keypoints = args.n_keypoints
     usempi = args.usempi
+    plotpairs = args.plotpairs
     
     # get the image collection
     imgs = io.ImageCollection(path.join(datadir,'*.tif'))
@@ -92,8 +95,8 @@ def main(argv):
                    if i in local_pairnrs]
     for pid, p in local_pairs:
         # FIXME: handle case where get_pair fails (no inliers)
-        pair = get_pair(datadir, imgs, p, offsets, 
-                        subsample_factor, overlap_fraction, orb, k)
+        pair = get_pair(datadir, imgs, p, pid, offsets, 
+                        subsample_factor, overlap_fraction, orb, k, plotpairs)
         pairfile = path.join(datadir, 'pairs' + 
                              '_o' + str(offsets) + 
                              '_s' + str(subsample_factor) + 
@@ -207,7 +210,7 @@ def plot_pair_ransac(datadir, p, full_im1, full_im2, kp_im1, kp_im2, matches, in
                           str(p[1][1]) + '.tif'))
     plt.close(fig)
 
-def get_pair(datadir, imgs, p, offsets, subsample_factor, overlap_fraction, orb, k):
+def get_pair(datadir, imgs, p, pid, offsets, subsample_factor, overlap_fraction, orb, k, plotpairs):
     """Create inlier keypoint pairs."""
     
     pair_tstart = time()
@@ -230,10 +233,11 @@ def get_pair(datadir, imgs, p, offsets, subsample_factor, overlap_fraction, orb,
     
     w = k[offsets - (p[1][0] - p[0][0])]
     
-    plot_pair_ransac(datadir, p, f1, f2, kp1, kp2, matches, inliers)
+    if plotpairs:
+        plot_pair_ransac(datadir, p, f1, f2, kp1, kp2, matches, inliers)
     
-    print('Pair done in: %.2f s' % (time() - pair_tstart,))
-    
+    print('Pair %04d done in: %.2f s; matches: %05d; inliers: %05d' 
+          % (pid, time() - pair_tstart, matches, inliers))
     return (p, src[inliers], dst[inliers], model, w)
 
 if __name__ == "__main__":
