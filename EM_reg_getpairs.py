@@ -27,9 +27,11 @@ def main(argv):
     parser = ArgumentParser(description=
         'Generate matching point-pairs for stack registration.')
     parser.add_argument('datadir', help='a directory with images')
+    parser.add_argument('-o', '--outputdir', 
+                        help='directory to write results')
     parser.add_argument('-t', '--n_tiles', type=int, default=4, 
                         help='the number of tiles in the montage')
-    parser.add_argument('-o', '--offsets', type=int, default=2, 
+    parser.add_argument('-c', '--offsets', type=int, default=2, 
                         help='the number of sections in z to consider')
     parser.add_argument('-s', '--subsample_factor', type=int, default=1, 
                         help='the factor to downsample the images by')
@@ -44,6 +46,12 @@ def main(argv):
     args = parser.parse_args()
     
     datadir = args.datadir
+    if not args.outputdir:
+        outputdir = datadir
+    else:
+        outputdir = args.outputdir
+        if not path.exists(outputdir):
+            makedirs(outputdir)
     n_tiles = args.n_tiles
     offsets = args.offsets
     subsample_factor = args.subsample_factor
@@ -202,7 +210,6 @@ def plot_pair_ransac(datadir, p, full_im1, full_im2, kp_im1, kp_im2, matches, in
     plotdir = path.join(datadir, 'plotpairs')
     if not path.exists(plotdir):
         makedirs(plotdir)
-        print(plotdir)
     fig.savefig(path.join(plotdir, 'pair_s' + 
                           str(p[0][0]).zfill(4) + '-t' + 
                           str(p[0][1]) + '_s' +
