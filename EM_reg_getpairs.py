@@ -101,18 +101,9 @@ def main(argv):
     # process the assigned pairs
     local_pairs = [(i,up) for i,up in enumerate(unique_pairs) 
                    if i in local_pairnrs]
-    for pid, p in local_pairs:
-        # FIXME: handle case where get_pair fails (no inliers)
+    for pid, p in local_pairs:  # FIXME: handle case where get_pair fails
         pair = get_pair(outputdir, imgs, p, pid, offsets, 
                         downsample_factor, overlap_fraction, orb, k, plotpairs)
-        pairfile = path.join(outputdir, 'pair_' + 
-                             '_c' + str(offsets) + 
-                             '_s' + str(downsample_factor) + 
-                             '_s' + str(p[0][0]).zfill(4) + 
-                             '-t' + str(p[0][1]) + 
-                             '_s' + str(p[1][0]).zfill(4) + 
-                             '-t' + str(p[1][1]) + '.pickle')
-        pickle.dump(pair, open(pairfile, 'wb'))
     
     return 0
 
@@ -201,7 +192,7 @@ def reset_imregions(ptype, kp_im1, kp_im2, overlap_pixels, imshape):
         kp_im2[:,1] += imshape[1] - 2 * overlap_pixels[1]
     return kp_im1, kp_im2
 
-def plot_pair_ransac(datadir, p, full_im1, full_im2, kp_im1, kp_im2, matches, inliers):
+def plot_pair_ransac(outputdir, pairstring, p, full_im1, full_im2, kp_im1, kp_im2, matches, inliers):
     """Create plots of orb keypoints vs. ransac inliers."""
     fig, (ax1,ax2) = plt.subplots(2,1)
     plot_matches(ax1, full_im1, full_im2, kp_im1, kp_im2, 
@@ -210,14 +201,10 @@ def plot_pair_ransac(datadir, p, full_im1, full_im2, kp_im1, kp_im2, matches, in
     plot_matches(ax2, full_im1, full_im2, kp_im1, kp_im2, 
                  matches[inliers], only_matches=True)
     ax2.axis('off')
-    plotdir = path.join(datadir, 'plotpairs')
+    plotdir = path.join(outputdir, 'plotpairs')
     if not path.exists(plotdir):
         makedirs(plotdir)
-    fig.savefig(path.join(plotdir, 'pair_s' + 
-                          str(p[0][0]).zfill(4) + '-t' + 
-                          str(p[0][1]) + '_s' +
-                          str(p[1][0]).zfill(4) + '-t' + 
-                          str(p[1][1]) + '.tif'))
+    fig.savefig(path.join(plotdir, pairstring))
     plt.close(fig)
 
 def get_pair(outputdir, imgs, p, pid, offsets, downsample_factor, 
@@ -244,12 +231,24 @@ def get_pair(outputdir, imgs, p, pid, offsets, downsample_factor,
     
     w = k[offsets - (p[1][0] - p[0][0])]
     
+    pair = (p, src[inliers], dst[inliers], model, w)
+    
+    pairstring = 'pair' + \
+                 '_c' + str(offsets) + \
+                 '_d' + str(downsample_factor) + \
+                 '_s' + str(p[0][0]).zfill(4) + \
+                 '-t' + str(p[0][1]) + \
+                 '_s' + str(p[1][0]).zfill(4) + \
+                 '-t' + str(p[1][1])
+    pairfile = path.join(outputdir, pairstring + '.pickle')
+    pickle.dump(pair, open(pairfile, 'wb'))
     if plotpairs:
-        plot_pair_ransac(outputdir, p, f1, f2, kp1, kp2, matches, inliers)
+        plot_pair_ransac(outputdir, pairstring, p, f1, f2, kp1, kp2, matches, inliers)
     
     print('Pair %04d done in: %.2f s; matches: %05d; inliers: %05d' 
           % (pid, time() - pair_tstart, len(matches), np.sum(inliers)))
-    return (p, src[inliers], dst[inliers], model, w)
+    
+    return pair
 
 if __name__ == "__main__":
     main(sys.argv)

@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 import sys
-from os import path
+from os import path, makedirs
 from argparse import ArgumentParser
 import pickle
 import math
@@ -20,21 +20,32 @@ def main(argv):
     parser = ArgumentParser(description=
         'Generate matching point-pairs for stack registration.')
     parser.add_argument('datadir', help='a directory with images')
+    parser.add_argument('-o', '--outputdir', 
+                        help='directory to write results')
     parser.add_argument('-t', '--n_tiles', type=int, default=4, 
                         help='the number of tiles in the montage')
-    parser.add_argument('-o', '--offsets', type=int, default=2, 
+    parser.add_argument('-c', '--offsets', type=int, default=2, 
                         help='the number of sections in z to consider')
     parser.add_argument('-d', '--downsample_factor', type=int, default=1, 
                         help='the factor to downsample the images by')
+    parser.add_argument('-i', '--maxiter', type=int, default=100, 
+                        help='maximum number of iterations for L-BGFS-B')
     parser.add_argument('-p', '--pc_factors', type=float, nargs=3, 
                         default=[0.2*math.pi, 0.001, 0.001], 
                         help='the number of initial keypoints to generate')
     args = parser.parse_args()
     
     datadir = args.datadir
+    if not args.outputdir:
+        outputdir = datadir
+    else:
+        outputdir = args.outputdir
+        if not path.exists(outputdir):
+            makedirs(outputdir)
     n_tiles = args.n_tiles
     offsets = args.offsets
     downsample_factor = args.downsample_factor
+    maxiter = args.maxiter
     pc_factors = args.pc_factors
     
     # get the image collection
@@ -52,16 +63,16 @@ def main(argv):
     unique_pairs = generate_unique_pairs(n_slcs, offsets, connectivities)
     
     # load, initialize, precondition, minimize, decondition, save betas
-    pairs = load_pairs(datadir, offsets, downsample_factor, unique_pairs)
+    pairs = load_pairs(outputdir, offsets, downsample_factor, unique_pairs)
     init_tfs = generate_init_tfs(pairs, n_slcs, n_tiles)
     init_tfs_pc = precondition_betas(init_tfs, pc_factors)
     res = minimize(obj_fun_global, init_tfs_pc, 
                    args=(pairs, pc_factors, n_slcs, n_tiles), 
                    method='L-BFGS-B',   # Nelder-Mead  # Powell
-                   options={'maxfun':100000, 'maxiter':1000, 'disp':True})
+                   options={'maxfun':100000, 'maxiter':maxiter, 'disp':True})
     betas = decondition_betas(res.x, pc_factors)
     betas = np.array(betas).reshape(n_slcs, n_tiles, len(pc_factors))
-    betasfile = path.join(datadir, 'betas' + 
+    betasfile = path.join(outputdir, 'betas' + 
                           '_o' + str(offsets) + 
                           '_s' + str(downsample_factor) + '.npy')
     np.save(betasfile, betas)
@@ -90,14 +101,18 @@ def generate_unique_pairs(n_slcs, offsets, connectivities):
     return unique_pairs
 
 
-def load_pairs(datadir, offsets, downsample_factor, unique_pairs):
+def load_pairs(outputdir, offsets, downsample_factor, unique_pairs):
     """Load a previously generated set of pairs."""
     pairs = []
-    for pid in range(0,len(unique_pairs)):
-        pairfile = path.join(datadir, 'pairs' + 
-                             '_o' + str(offsets) + 
-                             '_s' + str(downsample_factor) + 
-                             '_p' + str(pid).zfill(4) + '.pickle')
+    for p in unique_pairs:
+        pairstring = 'pair' + \
+                     '_c' + str(offsets) + \
+                     '_d' + str(downsample_factor) + \
+                     '_s' + str(p[0][0]).zfill(4) + \
+                     '-t' + str(p[0][1]) + \
+                     '_s' + str(p[1][0]).zfill(4) + \
+                     '-t' + str(p[1][1])
+        pairfile = path.join(outputdir, pairstring + '.pickle')
         p, src, dst, model, w = pickle.load(open(pairfile, 'rb'))
         pairs.append((p, src, dst, model, w))
     

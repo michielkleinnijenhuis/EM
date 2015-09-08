@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 import sys
-from os import path
+from os import path, makedirs
 from argparse import ArgumentParser
 
 import numpy as np
@@ -22,9 +22,11 @@ def main(argv):
     parser = ArgumentParser(description=
         'Generate matching point-pairs for stack registration.')
     parser.add_argument('datadir', help='a directory with images')
+    parser.add_argument('-o', '--outputdir', 
+                        help='directory to write results')
     parser.add_argument('-t', '--n_tiles', type=int, default=4, 
                         help='the number of tiles in the montage')
-    parser.add_argument('-o', '--offsets', type=int, default=2, 
+    parser.add_argument('-c', '--offsets', type=int, default=2, 
                         help='the number of sections in z to consider')
     parser.add_argument('-d', '--downsample_factor', type=int, default=1, 
                         help='the factor to downsample the images by')
@@ -35,6 +37,12 @@ def main(argv):
     args = parser.parse_args()
     
     datadir = args.datadir
+    if not args.outputdir:
+        outputdir = datadir
+    else:
+        outputdir = args.outputdir
+        if not path.exists(outputdir):
+            makedirs(outputdir)
     n_tiles = args.n_tiles
     offsets = args.offsets
     downsample_factor = args.downsample_factor
@@ -49,7 +57,7 @@ def main(argv):
     
     
     # load betas and make transformation matrices
-    betasfile = path.join(datadir, 'betas' + 
+    betasfile = path.join(outputdir, 'betas' + 
                           '_o' + str(offsets) + 
                           '_s' + str(downsample_factor) + '.npy')
     betas = np.load(betasfile)
@@ -93,7 +101,7 @@ def main(argv):
     # process the assigned pairs
     local_slcs = [(i,im) for i,im in enumerate(imgs) 
                   if i in local_slcnrs]
-    retval = blend_tiles(datadir, n_tiles, local_slcs, canvasshape, 
+    retval = blend_tiles(outputdir, n_tiles, local_slcs, canvasshape, 
                          coordinates, H, distance_image, 
                          downsample_factor, interpolation_order)
     
@@ -146,7 +154,7 @@ def get_canvas_bounds(imshape, n_slcs, n_tiles, H):
     
     return canvas_bounds  # [[xmin,ymin],[xmax,ymax]]
 
-def blend_tiles(datadir, n_tiles, local_slcs, canvasshape, coordinates, H, distance_image, downsample_factor, order):
+def blend_tiles(outputdir, n_tiles, local_slcs, canvasshape, coordinates, H, distance_image, downsample_factor, order):
     """Warp and blend the tiles."""
     
     # warp and blend for each slice
@@ -176,7 +184,7 @@ def blend_tiles(datadir, n_tiles, local_slcs, canvasshape, coordinates, H, dista
         imgcanvas[nzcount>0] = np.sum(np.multiply(imgslc[nzcount>0], w), axis=1)
         
         # save
-        imsave(path.join(datadir, 'reg_' + str(i).zfill(4) + '.tif'), imgcanvas)
+        imsave(path.join(outputdir, 'reg_' + str(i).zfill(4) + '.tif'), imgcanvas)
     
     return 0
 
