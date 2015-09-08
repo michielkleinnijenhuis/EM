@@ -39,7 +39,7 @@ def main(argv):
                         default=[0.1,0.1], help='section overlap in [y,x]')
     parser.add_argument('-k', '--n_keypoints', type=int, default=10000, 
                         help='the number of initial keypoints to generate')
-    parser.add_argument('-p', '--plotpairs', action='store_true', 
+    parser.add_argument('-p', '--plotpairs', action='store_false', 
                         help='create plots of point-pairs')
     parser.add_argument('-m', '--usempi', action='store_true', 
                         help='use mpi4py')
