@@ -26,7 +26,7 @@ def main(argv):
                         help='the number of tiles in the montage')
     parser.add_argument('-o', '--offsets', type=int, default=2, 
                         help='the number of sections in z to consider')
-    parser.add_argument('-s', '--subsample_factor', type=int, default=1, 
+    parser.add_argument('-d', '--downsample_factor', type=int, default=1, 
                         help='the factor to downsample the images by')
     parser.add_argument('-i', '--interpolation_order', type=int, default=1, 
                         help='the order for the interpolation')
@@ -37,7 +37,7 @@ def main(argv):
     datadir = args.datadir
     n_tiles = args.n_tiles
     offsets = args.offsets
-    subsample_factor = args.subsample_factor
+    downsample_factor = args.downsample_factor
     interpolation_order = args.interpolation_order
     usempi = args.usempi
     
@@ -51,12 +51,12 @@ def main(argv):
     # load betas and make transformation matrices
     betasfile = path.join(datadir, 'betas' + 
                           '_o' + str(offsets) + 
-                          '_s' + str(subsample_factor) + '.npy')
+                          '_s' + str(downsample_factor) + '.npy')
     betas = np.load(betasfile)
     H = tfs_to_H(betas, n_slcs, n_tiles)
     
     # create an distance image for blending weights
-    imshape = [s/subsample_factor for s in imgs[0][0].shape]
+    imshape = [s/downsample_factor for s in imgs[0][0].shape]
     distance_image = create_distance_image(imshape)
     
     # bounds of the final canvas
@@ -95,7 +95,7 @@ def main(argv):
                   if i in local_slcnrs]
     retval = blend_tiles(datadir, n_tiles, local_slcs, canvasshape, 
                          coordinates, H, distance_image, 
-                         subsample_factor, interpolation_order)
+                         downsample_factor, interpolation_order)
     
     return retval
 
@@ -146,7 +146,7 @@ def get_canvas_bounds(imshape, n_slcs, n_tiles, H):
     
     return canvas_bounds  # [[xmin,ymin],[xmax,ymax]]
 
-def blend_tiles(datadir, n_tiles, local_slcs, canvasshape, coordinates, H, distance_image, subsample_factor, order):
+def blend_tiles(datadir, n_tiles, local_slcs, canvasshape, coordinates, H, distance_image, downsample_factor, order):
     """Warp and blend the tiles."""
     
     # warp and blend for each slice
@@ -160,8 +160,8 @@ def blend_tiles(datadir, n_tiles, local_slcs, canvasshape, coordinates, H, dista
             tf_coord = np.reshape(tf_coord.T, (2, canvasshape[0], canvasshape[1]))
             tf_coord[[0,1],:,:] = tf_coord[[1,0],:,:]  # [y,x]
             
-            if subsample_factor > 1:
-                im = rescale(tile, 1./subsample_factor)
+            if downsample_factor > 1:
+                im = rescale(tile, 1./downsample_factor)
             else:
                 im = tile  # [y,x]
             imgslc[:,:,j] = map_coordinates(im, tf_coord, order=order)  # tfcoord should be [y,x] if im is [y,x]

@@ -24,7 +24,7 @@ def main(argv):
                         help='the number of tiles in the montage')
     parser.add_argument('-o', '--offsets', type=int, default=2, 
                         help='the number of sections in z to consider')
-    parser.add_argument('-s', '--subsample_factor', type=int, default=1, 
+    parser.add_argument('-d', '--downsample_factor', type=int, default=1, 
                         help='the factor to downsample the images by')
     parser.add_argument('-p', '--pc_factors', type=float, nargs=3, 
                         default=[0.2*math.pi, 0.001, 0.001], 
@@ -34,7 +34,7 @@ def main(argv):
     datadir = args.datadir
     n_tiles = args.n_tiles
     offsets = args.offsets
-    subsample_factor = args.subsample_factor
+    downsample_factor = args.downsample_factor
     pc_factors = args.pc_factors
     
     # get the image collection
@@ -52,7 +52,7 @@ def main(argv):
     unique_pairs = generate_unique_pairs(n_slcs, offsets, connectivities)
     
     # load, initialize, precondition, minimize, decondition, save betas
-    pairs = load_pairs(datadir, offsets, subsample_factor, unique_pairs)
+    pairs = load_pairs(datadir, offsets, downsample_factor, unique_pairs)
     init_tfs = generate_init_tfs(pairs, n_slcs, n_tiles)
     init_tfs_pc = precondition_betas(init_tfs, pc_factors)
     res = minimize(obj_fun_global, init_tfs_pc, 
@@ -63,7 +63,7 @@ def main(argv):
     betas = np.array(betas).reshape(n_slcs, n_tiles, len(pc_factors))
     betasfile = path.join(datadir, 'betas' + 
                           '_o' + str(offsets) + 
-                          '_s' + str(subsample_factor) + '.npy')
+                          '_s' + str(downsample_factor) + '.npy')
     np.save(betasfile, betas)
     
     return 0
@@ -90,13 +90,13 @@ def generate_unique_pairs(n_slcs, offsets, connectivities):
     return unique_pairs
 
 
-def load_pairs(datadir, offsets, subsample_factor, unique_pairs):
+def load_pairs(datadir, offsets, downsample_factor, unique_pairs):
     """Load a previously generated set of pairs."""
     pairs = []
     for pid in range(0,len(unique_pairs)):
         pairfile = path.join(datadir, 'pairs' + 
                              '_o' + str(offsets) + 
-                             '_s' + str(subsample_factor) + 
+                             '_s' + str(downsample_factor) + 
                              '_p' + str(pid).zfill(4) + '.pickle')
         p, src, dst, model, w = pickle.load(open(pairfile, 'rb'))
         pairs.append((p, src, dst, model, w))

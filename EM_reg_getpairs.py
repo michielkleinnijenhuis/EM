@@ -33,7 +33,7 @@ def main(argv):
                         help='the number of tiles in the montage')
     parser.add_argument('-c', '--offsets', type=int, default=2, 
                         help='the number of sections in z to consider')
-    parser.add_argument('-s', '--subsample_factor', type=int, default=1, 
+    parser.add_argument('-d', '--downsample_factor', type=int, default=1, 
                         help='the factor to downsample the images by')
     parser.add_argument('-f', '--overlap_fraction', type=float, nargs=2, 
                         default=[0.1,0.1], help='section overlap in [y,x]')
@@ -54,7 +54,7 @@ def main(argv):
             makedirs(outputdir)
     n_tiles = args.n_tiles
     offsets = args.offsets
-    subsample_factor = args.subsample_factor
+    downsample_factor = args.downsample_factor
     overlap_fraction = args.overlap_fraction
     n_keypoints = args.n_keypoints
     usempi = args.usempi
@@ -104,11 +104,14 @@ def main(argv):
     for pid, p in local_pairs:
         # FIXME: handle case where get_pair fails (no inliers)
         pair = get_pair(outputdir, imgs, p, pid, offsets, 
-                        subsample_factor, overlap_fraction, orb, k, plotpairs)
-        pairfile = path.join(outputdir, 'pairs' + 
-                             '_o' + str(offsets) + 
-                             '_s' + str(subsample_factor) + 
-                             '_p' + str(pid).zfill(4) + '.pickle')
+                        downsample_factor, overlap_fraction, orb, k, plotpairs)
+        pairfile = path.join(outputdir, 'pair_' + 
+                             '_c' + str(offsets) + 
+                             '_s' + str(downsample_factor) + 
+                             '_s' + str(p[0][0]).zfill(4) + 
+                             '-t' + str(p[0][1]) + 
+                             '_s' + str(p[1][0]).zfill(4) + 
+                             '-t' + str(p[1][1]) + '.pickle')
         pickle.dump(pair, open(pairfile, 'wb'))
     
     return 0
@@ -134,11 +137,11 @@ def generate_unique_pairs(n_slcs, offsets, connectivities):
     
     return unique_pairs
 
-def subsample_images(p, imgs, subsample_factor):
-    """Subsample images with subsample_factor"""
-    if subsample_factor > 1:
-        full_im1 = rescale(imgs[p[0][0]][p[0][1]], 1./subsample_factor)
-        full_im2 = rescale(imgs[p[1][0]][p[1][1]], 1./subsample_factor)
+def downsample_images(p, imgs, downsample_factor):
+    """Subsample images with downsample_factor"""
+    if downsample_factor > 1:
+        full_im1 = rescale(imgs[p[0][0]][p[0][1]], 1./downsample_factor)
+        full_im2 = rescale(imgs[p[1][0]][p[1][1]], 1./downsample_factor)
     else:
         full_im1 = imgs[p[0][0]][p[0][1]]
         full_im2 = imgs[p[1][0]][p[1][1]]
@@ -217,16 +220,16 @@ def plot_pair_ransac(datadir, p, full_im1, full_im2, kp_im1, kp_im2, matches, in
                           str(p[1][1]) + '.tif'))
     plt.close(fig)
 
-def get_pair(outputdir, imgs, p, pid, offsets, subsample_factor, 
+def get_pair(outputdir, imgs, p, pid, offsets, downsample_factor, 
              overlap_fraction, orb, k, plotpairs):
     """Create inlier keypoint pairs."""
     
     pair_tstart = time()
     
-    overlap_pixels = [int(math.ceil(d * overlap_fraction[i] * 1/subsample_factor)) 
+    overlap_pixels = [int(math.ceil(d * overlap_fraction[i] * 1/downsample_factor)) 
                       for i,d in enumerate(imgs[0][0].shape)]
     
-    f1, f2 = subsample_images(p, imgs, subsample_factor)
+    f1, f2 = downsample_images(p, imgs, downsample_factor)
     p1, p2 = select_imregions(p[2], f1, f2, overlap_pixels)
     kp1, de1 = get_keypoints(orb, p1)
     kp2, de2 = get_keypoints(orb, p2)
