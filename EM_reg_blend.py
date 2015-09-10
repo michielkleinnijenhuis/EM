@@ -184,7 +184,7 @@ def blend_tiles(outputdir, n_tiles, local_slcs, canvasshape, coordinates, H, dis
         imgcanvas[nzcount>0] = np.sum(np.multiply(imgslc[nzcount>0], w), axis=1)
         
         # save
-        imsave(path.join(outputdir, 'reg_' + str(i).zfill(4) + '.tif'), imgcanvas)
+        imsave(path.join(outputdir, str(i).zfill(4) + '.tif'), imgcanvas)
     
     return 0
 

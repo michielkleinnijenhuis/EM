@@ -39,6 +39,10 @@ def main(argv):
                         default=[0.1,0.1], help='section overlap in [y,x]')
     parser.add_argument('-k', '--n_keypoints', type=int, default=10000, 
                         help='the number of initial keypoints to generate')
+    parser.add_argument('-r', '--residual_threshold', type=float, 
+                        default=2, help='inlier threshold for ransac')
+    parser.add_argument('-n', '--num_inliers', type=int, default=100, 
+                        help='the number of ransac inliers to look for')
     parser.add_argument('-p', '--plotpairs', action='store_true', 
                         help='create plots of point-pairs')
     parser.add_argument('-m', '--usempi', action='store_true', 
@@ -57,6 +61,8 @@ def main(argv):
     downsample_factor = args.downsample_factor
     overlap_fraction = args.overlap_fraction
     n_keypoints = args.n_keypoints
+    residual_threshold = args.residual_threshold
+    num_inliers = args.num_inliers
     usempi = args.usempi
     plotpairs = args.plotpairs
     
@@ -103,7 +109,8 @@ def main(argv):
                    if i in local_pairnrs]
     for pid, p in local_pairs:  # FIXME: handle case where get_pair fails
         pair = get_pair(outputdir, imgs, p, pid, offsets, 
-                        downsample_factor, overlap_fraction, orb, k, plotpairs)
+                        downsample_factor, overlap_fraction, orb, k, plotpairs, 
+                        residual_threshold, num_inliers)
     
     return 0
 
@@ -208,7 +215,7 @@ def plot_pair_ransac(outputdir, pairstring, p, full_im1, full_im2, kp_im1, kp_im
     plt.close(fig)
 
 def get_pair(outputdir, imgs, p, pid, offsets, downsample_factor, 
-             overlap_fraction, orb, k, plotpairs):
+             overlap_fraction, orb, k, plotpairs=0, res_th=10, num_inliers=100):
     """Create inlier keypoint pairs."""
     
     pair_tstart = time()
@@ -225,8 +232,10 @@ def get_pair(outputdir, imgs, p, pid, offsets, downsample_factor,
     matches = match_descriptors(de1, de2, cross_check=True)
     dst = kp1[matches[:, 0]][:, ::-1]
     src = kp2[matches[:, 1]][:, ::-1]
+#     res_th = np.median(np.abs(dst-src))
     model, inliers = ransac((src, dst), SimilarityTransform, min_samples=4, 
-                            residual_threshold=2, max_trials=300)
+                            residual_threshold=res_th, 
+                            max_trials=1000, stop_sample_num=num_inliers)
     # FIXME: is there no rigid model in scikit-image??? # this is needed for input to RANSAC
     
     w = k[offsets - (p[1][0] - p[0][0])]
@@ -245,7 +254,7 @@ def get_pair(outputdir, imgs, p, pid, offsets, downsample_factor,
     if plotpairs:
         plot_pair_ransac(outputdir, pairstring, p, f1, f2, kp1, kp2, matches, inliers)
     
-    print('Pair %04d done in: %.2f s; matches: %05d; inliers: %05d' 
+    print('Pair %04d done in: %6.2f s; matches: %05d; inliers: %05d' 
           % (pid, time() - pair_tstart, len(matches), np.sum(inliers)))
     
     return pair
