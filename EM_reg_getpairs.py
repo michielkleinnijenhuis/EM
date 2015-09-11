@@ -41,7 +41,7 @@ def main(argv):
                         help='the number of initial keypoints to generate')
     parser.add_argument('-r', '--residual_threshold', type=float, 
                         default=2, help='inlier threshold for ransac')
-    parser.add_argument('-n', '--num_inliers', type=int, default=100, 
+    parser.add_argument('-n', '--num_inliers', type=int, default=None, 
                         help='the number of ransac inliers to look for')
     parser.add_argument('-p', '--plotpairs', action='store_true', 
                         help='create plots of point-pairs')
@@ -79,10 +79,15 @@ def main(argv):
                       ['x', 0, 1],['x', 2, 3],
                       ['d1', 0, 3]]
     unique_pairs = generate_unique_pairs(n_slcs, offsets, connectivities)
+    pairstring = 'unique_pairs' + \
+                 '_c' + str(offsets) + \
+                 '_d' + str(downsample_factor)
+    pairfile = path.join(outputdir, pairstring + '.pickle')
+    pickle.dump(unique_pairs, open(pairfile, 'wb'))
     
     
     # get the feature class
-    orb = ORB(n_keypoints=n_keypoints, fast_threshold=0.05)
+    orb = ORB(n_keypoints=n_keypoints, fast_threshold=0.08, n_scales=8, downscale=1.2)
     # get the weighing kernel in z
     k = gaussian(offsets*2+1, 1, sym=True)
     
@@ -232,7 +237,6 @@ def get_pair(outputdir, imgs, p, pid, offsets, downsample_factor,
     matches = match_descriptors(de1, de2, cross_check=True)
     dst = kp1[matches[:, 0]][:, ::-1]
     src = kp2[matches[:, 1]][:, ::-1]
-#     res_th = np.median(np.abs(dst-src))
     model, inliers = ransac((src, dst), SimilarityTransform, min_samples=4, 
                             residual_threshold=res_th, 
                             max_trials=1000, stop_sample_num=num_inliers)

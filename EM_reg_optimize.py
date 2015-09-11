@@ -13,6 +13,7 @@ from matplotlib.pylab import c_, r_
 from scipy.optimize import minimize
 from skimage.transform import SimilarityTransform
 
+
 def main(argv):
     """."""
     
@@ -22,6 +23,8 @@ def main(argv):
     parser.add_argument('datadir', help='a directory with images')
     parser.add_argument('-o', '--outputdir', 
                         help='directory to write results')
+    parser.add_argument('-u', '--upairsfile', 
+                        help='pickle with the unique pairs')
     parser.add_argument('-t', '--n_tiles', type=int, default=4, 
                         help='the number of tiles in the montage')
     parser.add_argument('-c', '--offsets', type=int, default=2, 
@@ -42,25 +45,31 @@ def main(argv):
         outputdir = args.outputdir
         if not path.exists(outputdir):
             makedirs(outputdir)
+    upairsfile = args.upairsfile
     n_tiles = args.n_tiles
     offsets = args.offsets
     downsample_factor = args.downsample_factor
     maxiter = args.maxiter
     pc_factors = args.pc_factors
     
-    # get the image collection
-    imgs = io.ImageCollection(path.join(datadir,'*.tif'))
-    n_slcs = len(imgs) / n_tiles
-    imgs = [imgs[(slc+1)*n_tiles-n_tiles:slc*n_tiles+4] 
-            for slc in range(0, n_slcs)]
-    
-    # determine which pairs of images to process
-    # NOTE: ['d2', 1, 2] non-overlapping for M3 dataset
-    connectivities = [['z', 0, 0],['z', 1, 1],['z', 2, 2],['z', 3, 3],
-                      ['y', 0, 2],['y', 1, 3],
-                      ['x', 0, 1],['x', 2, 3],
-                      ['d1', 0, 3]]
-    unique_pairs = generate_unique_pairs(n_slcs, offsets, connectivities)
+    if not upairsfile:
+        # get the image collection
+        imgs = io.ImageCollection(path.join(datadir,'*.tif'))
+        n_slcs = len(imgs) / n_tiles
+        imgs = [imgs[(slc+1)*n_tiles-n_tiles:slc*n_tiles+4] 
+                for slc in range(0, n_slcs)]
+        
+        # determine which pairs of images to process
+        # NOTE: ['d2', 1, 2] non-overlapping for M3 dataset
+        connectivities = [['z', 0, 0],['z', 1, 1],['z', 2, 2],['z', 3, 3],
+                          ['y', 0, 2],['y', 1, 3],
+                          ['x', 0, 1],['x', 2, 3],
+                          ['d1', 0, 3]]
+        unique_pairs = generate_unique_pairs(n_slcs, offsets, connectivities)
+    else:
+        unique_pairs = pickle.load(open(upairsfile, 'rb'))
+        n_slcs = len(unique_pairs) / 4
+        
     
     # load, initialize, precondition, minimize, decondition, save betas
     pairs = load_pairs(outputdir, offsets, downsample_factor, unique_pairs)
@@ -126,8 +135,11 @@ def generate_init_tfs(pairs, n_slcs, n_tiles):
         p, _, _, model, _ = pair
         if (p[0][1] == 0) & (p[0][0] == p[1][0]):  # referenced to tile 0 within the same slice
             tf1 = tf0.__add__(model)
-            itf = [math.acos(min(tf1.params[0,0], 1)),   # FIXME!!! with RigidTransform
-                   tf1.params[0,2], tf1.params[1,2]]
+            if tf1.params[0,0] > 0:  # FIXME!!! with RigidTransform
+                theta = min(tf1.params[0,0], 1)
+            else:
+                theta = max(tf1.params[0,0], -1)
+            itf = [math.acos(theta), tf1.params[0,2], tf1.params[1,2]]
             init_tfs[p[1][0],p[1][1],:] = np.array(itf)
         if (p[0][1] == p[1][1] == 0) & (p[1][0] - p[0][0] == 1):  # if [slcX,tile0] to [slcX-1,tile0]
             tf0 = tf0.__add__(model)
