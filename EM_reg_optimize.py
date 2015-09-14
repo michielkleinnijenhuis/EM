@@ -5,16 +5,15 @@ from os import path, makedirs
 from argparse import ArgumentParser
 import pickle
 import math
+import glob
 
 import numpy as np
 
-from skimage import io
 from matplotlib.pylab import c_, r_
 from scipy.optimize import minimize
 from skimage.transform import SimilarityTransform
 
 from mpi4py import MPI
-# from time import time
 
 def main(argv):
     """."""
@@ -22,68 +21,38 @@ def main(argv):
     # parse arguments
     parser = ArgumentParser(description=
         'Generate matching point-pairs for stack registration.')
-    parser.add_argument('datadir', help='a directory with images')
-    parser.add_argument('-o', '--outputdir', 
-                        help='directory to write results')
+    parser.add_argument('inputdir', help='a directory with pickles')
+    parser.add_argument('-r', '--regex', default='*.pickle', 
+                        help='regular expression to select files with')
+    parser.add_argument('outputfile', help='file to write results to')
     parser.add_argument('-a', '--method', default='L-BGFS-B', 
                         help='minimization method')
-    parser.add_argument('-u', '--upairsfile', 
-                        help='pickle with the unique pairs')
-    parser.add_argument('-t', '--n_tiles', type=int, default=4, 
-                        help='the number of tiles in the montage')
-    parser.add_argument('-c', '--offsets', type=int, default=2, 
-                        help='the number of sections in z to consider')
-    parser.add_argument('-d', '--downsample_factor', type=int, default=1, 
-                        help='the factor to downsample the images by')
     parser.add_argument('-i', '--maxiter', type=int, default=100, 
                         help='maximum number of iterations for L-BGFS-B')
     parser.add_argument('-p', '--pc_factors', type=float, nargs=3, 
                         default=[0.2*math.pi, 0.001, 0.001], 
-                        help='the number of initial keypoints to generate')
+                        help='preconditioning factors')
     parser.add_argument('-m', '--usempi', action='store_true', 
                         help='use mpi4py')
     args = parser.parse_args()
     
-    datadir = args.datadir
-    if not args.outputdir:
-        outputdir = datadir
-    else:
-        outputdir = args.outputdir
-        if not path.exists(outputdir):
-            makedirs(outputdir)
-    upairsfile = args.upairsfile
-    n_tiles = args.n_tiles
-    offsets = args.offsets
-    downsample_factor = args.downsample_factor
+    inputdir = args.inputdir
+    regex = args.regex
+    outputfile = args.outputfile
+    p,_ = path.split(outputfile)
+    if not path.exists(p):
+        makedirs(p)
+    method = args.method
     maxiter = args.maxiter
     pc_factors = args.pc_factors
-    method = args.method
     usempi = args.usempi
     
-    if not upairsfile:
-        # get the image collection
-        imgs = io.ImageCollection(path.join(datadir,'*.tif'))
-        n_slcs = len(imgs) / n_tiles
-        imgs = [imgs[(slc+1)*n_tiles-n_tiles:slc*n_tiles+4] 
-                for slc in range(0, n_slcs)]
-        
-        # determine which pairs of images to process
-        # NOTE: ['d2', 1, 2] non-overlapping for M3 dataset
-        connectivities = [['z', 0, 0],['z', 1, 1],['z', 2, 2],['z', 3, 3],
-                          ['y', 0, 2],['y', 1, 3],
-                          ['x', 0, 1],['x', 2, 3],
-                          ['d1', 0, 3]]
-        unique_pairs = generate_unique_pairs(n_slcs, offsets, connectivities)
-    else:
-        unique_pairs = pickle.load(open(upairsfile, 'rb'))
-        n_slcs = unique_pairs[-1][0][0] + 1
     
-    # load, initialize, precondition, minimize, decondition, save betas
-    pairs = load_pairs(outputdir, offsets, downsample_factor, unique_pairs)
+    # load pairs
+    pairs, n_slcs, n_tiles = load_pairs(inputdir, regex)
     
     
-    init_tfs = np.zeros([n_slcs, n_tiles, 3])
-    
+    # distribute the job
     n = len(pairs)
     nrs = np.array(range(0, n), dtype=int)
     if usempi:
@@ -100,19 +69,20 @@ def main(argv):
         comm.Scatterv([nrs, tuple(local_n), displacements, 
                        MPI.SIGNED_LONG_LONG], local_nrs, root=0)
         
+        # generate initilization point and send to all processes
+        init_tfs = np.zeros([n_slcs, n_tiles, 3])
         if rank == 0:
             init_tfs = generate_init_tfs(pairs, n_slcs, n_tiles)
         comm.Bcast(init_tfs, root=0)
     else:
         comm = None
-        
         local_nrs = nrs
-        
         init_tfs = generate_init_tfs(pairs, n_slcs, n_tiles)
     
-    if not method:
+    
+    # run minimization
+    if method == 'init':
         betas = init_tfs
-        method = 'init'
     else:
         init_tfs_pc = precondition_betas(init_tfs, pc_factors)
         res = minimize(obj_fun_global, init_tfs_pc, 
@@ -123,53 +93,32 @@ def main(argv):
         betas = decondition_betas(res.x, pc_factors)
         betas = np.array(betas).reshape(n_slcs, n_tiles, len(pc_factors))
     
-    betasfile = path.join(outputdir, 
-                          'betas_' + method + 
-                          '_o' + str(offsets) + 
-                          '_d' + str(downsample_factor) + 
-                          '_n' + str(maxiter) + '.npy')
-    np.save(betasfile, betas)
     
-    return 0
+    # write the optimized transformation as numpy array
+    np.save(outputfile, betas)
+    
+    return betas
 
 
 #####################
 ### function defs ###
 #####################
 
-def generate_unique_pairs(n_slcs, offsets, connectivities):
-    """Get a list of unique pairs with certain connectivity."""
-    # list of [[slcIm1, tileIm1], [slcIm2, tileIm2], 'type']
-    all_pairs = [[[slc,c[1]], [slc+o,c[2]], c[0]] 
-                 for slc in range(0, n_slcs) 
-                 for o in range(0, offsets+1) 
-                 for c in connectivities]
-    unique_pairs = []
-    for pair in all_pairs:
-        if (([pair[1],pair[0],pair[2]] not in unique_pairs) & 
-            (pair[0] != pair[1]) & 
-            (pair[1][0] != n_slcs)):
-            unique_pairs.append(pair)
-    
-    return unique_pairs
-
-
-def load_pairs(outputdir, offsets, downsample_factor, unique_pairs):
+def load_pairs(inputdir, regex):
     """Load a previously generated set of pairs."""
+    
+    pairfiles = glob.glob(path.join(inputdir, regex))
+    
     pairs = []
-    for p in unique_pairs:
-        pairstring = 'pair' + \
-                     '_c' + str(offsets) + \
-                     '_d' + str(downsample_factor) + \
-                     '_s' + str(p[0][0]).zfill(4) + \
-                     '-t' + str(p[0][1]) + \
-                     '_s' + str(p[1][0]).zfill(4) + \
-                     '-t' + str(p[1][1])
-        pairfile = path.join(outputdir, pairstring + '.pickle')
+    slcnr = 0
+    tilenr = 0
+    for pairfile in pairfiles:
         p, src, dst, model, w = pickle.load(open(pairfile, 'rb'))
         pairs.append((p, src, dst, model, w))
+        slcnr = max(p[0][0], slcnr)
+        tilenr = max(p[0][1], tilenr)
     
-    return pairs
+    return pairs, slcnr+1, tilenr+1
 
 def generate_init_tfs(pairs, n_slcs, n_tiles):
     """Find the transformation of each tile to tile[0,0]."""
@@ -223,7 +172,6 @@ def obj_fun_global(pars, pairs, pc_factors, n_slcs, n_tiles, local_nrs, usempi=0
                                        [math.sin(theta),  math.cos(theta), ty],
                                        [0,0,1]])
     
-#     pair_ssestart = time()
     wses = np.empty([0,2])
     local_pairs = [(i,up) for i,up in enumerate(pairs) 
                    if i in local_nrs]
@@ -243,7 +191,6 @@ def obj_fun_global(pars, pairs, pc_factors, n_slcs, n_tiles, local_nrs, usempi=0
     if usempi:
         sse = comm.allreduce(sse, op = MPI.SUM)
     
-#     print('sse calculated in: %6.5f s' % (time() - pair_ssestart))
     return sse
 
 if __name__ == "__main__":

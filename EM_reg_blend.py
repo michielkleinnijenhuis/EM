@@ -16,18 +16,16 @@ from scipy.misc import imsave
 from mpi4py import MPI
 
 def main(argv):
-    """."""
+    """Transform, blend and write images."""
     
     # parse arguments
     parser = ArgumentParser(description=
         'Generate matching point-pairs for stack registration.')
-    parser.add_argument('datadir', help='a directory with images')
-    parser.add_argument('-o', '--outputdir', 
-                        help='directory to write results')
-    parser.add_argument('-t', '--n_tiles', type=int, default=4, 
-                        help='the number of tiles in the montage')
-    parser.add_argument('-c', '--offsets', type=int, default=2, 
-                        help='the number of sections in z to consider')
+    parser.add_argument('inputdir', help='a directory with original images')
+    parser.add_argument('betasfile', 
+                        help='files with transformations [theta,tx,ty]: \
+                        numpy array n_slcs x n_tiles x 3')
+    parser.add_argument('outputdir', help='directory to write results')
     parser.add_argument('-d', '--downsample_factor', type=int, default=1, 
                         help='the factor to downsample the images by')
     parser.add_argument('-i', '--interpolation_order', type=int, default=1, 
@@ -36,41 +34,36 @@ def main(argv):
                         help='use mpi4py')
     args = parser.parse_args()
     
-    datadir = args.datadir
-    if not args.outputdir:
-        outputdir = datadir
-    else:
-        outputdir = args.outputdir
-        if not path.exists(outputdir):
-            makedirs(outputdir)
-    n_tiles = args.n_tiles
-    offsets = args.offsets
+    inputdir = args.inputdir
+    betasfile = args.betasfile
+    outputdir = args.outputdir
+    if not path.exists(outputdir):
+        makedirs(outputdir)
     downsample_factor = args.downsample_factor
     interpolation_order = args.interpolation_order
     usempi = args.usempi
     
-    # get the image collection
-    imgs = io.ImageCollection(path.join(datadir,'*.tif'))
-    n_slcs = len(imgs) / n_tiles
-    imgs = [imgs[(slc+1)*n_tiles-n_tiles:slc*n_tiles+4] 
-            for slc in range(0, n_slcs)]
-    
     
     # load betas and make transformation matrices
-    betasfile = path.join(outputdir, 'betas' + 
-                          '_o' + str(offsets) + 
-                          '_d' + str(downsample_factor) + '.npy')
     betas = np.load(betasfile)
+    n_slcs = betas.shape[0]
+    n_tiles = betas.shape[1]
     H = tfs_to_H(betas, n_slcs, n_tiles)
+    
+    
+    # get the image collection
+    imgs = io.ImageCollection(path.join(inputdir,'*.tif'))
+    imgs = [imgs[(slc+1)*n_tiles-n_tiles:slc*n_tiles+n_tiles] 
+            for slc in range(0, n_slcs)]
+    
     
     # create an distance image for blending weights
     imshape = [s/downsample_factor for s in imgs[0][0].shape]
     distance_image = create_distance_image(imshape)
     
-    # bounds of the final canvas
-    canvas_bounds = get_canvas_bounds(imshape, n_slcs, n_tiles, H)  ## [[xmin,ymin],[xmax,ymax]]
     
     # create the canvas coordinate list
+    canvas_bounds = get_canvas_bounds(imshape, n_slcs, n_tiles, H)  ## [[xmin,ymin],[xmax,ymax]]
     x = np.linspace(canvas_bounds[0,0], canvas_bounds[1,0], 
                     canvas_bounds[1,0]-canvas_bounds[0,0])
     y = np.linspace(canvas_bounds[0,1], canvas_bounds[1,1], 
@@ -81,7 +74,9 @@ def main(argv):
     canvasshape = X.shape
     
     
-    slcnrs = np.array(range(0, n_slcs), dtype=int)
+    # distribute the job
+    n = n_slcs
+    nrs = np.array(range(0, n), dtype=int)
     if usempi:
         # start the mpi communicator
         comm = MPI.COMM_WORLD
@@ -89,18 +84,18 @@ def main(argv):
         size = comm.Get_size()
          
         # scatter the slices
-        local_nslcs = np.ones(size, dtype=int) * n_slcs / size
-        local_nslcs[0:n_slcs % size] += 1
-        local_slcnrs = np.zeros(local_nslcs[rank], dtype=int)
-        displacements = tuple(sum(local_nslcs[0:r]) for r in range(0, size))
-        comm.Scatterv([slcnrs, tuple(local_nslcs), displacements, 
-                       MPI.SIGNED_LONG_LONG], local_slcnrs, root=0)
+        local_n = np.ones(size, dtype=int) * n / size
+        local_n[0:n_slcs % size] += 1
+        local_nrs = np.zeros(local_n[rank], dtype=int)
+        displacements = tuple(sum(local_n[0:r]) for r in range(0, size))
+        comm.Scatterv([nrs, tuple(local_n), displacements, 
+                       MPI.SIGNED_LONG_LONG], local_nrs, root=0)
     else:
-        local_slcnrs = slcnrs
+        local_nrs = nrs
+    
     
     # process the assigned pairs
-    local_slcs = [(i,im) for i,im in enumerate(imgs) 
-                  if i in local_slcnrs]
+    local_slcs = [(i,im) for i,im in enumerate(imgs) if i in local_nrs]
     retval = blend_tiles(outputdir, n_tiles, local_slcs, canvasshape, 
                          coordinates, H, distance_image, 
                          downsample_factor, interpolation_order)
@@ -157,7 +152,6 @@ def get_canvas_bounds(imshape, n_slcs, n_tiles, H):
 def blend_tiles(outputdir, n_tiles, local_slcs, canvasshape, coordinates, H, distance_image, downsample_factor, order):
     """Warp and blend the tiles."""
     
-    # warp and blend for each slice
     for i, tiles in local_slcs:
         # warp
         imgslc = np.zeros([canvasshape[0], canvasshape[1], n_tiles])  # [y,x]
