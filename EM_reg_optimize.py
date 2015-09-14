@@ -13,6 +13,8 @@ from matplotlib.pylab import c_, r_
 from scipy.optimize import minimize
 from skimage.transform import SimilarityTransform
 
+from mpi4py import MPI
+# from time import time
 
 def main(argv):
     """."""
@@ -36,6 +38,8 @@ def main(argv):
     parser.add_argument('-p', '--pc_factors', type=float, nargs=3, 
                         default=[0.2*math.pi, 0.001, 0.001], 
                         help='the number of initial keypoints to generate')
+    parser.add_argument('-m', '--usempi', action='store_true', 
+                        help='use mpi4py')
     args = parser.parse_args()
     
     datadir = args.datadir
@@ -51,6 +55,7 @@ def main(argv):
     downsample_factor = args.downsample_factor
     maxiter = args.maxiter
     pc_factors = args.pc_factors
+    usempi = args.usempi
     
     if not upairsfile:
         # get the image collection
@@ -68,17 +73,48 @@ def main(argv):
         unique_pairs = generate_unique_pairs(n_slcs, offsets, connectivities)
     else:
         unique_pairs = pickle.load(open(upairsfile, 'rb'))
-        n_slcs = len(unique_pairs) / 4
-        
+        n_slcs = unique_pairs[-1][0][0] + 1
     
     # load, initialize, precondition, minimize, decondition, save betas
     pairs = load_pairs(outputdir, offsets, downsample_factor, unique_pairs)
-    init_tfs = generate_init_tfs(pairs, n_slcs, n_tiles)
+    
+    
+    init_tfs = np.zeros([n_slcs, n_tiles, 3])
+    
+    n = len(pairs)
+    nrs = np.array(range(0, n), dtype=int)
+    if usempi:
+        # start the mpi communicator
+        comm = MPI.COMM_WORLD
+        rank = comm.Get_rank()
+        size = comm.Get_size()
+        
+        # scatter the slices
+        local_n = np.ones(size, dtype=int) * n / size
+        local_n[0:n % size] += 1
+        local_nrs = np.zeros(local_n[rank], dtype=int)
+        displacements = tuple(sum(local_n[0:r]) for r in range(0, size))
+        comm.Scatterv([nrs, tuple(local_n), displacements, 
+                       MPI.SIGNED_LONG_LONG], local_nrs, root=0)
+        
+        if rank == 0:
+            init_tfs = generate_init_tfs(pairs, n_slcs, n_tiles)
+        comm.Bcast(init_tfs, root=0)
+    else:
+        comm = None
+        
+        local_nrs = nrs
+        
+        init_tfs = generate_init_tfs(pairs, n_slcs, n_tiles)
+    
     init_tfs_pc = precondition_betas(init_tfs, pc_factors)
+    
     res = minimize(obj_fun_global, init_tfs_pc, 
-                   args=(pairs, pc_factors, n_slcs, n_tiles), 
+                   args=(pairs, pc_factors, n_slcs, n_tiles, 
+                         local_nrs, usempi, comm), 
                    method='L-BFGS-B',   # Nelder-Mead  # Powell
                    options={'maxfun':100000, 'maxiter':maxiter, 'disp':True})
+    
     betas = decondition_betas(res.x, pc_factors)
     betas = np.array(betas).reshape(n_slcs, n_tiles, len(pc_factors))
     betasfile = path.join(outputdir, 'betas' + 
@@ -130,10 +166,10 @@ def load_pairs(outputdir, offsets, downsample_factor, unique_pairs):
 def generate_init_tfs(pairs, n_slcs, n_tiles):
     """Find the transformation of each tile to tile[0,0]."""
     tf0 = SimilarityTransform()
-    init_tfs = np.empty([n_slcs, n_tiles, 3])
+    init_tfs = np.zeros([n_slcs, n_tiles, 3])
     for pair in pairs:
         p, _, _, model, _ = pair
-        if (p[0][1] == 0) & (p[0][0] == p[1][0]):  # referenced to tile 0 within the same slice
+        if (p[0][1] == 0) & (p[0][0] == p[1][0]):  # if referenced to tile 0 & within the same slice
             tf1 = tf0.__add__(model)
             if tf1.params[0,0] > 0:  # FIXME!!! with RigidTransform
                 theta = min(tf1.params[0,0], 1)
@@ -162,7 +198,7 @@ def decondition_betas(betas_pc, pc_factors):
     
     return betas
 
-def obj_fun_global(pars, pairs, pc_factors, n_slcs, n_tiles):
+def obj_fun_global(pars, pairs, pc_factors, n_slcs, n_tiles, local_nrs, usempi=0, comm=None):
     """Calculate sum of squared error distances of keypoints."""
     # construct the transformation matrix for each slc/tile.
     H = np.empty([n_slcs, n_tiles, 3, 3])
@@ -179,8 +215,11 @@ def obj_fun_global(pars, pairs, pc_factors, n_slcs, n_tiles):
                                        [math.sin(theta),  math.cos(theta), ty],
                                        [0,0,1]])
     
+#     pair_ssestart = time()
     wses = np.empty([0,2])
-    for i, (p,s,d,_,w) in enumerate(pairs):
+    local_pairs = [(i,up) for i,up in enumerate(pairs) 
+                   if i in local_nrs]
+    for i, (p,s,d,_,w) in local_pairs:
         # homogenize pointsets
         d = c_[d, np.ones(d.shape[0])]
         s = c_[s, np.ones(s.shape[0])]
@@ -191,7 +230,12 @@ def obj_fun_global(pars, pairs, pc_factors, n_slcs, n_tiles):
         # concatenate the weighted squared errors of all the pairs
         wses = r_[wses, wse]
     # and sum
-    sse = sum(sum(wses))
+    sse = np.sum(wses)
+    
+    if usempi:
+        sse = comm.allreduce(sse, op = MPI.SUM)
+    
+#     print('sse calculated in: %6.2f s' % (time() - pair_ssestart))
     return sse
 
 if __name__ == "__main__":
