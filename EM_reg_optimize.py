@@ -25,6 +25,8 @@ def main(argv):
     parser.add_argument('datadir', help='a directory with images')
     parser.add_argument('-o', '--outputdir', 
                         help='directory to write results')
+    parser.add_argument('-a', '--method', default='L-BGFS-B', 
+                        help='minimization method')
     parser.add_argument('-u', '--upairsfile', 
                         help='pickle with the unique pairs')
     parser.add_argument('-t', '--n_tiles', type=int, default=4, 
@@ -55,6 +57,7 @@ def main(argv):
     downsample_factor = args.downsample_factor
     maxiter = args.maxiter
     pc_factors = args.pc_factors
+    method = args.method
     usempi = args.usempi
     
     if not upairsfile:
@@ -107,19 +110,24 @@ def main(argv):
         
         init_tfs = generate_init_tfs(pairs, n_slcs, n_tiles)
     
-    init_tfs_pc = precondition_betas(init_tfs, pc_factors)
+    if not method:
+        betas = init_tfs
+        method = 'init'
+    else:
+        init_tfs_pc = precondition_betas(init_tfs, pc_factors)
+        res = minimize(obj_fun_global, init_tfs_pc, 
+                       args=(pairs, pc_factors, n_slcs, n_tiles, 
+                             local_nrs, usempi, comm), 
+                       method=method,  # L-BGFS-B  # Nelder-Mead  # Powell
+                       options={'maxfun':100000, 'maxiter':maxiter, 'disp':True})
+        betas = decondition_betas(res.x, pc_factors)
+        betas = np.array(betas).reshape(n_slcs, n_tiles, len(pc_factors))
     
-    res = minimize(obj_fun_global, init_tfs_pc, 
-                   args=(pairs, pc_factors, n_slcs, n_tiles, 
-                         local_nrs, usempi, comm), 
-                   method='L-BFGS-B',   # Nelder-Mead  # Powell
-                   options={'maxfun':100000, 'maxiter':maxiter, 'disp':True})
-    
-    betas = decondition_betas(res.x, pc_factors)
-    betas = np.array(betas).reshape(n_slcs, n_tiles, len(pc_factors))
-    betasfile = path.join(outputdir, 'betas' + 
+    betasfile = path.join(outputdir, 
+                          'betas_' + method + 
                           '_o' + str(offsets) + 
-                          '_d' + str(downsample_factor) + '.npy')
+                          '_d' + str(downsample_factor) + 
+                          '_n' + str(maxiter) + '.npy')
     np.save(betasfile, betas)
     
     return 0
