@@ -59,7 +59,7 @@ def main(argv):
     # load betas and make transformation matrices
     betasfile = path.join(outputdir, 'betas' + 
                           '_o' + str(offsets) + 
-                          '_s' + str(downsample_factor) + '.npy')
+                          '_d' + str(downsample_factor) + '.npy')
     betas = np.load(betasfile)
     H = tfs_to_H(betas, n_slcs, n_tiles)
     

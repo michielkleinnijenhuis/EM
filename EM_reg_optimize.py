@@ -119,7 +119,7 @@ def main(argv):
     betas = np.array(betas).reshape(n_slcs, n_tiles, len(pc_factors))
     betasfile = path.join(outputdir, 'betas' + 
                           '_o' + str(offsets) + 
-                          '_s' + str(downsample_factor) + '.npy')
+                          '_d' + str(downsample_factor) + '.npy')
     np.save(betasfile, betas)
     
     return 0
@@ -235,7 +235,7 @@ def obj_fun_global(pars, pairs, pc_factors, n_slcs, n_tiles, local_nrs, usempi=0
     if usempi:
         sse = comm.allreduce(sse, op = MPI.SUM)
     
-#     print('sse calculated in: %6.2f s' % (time() - pair_ssestart))
+#     print('sse calculated in: %6.5f s' % (time() - pair_ssestart))
     return sse
 
 if __name__ == "__main__":
