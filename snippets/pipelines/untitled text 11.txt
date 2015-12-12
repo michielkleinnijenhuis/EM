@@ -1,0 +1,98 @@
+import os
+import h5py
+import numpy as np
+from skimage import segmentation, img_as_float
+import nibabel as nib
+
+datadir = '/data/ndcn-fmrib-water-brain/ndcn0180/EM/M2/I/'
+datadir = '/Users/michielk/oxdata/P01/EM/M2/I/'
+
+f = h5py.File(os.path.join(datadir, 'training_data0.h5'), 'r')
+g = h5py.File(os.path.join(datadir, 'training_data.h5'), 'w')
+g.create_dataset('stack', (500,500,50), dtype='uint16')
+g['stack'][:,:,:] = f['stack'][:,:,:].transpose([2,1,0])
+
+f = h5py.File(os.path.join(datadir, 'training_data0_slicvoxels.h5'), 'r')
+g = h5py.File(os.path.join(datadir, 'training_data_slicvoxels.h5'), 'w')
+g.create_dataset('stack', (500,500,50), dtype='uint32')
+g['stack'][:,:,:] = f['stack'][:,:,:].transpose([2,1,0])
+
+f = h5py.File(os.path.join(datadir, 'training_data0_Probabilities.h5'), 'r')
+g = h5py.File(os.path.join(datadir, 'training_data_Probabilities.h5'), 'w')
+g.create_dataset('stack', (500,500,50,2), dtype='uint16')
+g['stack'][:,:,:,:] = f['stack'][:,:,:,:].transpose([2,1,0,3])
+
+f = h5py.File(os.path.join(datadir, 'training_data0_SimpleSegmentation.h5'), 'r')
+g = h5py.File(os.path.join(datadir, 'training_data_SimpleSegmentation.h5'), 'w')
+g.create_dataset('stack', (500,500,50,1), dtype='uint8')
+g['stack'][:,:,:,:] = f['stack'][:,:,:,:].transpose([2,1,0,3])
+
+
+fd = h5py.File(os.path.join(datadir, 'training_data.h5'), 'r')
+img = img_as_float(fd['stack'][:,:,:])
+fd.close()
+
+supervoxelsize = 10000
+n_segm = np.prod(img.shape) / supervoxelsize
+
+segments = segmentation.slic(img, 
+                             n_segments=n_segm, 
+                             compactness=0.02, 
+                             sigma=3, 
+                             spacing=[1, 1, 5], 
+                             multichannel=False, 
+                             convert2lab=True, 
+                             enforce_connectivity=True)
+
+g = h5py.File(os.path.join(datadir, 'training_data_slicvoxels002.h5'), 'w')
+g.create_dataset('stack', (500,500,50), dtype='uint32')
+g['stack'][:,:,:] = segments
+g.close()
+
+segments = segmentation.slic(img, 
+                             n_segments=n_segm, 
+                             compactness=0.05, 
+                             sigma=3, 
+                             spacing=[1, 1, 5], 
+                             multichannel=False, 
+                             convert2lab=True, 
+                             enforce_connectivity=True)
+
+g = h5py.File(os.path.join(datadir, 'training_data_slicvoxels005.h5'), 'w')
+g.create_dataset('stack', (500,500,50), dtype='uint32')
+g['stack'][:,:,:] = segments
+g.close()
+
+
+
+### train on dataset
+
+import os
+import numpy as np
+import matplotlib.pyplot as plt
+import h5py
+from gala import viz
+from skimage import segmentation
+from gala import imio, classify, features, agglo, evaluate as ev
+
+datadir = '/data/ndcn-fmrib-water-brain/ndcn0180/EM/M2/I/'
+datadir = '/Users/michielk/oxdata/P01/EM/M2/I/'
+
+gt_train, pr_train, ws_train = (map(imio.read_h5_stack,
+                                [os.path.join(datadir, 'training_data_SimpleSegmentation.h5'), 
+                                 os.path.join(datadir, 'training_data_Probabilities.h5'),
+                                 os.path.join(datadir, 'training_data_slicvoxels005.h5')], 
+                                ['stack', 'stack', 'stack']))
+
+fm = features.moments.Manager()
+fh = features.histogram.Manager()
+fc = features.base.Composite(children=[fm, fh])
+
+#gt_train = gt_train.astype('uint8') - 1
+#g_train = agglo.Rag(ws_train, pr_train[:,:,:,1], feature_manager=fc)
+g_train = agglo.Rag(ws_train, pr_train, feature_manager=fc)
+(X, y, w, merges) = g_train.learn_agglomerate(gt_train, fc)[0]
+y = y[:, 0] # gala has 3 truth labeling schemes, pick the first one
+
+with open(os.path.join(datadir, 'training_data_rf005.pickle'), 'w') as f:
+    pickle.dump([fc,rf], f)

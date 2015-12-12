@@ -1,0 +1,62 @@
+i=0
+for x in 0 1000 2000 3000; do
+for y in 0 1000 2000 3000; do
+id=`printf %02d $i`
+echo $id;
+file=EM_slicvoxels_array_submit_$id.sh
+cp EM_slicvoxels_array_submit.sh $file
+sed -i "s/SSV/ssv$id/g" $file
+sed -i "s/X_START/$x/g" $file
+sed -i "s/X_END/$((x+1000))/g" $file
+sed -i "s/Y_START/$y/g" $file
+sed -i "s/Y_END/$((y+1000))/g" $file
+qsub $file
+i=$(( i+1 ));
+done
+done
+
+i=0
+for x in 0 800 1600 2400 3200; do
+for y in 0 800 1600 2400 3200; do
+for z in 0 224; do
+id=`printf %02d $i`
+echo $id;
+file=EM_slicvoxels_array_submit_div50_$id.sh
+cp EM_slicvoxels_array_submit.sh $file
+sed -i "s/SSV/ssv$id/g" $file
+sed -i "s/X_START/$x/g" $file
+sed -i "s/X_END/$((x+800))/g" $file
+sed -i "s/Y_START/$y/g" $file
+sed -i "s/Y_END/$((y+800))/g" $file
+sed -i "s/Z_START/$z/g" $file
+sed -i "s/Z_END/$((z+224))/g" $file
+qsub $file
+i=$(( i+1 ));
+done
+done
+done
+
+i=0
+for x in 0; do
+for y in 0; do
+for z in 0 224; do
+id=`printf %02d $i`
+echo $id;
+file=EM_slicvoxels_array_submit_div50_$id.sh
+cp EM_slicvoxels_array_submit.sh $file
+sed -i "s/SSV/ssv$id/g" $file
+sed -i "s/X_START/$x/g" $file
+sed -i "s/X_END/$((x+800))/g" $file
+sed -i "s/Y_START/$y/g" $file
+sed -i "s/Y_END/$((y+800))/g" $file
+sed -i "s/Z_START/$z/g" $file
+sed -i "s/Z_END/$((z+224))/g" $file
+qsub $file
+i=$(( i+1 ));
+done
+done
+done
+
+for I in `seq 283127 283172`; do
+qdel $I
+done

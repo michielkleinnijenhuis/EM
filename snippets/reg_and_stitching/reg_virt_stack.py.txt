@@ -1,0 +1,21 @@
+from register_virtual_stack import Register_Virtual_Stack_MT
+
+# source directory
+source_dir = "/Users/michielk/oxdata/P01/EM/M2/J/part1/"
+# output directory
+target_dir = "/Users/michielk/oxdata/P01/EM/M2/J/part1/reg/"
+# transforms directory
+transf_dir = "/Users/michielk/oxdata/P01/EM/M2/J/part1/reg/trans/"
+# reference image
+reference_name = 'J 3Oct14_3VBSED_slice_0049.tif'
+# shrinkage option (false)
+use_shrinking_constraint = 0
+
+p = Register_Virtual_Stack_MT.Param()
+# The "maximum image size":
+p.sift.maxOctaveSize = 1024
+# The "inlier ratio":
+p.minInlierRatio = 0.05
+
+Register_Virtual_Stack_MT.exec(source_dir, target_dir, transf_dir, 
+reference_name, p, use_shrinking_constraint)

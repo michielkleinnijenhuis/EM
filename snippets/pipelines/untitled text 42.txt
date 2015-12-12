@@ -1,0 +1,68 @@
+stack=training4
+qsubfile=$datadir/EM_stack2stack_submit.sh
+echo '#!/bin/bash' > $qsubfile
+echo "#PBS -l nodes=1:ppn=1" >> $qsubfile
+echo "#PBS -l walltime=00:10:00" >> $qsubfile
+echo "#PBS -N em_s2s" >> $qsubfile
+echo "#PBS -V" >> $qsubfile
+echo "cd \$PBS_O_WORKDIR" >> $qsubfile
+echo "python $scriptdir/EM_stack2stack.py \
+$datadir/reg.h5 $datadir/$stack.h5 \
+-f 'reg' -g 'stack' -e 0.05 0.0073 0.0073 \
+-x 2000 -X 2250 -y 2000 -Y 2250 -z 60 -Z 100 -m .nii" >> $qsubfile
+echo "export PATH=\$HOME/miniconda/bin:\$PATH" >> $qsubfile
+echo "source activate ilastik-devel" >> $qsubfile
+echo "CONDA_ROOT=\`conda info --root\`" >> $qsubfile
+echo "\${CONDA_ROOT}/envs/ilastik-devel/run_ilastik.sh --headless \
+--preconvert_stacks \
+--project=$datadir/training.ilp \
+--output_axis_order=xyzc \
+--output_format=hdf5 \
+--output_filename_format=$datadir/${stack}_probabilities.h5 \
+--output_internal_path=/probs \
+$datadir/$stack.h5/stack" >> $qsubfile
+echo "python $scriptdir/EM_stack2stack.py \
+$datadir/${stack}_probabilities.h5 \
+$datadir/${stack}_probabilities.nii.gz" >> $qsubfile
+
+qsub -q develq $qsubfile
+#rsync -avz ndcn0180@arcus.oerc.ox.ac.uk:$datadir/training4* $local_datadir
+
+scriptdir=/Users/michielk/workspace/EM
+datadir='/Users/michielk/oxdata/P01/EM/M3/M3_S1_GNU'
+stack=training4
+
+# SLICVOXELS WORKS
+python $scriptdir/EM_slicvoxels.py \
+-i $datadir/${stack}_probabilities.h5 \
+-o $datadir/${stack}_probabilities_slic.h5 \
+-f 'probs' -g 'slic' -s 500
+
+# ITKSNAP FAILS
+python $scriptdir/EM_stack2stack.py \
+$datadir/${stack}_probabilities_slic.h5 \
+$datadir/${stack}_probabilities_slic.nii.gz -i zyx -d int32
+
+# DOJO FAILS
+python $scriptdir/EM_stack2stack.py \
+$datadir/${stack}.h5 \
+$datadir/${stack}.tif -i zyx -d uint16
+python $scriptdir/EM_stack2stack.py \
+$datadir/${stack}_probabilities_slic.h5 \
+$datadir/${stack}_probabilities_slic.tif -i zyx -d uint16
+
+
+stack=training2
+source activate ilastik-devel
+CONDA_ROOT=`conda info --root`
+${CONDA_ROOT}/envs/ilastik-devel/run_ilastik.sh --headless \
+--preconvert_stacks \
+--project=$datadir/training.ilp \
+--output_axis_order=xyzc \
+--output_format=hdf5 \
+--output_filename_format=$datadir/${stack}_probabilities.h5 \
+--output_internal_path=/probs \
+$datadir/$stack.h5/stack
+
+
+

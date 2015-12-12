@@ -1,0 +1,143 @@
+qsubfile=$datadir/EM_stack2stack_submit.sh
+echo '#!/bin/bash' > $qsubfile
+echo "#PBS -l nodes=1:ppn=1" >> $qsubfile
+echo "#PBS -l walltime=00:10:00" >> $qsubfile
+echo "#PBS -N em_s2s" >> $qsubfile
+echo "#PBS -V" >> $qsubfile
+echo "cd \$PBS_O_WORKDIR" >> $qsubfile
+echo "python $scriptdir/EM_stack2stack.py \
+$datadir/reg.h5 \
+$datadir/training2.h5 \
+-f 'reg' -g 'stack' \
+-e 0.05 0.0073 0.0073 \
+-x 7000 -X 7500 -y 4000 -Y 4500 -z 260 -Z 360 -n" >> $qsubfile
+qsub -q develq $qsubfile
+#rsync -avz ndcn0180@arcus.oerc.ox.ac.uk:$datadir/training2* $local_datadir
+
+qsubfile=$datadir/EM_stack2stack_submit.sh
+echo '#!/bin/bash' > $qsubfile
+echo "#PBS -l nodes=1:ppn=1" >> $qsubfile
+echo "#PBS -l walltime=00:10:00" >> $qsubfile
+echo "#PBS -N em_s2s" >> $qsubfile
+echo "#PBS -V" >> $qsubfile
+echo "cd \$PBS_O_WORKDIR" >> $qsubfile
+echo "python $scriptdir/EM_stack2stack.py \
+$datadir/reg.h5 \
+$datadir/training3.h5 \
+-f 'reg' -g 'stack' \
+-e 0.05 0.0073 0.0073 \
+-x 4000 -X 4500 -y 4000 -Y 4500 -z 260 -Z 360 -n" >> $qsubfile
+qsub -q develq $qsubfile
+#rsync -avz ndcn0180@arcus.oerc.ox.ac.uk:$datadir/training3* $local_datadir
+
+
+
+
+
+
+
+
+scriptdir=/Users/michielk/workspace/EM
+datadir='/Users/michielk/oxdata/P01/EM/M3/M3_S1_GNU'
+
+source activate ilastik-devel
+CONDA_ROOT=`conda info --root`
+${CONDA_ROOT}/envs/ilastik-devel/run_ilastik.sh --headless \
+--project=$datadir/training.ilp \
+--output_internal_path=/prediction \
+$datadir/training3.h5/stack
+
+python /Users/michielk/workspace/EM/EM_stack2stack.py $datadir/training3_probabilities.h5 $datadir/training3_probabilities.nii.gz
+
+python $scriptdir/EM_slicvoxels.py \
+-i $datadir/training3_Probabilities.h5 \
+-o $datadir/training3_slic.h5 \
+-f 'prediction' -g 'slic' -s 500
+
+
+
+
+
+
+python /Users/michielk/workspace/EM/EM_stack2stack.py \
+$datadir/reg_ds.h5 \
+$datadir/reg_ds_test.tif -r 1 5 5
+python /Users/michielk/workspace/EM/EM_stack2stack.py $datadir/training.h5 $datadir/training.tif
+python /Users/michielk/workspace/EM/EM_stack2stack.py $datadir/training_slic.h5 $datadir/training_slic.tif -d int32 -i zyx
+
+
+
+
+
+
+from os import path
+import h5py
+from skimage.morphology import watershed
+from scipy.ndimage import label
+datadir='/Users/michielk/oxdata/P01/EM/M3/M3_S1_GNU'
+inputfile='training.h5'
+f = h5py.File(path.join(datadir, inputfile), 'r')
+seeds = label(f['stack'][:,:,:]<=1000)[0]
+ws = watershed(f['stack'][:,:,:], seeds)
+f.close()
+outputfile='training_ws.h5'
+g = h5py.File(path.join(datadir, outputfile), 'w')
+outds = g.create_dataset('stack', ws.shape)
+outds[:,:,:] = ws
+g.close()
+
+python /Users/michielk/workspace/EM/EM_stack2stack.py $datadir/training_ws.h5 $datadir/training_ws.tif -i zyx -d int32
+
+
+
+from os import path
+import h5py
+from skimage import segmentation
+datadir='/Users/michielk/oxdata/P01/EM/M3/M3_S1_GNU'
+inputfile='training4_probabilities.h5'
+f = h5py.File(path.join(datadir, inputfile), 'r')
+inds = f['probs']
+supervoxelsize=1000
+n_segm = inds.size / supervoxelsize
+comp = 0.05
+spac = [6.85,1,1]  #     spac = [1,1,1]
+sig = 1
+mc = True if len(inds.dims) == 4 else False
+segments = segmentation.slic(inds[:,:,:,:], 
+                             n_segments=n_segm, 
+                             compactness=comp, 
+                             sigma=sig, 
+                             spacing=spac, 
+                             multichannel=mc, 
+                             convert2lab=False, 
+                             enforce_connectivity=False)
+segments = segments + 1
+f.close()
+outputfile='training3_probabilities_slic.h5'
+g = h5py.File(path.join(datadir, outputfile), 'w')
+outds = g.create_dataset('stack', segments.shape)
+outds[:,:,:] = segments
+g.close()
+
+python $scriptdir/EM_stack2stack.py $datadir/training3_probabilities_slic.h5 $datadir/training3_probabilities_slic.nii.gz -i zyx -d int32
+
+
+
+
+
+
+
+
+
+
+
+
+datadir=/Users/michielk/workspace/FlyEM/NeuroProof/examples
+python /Users/michielk/workspace/EM/EM_series2stack.py \
+$datadir/training_sample2/grayscale_maps \
+$datadir/training_sample2/grayscale_maps.h5 \
+-f 'stack' -o -r '*.png' -n 5
+python /Users/michielk/workspace/EM/EM_stack2stack.py $datadir/training_sample2/grayscale_maps.h5 $datadir/training_sample2/grayscale_maps_tif.tif -i zyx
+
+python /Users/michielk/workspace/EM/EM_stack2stack.py $datadir/training_sample2/groundtruth.h5 $datadir/training_sample2/groundtruth.tif -i zyx
+

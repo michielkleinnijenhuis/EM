@@ -1,0 +1,32 @@
+python /Users/michielk/workspace/EMseg/EM_slicvoxels0.py \
+-i '/Users/michielk/oxdata/P01/EM/M2/I/training_data0.h5' \
+-o '/Users/michielk/oxdata/P01/EM/M2/I/training_data0_slicvoxels002.h5' \
+-f 'stack' \
+-g 'stack' \
+-s 1000
+
+
+
+python /home/ndcn-fmrib-water-brain/ndcn0180/workspace/EMseg/EM_mpi_createh5.py \
+-o '/data/ndcn-fmrib-water-brain/ndcn0180/EM/M2/I/test_data_segmentation002.h5' \
+-g 'stack' \
+-d 'uint32' \
+-x 0 -X 4000 -y 0 -Y 4000 -z 0 -Z 448
+
+mpirun -n 8 python /home/ndcn-fmrib-water-brain/ndcn0180/workspace/EMseg/EM_gala_apply_classifier_mpi.py \
+-p '/data/ndcn-fmrib-water-brain/ndcn0180/EM/M2/I/test_data_Probabilities.h5' \
+-s '/data/ndcn-fmrib-water-brain/ndcn0180/EM/M2/I/test_data_slicvoxels.h5' \
+-c '/data/ndcn-fmrib-water-brain/ndcn0180/EM/M2/I/training_data0_rf.pickle' \
+-o '/data/ndcn-fmrib-water-brain/ndcn0180/EM/M2/I/test_data_segmentation.h5' \
+-f 'stack' \
+-g 'stack' \
+-x 0 -X 400 -y 0 -Y 400 -z 0 -Z 56
+
+-x 0 -X 4000 -y 0 -Y 4000 -z 0 -Z 448
+
+
+python /home/ndcn-fmrib-water-brain/ndcn0180/workspace/EMseg/EM_mpi_createh5.py \
+-o '/data/ndcn-fmrib-water-brain/ndcn0180/EM/M2/I/test_data_slicsegmentation002_a100.h5' \
+-g 'stack' \
+-d 'uint8' \
+-x 0 -X 4000 -y 0 -Y 4000 -z 0 -Z 448

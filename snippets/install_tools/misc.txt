@@ -1,0 +1,63 @@
+git clone https://github.com/openconnectome/CAJAL.git
+
+git clone https://github.com/fangq/iso2mesh.git
+
+git clone https://github.com/r03ert0/unfolder.git
+
+https://github.com/Rhoana/Mojo.git
+
+https://github.com/Rhoana/rhoana.git
+
+
+
+pip install nipy
+conda install sphinx
+conda install sympy
+conda install nibabel
+conda install mayavi
+
+pip install git+git://github.com/nipy/dipy@master
+pip install git+git://github.com/nipy/nipype@master
+pip install git+git://github.com/nipy/brainx@master
+pip install git+git://github.com/nipy/PySurfer@master
+pip install git+git://github.com/nipy/nitime@master
+pip install git+git://github.com/nipy/nireg@master
+
+
+
+'/Users/michielk/anaconda/lib/python2.7/site-packages'
+'/Users/michielk/anaconda/lib/site-python'
+
+mpicbg.stitching.GlobalOptimization.ignoreZ = true;
+
+
+cd ~/workspace
+git clone https://github.com/trakem2/register_virtual_stack_slices.git
+git clone https://github.com/fiji/Stitching.git
+git clone https://github.com/fiji/fiji.git
+
+
+conda create -n py27opencv -c https://conda.binstar.org/jjhelmus opencv
+
+##########################
+### RegDev in anaconda ###
+##########################
+conda create --name EMreg-devel opencv
+
+## opencv import does not work in env!!! tried this instead:
+
+source deactivate
+conda install -c https://conda.binstar.org/jjhelmus opencv
+
+cd ~/workspace
+git clone https://github.com/cbuntain/stitcher.git
+git clone https://github.com/alexflint/pysfm.git
+
+
+
+
+cd ~/workspace
+git clone https://github.com/MRtrix3/mrtrix3.git
+cd mrtrix3
+./configure
+./build

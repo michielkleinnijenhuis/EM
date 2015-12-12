@@ -1,0 +1,106 @@
+cd ~/workspace; git clone git://github.com/Theano/Theano.git; cd theano; python setup.py install
+
+cd ~/workspace; git clone https://github.com/ilastik/ilastik-build-Linux.git; 
+mkdir ilastik
+cd <ilastik_build_dir>
+git clone https://github.com/ilastik/ilastik-build-Linux.git
+mkdir build
+cd build
+cmake ../ilastik-build-Linux -DBUILDEM_DIR=<ilastik_build_dir>
+make help
+make
+
+rsync -avz ~/Downloads/ilastik-0.5-linux-v0.5.12-x86-64.tar.gz ndcn0180@arcus.oerc.ox.ac.uk:/home/ndcn-fmrib-water-brain/ndcn0180/workspace
+
+
+
+
+/home/ndcn-fmrib-water-brain/ndcn0180/workspace/ilastik-05-rc-final/run-ilastik-linux.sh --headless \
+--project=/data/ndcn-fmrib-water-brain/ndcn0180/EM/M2/I/training_data.ilp \
+--output_internal_path=/stack \
+/data/ndcn-fmrib-water-brain/ndcn0180/EM/M2/I/test_data_full.h5/stack
+
+
+/home/ndcn-fmrib-water-brain/ndcn0180/workspace/ilastik-1.1.3-Linux/run_ilastik.sh --headless \
+--project=/data/ndcn-fmrib-water-brain/ndcn0180/EM/M2/I/training_data.ilp \
+--output_internal_path=/stack \
+/data/ndcn-fmrib-water-brain/ndcn0180/EM/M2/I/test_data_full.h5/stack
+
+import os
+import h5py
+from skimage import segmentation, img_as_float
+import matplotlib.pyplot as plt
+datadir = '/data/ndcn-fmrib-water-brain/ndcn0180/EM/M2/I/'
+os.chdir(datadir)
+
+fs = h5py.File('test_data_full_slicvoxels.h5','r')
+fd = h5py.File('test_data_test_tp.h5','r')
+
+slice = 10
+img = fd['stack'][0:1000,0:1000,slice].astype('uint32')
+
+img_bound = segmentation.mark_boundaries(fd['stack'][0:1000,0:1000,slice].astype('uint32'), 
+                                         fs['stack'][0:1000,0:1000,slice].astype('uint8'), 
+                                         (1, 0, 0))
+plt.imshow(img_bound, interpolation='nearest')
+img_bound = segmentation.mark_boundaries(fd['stack'][0:1000,slice,0:200].astype('uint32'), 
+                                         fs['stack'][0:1000,slice,0:200].astype('uint8'), 
+                                         (1, 0, 0))
+plt.imshow(img_bound, interpolation='nearest', extent=[0,1000,0,200], aspect=5)
+img_bound = segmentation.mark_boundaries(fd['stack'][slice,0:1000,0:200].astype('uint32'), 
+                                         fs['stack'][slice,0:1000,0:200].astype('uint8'), 
+                                         (1, 0, 0))
+plt.imshow(img_bound, interpolation='nearest', extent=[0,1000,0,200], aspect=5)
+plt.show()
+
+
+
+
+ilastik --headless \
+--project=/Users/michielk/oxdata/P01/EM/M2/I/training_data.ilp \
+--output_internal_path=/stack \
+/Users/michielk/oxdata/P01/EM/M2/I/test_data_full.h5/stack
+
+
+inputdir='/Users/michielk/oxdata/P01/EM/M2/I/tifs'
+outputfile='/Users/michielk/oxdata/P01/EM/M2/I/test_data_test.h5'
+fieldname='stack'
+x_start=0
+x_end=100
+y_start=0
+y_end=100
+z_start=0
+z_end=16
+
+# mpiexec -n 8 python /Users/michielk/workspace/EM_seg/src/EM_convert2stack.py \
+# -i '/Users/michielk/oxdata/P01/EM/M2/I/tifs' \
+# -o '/Users/michielk/oxdata/P01/EM/M2/I/test_data_test.h5' \
+# -f 'stack' \
+# -x 0 -X 4000 -y 0 -Y 4000 -z 0 -Z 16
+# mpiexec -n 8 python /Users/michielk/workspace/EM_seg/src/EM_convert2stack_blocks.py \
+# -i '/Users/michielk/oxdata/P01/EM/M2/I/tifs' \
+# -o '/Users/michielk/oxdata/P01/EM/M2/I/test_data_test.h5' \
+# -f 'stack' \
+# -x 0 -X 4000 -y 0 -Y 4000 -z 0 -Z 448
+
+python /Users/michielk/workspace/EMseg/EM_convert2stack.py \
+-i '/Users/michielk/oxdata/P01/EM/M2/I/tifs' \
+-o '/Users/michielk/oxdata/P01/EM/M2/I/test_data_full.h5' \
+-f 'stack' \
+-x 0 -X 4000 -y 0 -Y 4000 -z 0 -Z 448
+
+
+import os
+import h5py
+from skimage import segmentation, img_as_float
+import matplotlib.pyplot as plt
+datadir = '/Users/michielk/oxdata/P01/EM/M2/I/'
+os.chdir(datadir)
+fd = h5py.File('test_data_full.h5','r')
+fd['stack'][0:100,0:100,10]
+
+for i in `seq 1 10000000`; do
+echo $i
+sleep 10s
+done
+

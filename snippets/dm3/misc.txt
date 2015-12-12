@@ -1,0 +1,70 @@
+from os import path
+from java.io import File
+from loci.formats import ImageReader
+import glob
+
+# Get list of DM3 files
+# dir = '/Users/michielk/oxdata/originaldata/P01/EM/M2/Brain/I/26Sep14/img000-099'
+dir = '/data/ndcn-fmrib-water-brain/ndcn0180/EM/M2/part1'
+filenames = glob.glob(path.join(dir, '*.dm3'))
+# Create output file
+outFile = open(path.join(dir, 'test.txt'),'w')
+
+for filename in filenames:
+    
+    # Open file
+    file = File(filename)
+    
+    # parse file header
+    imageReader = ImageReader()
+    meta = MetadataTools.createOMEXMLMetadata()
+    imageReader.setMetadataStore(meta)
+    imageReader.setId(file.getAbsolutePath())
+    
+    # get pixel size
+    pSizeX = meta.getPixelsPhysicalSizeX(0)
+    
+    # close the image reader
+    imageReader.close()
+    
+    outFile.write(filename + "\t" + str(pSizeX) + "\n")
+
+# Close the output file
+outFile.close()
+
+
+from os import path
+from java.io import File
+from loci.formats import ImageReader
+# from loci.formats import MetadataTools
+import glob
+
+dir = '/Users/michielk/oxdata/originaldata/P01/EM/M2/Brain/I/26Sep14/img000-099'
+# Create output file
+# outFile = open('./pixel_sizes.txt','w')
+
+# Get list of DM3 files
+filenames = glob.glob(path.join(dir, '*.dm3'))
+
+
+for filename in filenames:
+    
+    # Open file
+     file = File(filename)
+    
+    # parse file header
+#     imageReader = ImageReader()
+#     meta = MetadataTools.createOMEXMLMetadata()
+#     imageReader.setMetadataStore(meta)
+#     imageReader.setId(file.getAbsolutePath())
+#     
+#     # get pixel size
+#     pSizeX = meta.getPixelsPhysicalSizeX(0)
+#     
+#     # close the image reader
+#     imageReader.close()
+    
+    outFile.write(filename + "\t" + str(pSizeX) + "\n")
+
+# Close the output file
+outFile.close()

@@ -1,0 +1,34 @@
+python /Users/michielk/workspace/EM/EM_stack2stack.py $datadir/reg_m000_ds.h5 $datadir/reg_m000_ds.nii.gz
+
+
+for montage in 000 001 002 003; do
+sed "s?INPUTDIR?$datadir/reg_m${montage}_ds/?;\
+    s?OUTPUTFILE?$datadir/reg_m${montage}_ds.ome?g" \
+    $datadir/EM_h2t.py > \
+    $datadir/EM_h2t_m$montage.py
+ImageJ --headless $datadir/EM_h2t_m${montage}.py
+done
+
+
+
+$HOME/Downloads/1.9.2/bin/terastitcher --import --volin=$datadir/reg_ds --ref1=y --ref2=-x --ref3=z --vxl1=0.073 --vxl2=0.073 --vxl3=0.05 --volin_plugin="TiledXY|3Dseries"
+
+
+
+
+for mon in 000 001 002 003; do
+grep m$mon.tif tifs/????TileConfiguration.registered.txt | cut -f3- -d' ' > TC_m$mon.txt
+done
+#rsync -avz ndcn0180@arcus.oerc.ox.ac.uk:$datadir/TC* $local_datadir
+
+
+
+
+
+
+
+image_dir = '/Users/michielk/oxdata/P01/EM/M3/stitch0000'
+key_frame = '/Users/michielk/oxdata/P01/EM/M3/stitch0000/0000_m000.tif'
+output_dir = '/Users/michielk/oxdata/P01/EM/M3/stitch0000/output'
+img_filter=tif
+AlignImagesRansac(image_dir, key_frame, output_dir, img_filter)

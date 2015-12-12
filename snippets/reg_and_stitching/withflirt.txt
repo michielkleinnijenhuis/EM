@@ -1,0 +1,1 @@
+flirt -in reg_m001_ds.nii.gz -ref reg_m000_ds.nii.gz -dof 12 -out reg_m001-000_ds.nii.gz

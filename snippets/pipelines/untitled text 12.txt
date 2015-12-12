@@ -1,0 +1,485 @@
+### create the file
+
+import os
+import h5py
+from mpi4py import MPI
+
+datadir = '/data/ndcn-fmrib-water-brain/ndcn0180/EM/M2/I/'
+#datadir = '/Users/michielk/oxdata/P01/EM/M2/I/'
+
+g = h5py.File(os.path.join(datadir, 'test_data_slicvoxels_div50.h5'), 'w', driver='mpio', comm=MPI.COMM_WORLD)
+g.create_dataset('stack', (4000,4000,448), dtype='uint32')
+g.close()
+
+### create the file
+
+import os
+import h5py
+from mpi4py import MPI
+
+datadir = '/data/ndcn-fmrib-water-brain/ndcn0180/EM/M2/I/'
+datadir = '/Users/michielk/oxdata/P01/EM/M2/I/'
+
+g = h5py.File(os.path.join(datadir, 'test_data_rag.h5'), 'w', driver='mpio', comm=MPI.COMM_WORLD)
+g.create_dataset('stack', (4000,4000,448), dtype='float32')
+g.close()
+
+
+### check the file
+import os
+import h5py
+from mpi4py import MPI
+
+datadir = '/data/ndcn-fmrib-water-brain/ndcn0180/EM/M2/I/'
+datadir = '/Users/michielk/oxdata/P01/EM/M2/I/'
+
+g = h5py.File(os.path.join(datadir, 'test_data_slicvoxels_50div.h5'), 'r', driver='mpio', comm=MPI.COMM_WORLD)
+g = h5py.File(os.path.join(datadir, 'training_data0_slicvoxels002.h5'), 'r', driver='mpio', comm=MPI.COMM_WORLD)
+g = h5py.File(os.path.join(datadir, 'test_data_segmentation.h5'), 'r', driver='mpio', comm=MPI.COMM_WORLD)
+g = h5py.File(os.path.join(datadir, 'test_data_slicsegmentation002_a100.h5'), 'r', driver='mpio', comm=MPI.COMM_WORLD)
+g['stack'][3001,3001,0]
+g.close()
+
+
+### slic tests
+import os
+import h5py
+import numpy as np
+from skimage import segmentation, img_as_float
+import nibabel as nib
+
+datadir = '/Users/michielk/oxdata/P01/EM/M2/I/'
+datadir = '/data/ndcn-fmrib-water-brain/ndcn0180/EM/M2/I/'
+
+fd = h5py.File(os.path.join(datadir, 'training_data0.h5'), 'r')
+img = img_as_float(fd['stack'][:,:,:])
+
+supervoxelsize = 1000
+n_segm = np.prod(img.shape) / supervoxelsize
+
+segments = segmentation.slic(img, 
+                             n_segments=n_segm, 
+                             compactness=0.02, 
+                             sigma=3, 
+                             spacing=[5, 1, 1], 
+                             multichannel=False, 
+                             convert2lab=True, 
+                             enforce_connectivity=True)
+
+g = h5py.File(os.path.join(datadir, 'training_data0_slicvoxels002.h5'), 'w')
+g.create_dataset('stack', (50,500,500), dtype='uint32')
+g['stack'][:,:,:] = segments
+
+mat = np.array([[0.01, 0, 0, 0],[0, 0.01, 0, 0],[0, 0, 0.05, 0],[0, 0, 0, 1]])
+slicout = nib.Nifti1Image(segments.astype('uint16').transpose([2,1,0]), mat)
+slicout.to_filename(os.path.join(datadir, 'training_data0_slic002.nii.gz'))
+
+
+
+fd = h5py.File(os.path.join(datadir, 'test_data.h5'), 'r')
+
+part='03'
+x_start=1200
+x_end=1400
+y_start=1200
+y_end=1400
+z_start=112
+z_end=168
+
+part='04'
+x_start=1200
+x_end=2000
+y_start=1200
+y_end=2000
+z_start=112
+z_end=224
+
+part='05'
+x_start=1000
+x_end=2000
+y_start=1000
+y_end=2000
+z_start=0
+z_end=448
+
+img = img_as_float(fd['stack'][x_start:x_end,y_start:y_end,z_start:z_end])
+
+supervoxelsize = 10000
+n_segm = np.prod(img.shape) / supervoxelsize
+
+segments = segmentation.slic(img, 
+                             n_segments=n_segm, 
+                             compactness=0.02, 
+                             sigma=3, 
+                             spacing=[1, 1, 5], 
+                             multichannel=False, 
+                             convert2lab=True, 
+                             enforce_connectivity=True)
+
+mat = np.array([[0.01, 0, 0, 0],[0, 0.01, 0, 0],[0, 0, 0.05, 0],[0, 0, 0, 1]])
+slicout = nib.Nifti1Image(segments.astype('uint16'), mat)
+slicout.to_filename(os.path.join(datadir, 'test_data_part'+part+'_slicvoxel_c002_s10000.nii.gz'))
+
+segments = segmentation.slic(img, 
+                             compactness=0.01, 
+                             sigma=3, 
+                             spacing=[1, 1, 5], 
+                             multichannel=False, 
+                             convert2lab=True, 
+                             enforce_connectivity=True)
+
+mat = np.array([[0.01, 0, 0, 0],[0, 0.01, 0, 0],[0, 0, 0.05, 0],[0, 0, 0, 1]])
+slicout = nib.Nifti1Image(segments.astype('uint16'), mat)
+slicout.to_filename(os.path.join(datadir, 'test_data_part'+part+'_slic01.nii.gz'))
+
+
+### apply classifier
+
+import os
+import sys
+import numpy as np
+from skimage import segmentation
+from gala import imio,  agglo
+import cPickle as pickle
+import h5py
+from mpi4py import MPI
+import numpy as np
+import nibabel as nib
+
+mat = np.array([[0.01, 0, 0, 0],[0, 0.01, 0, 0],[0, 0, 0.05, 0],[0, 0, 0, 1]])
+
+datadir = '/Users/michielk/oxdata/P01/EM/M2/I/'
+
+fd = h5py.File(os.path.join(datadir, 'test_data.h5'), 'r', driver='mpio', comm=MPI.COMM_WORLD)
+fp = h5py.File(os.path.join(datadir, 'test_data_Probabilities.h5'), 'r', driver='mpio', comm=MPI.COMM_WORLD)
+fs = h5py.File(os.path.join(datadir, 'test_data_slicvoxels.h5'), 'r', driver='mpio', comm=MPI.COMM_WORLD)
+with open(os.path.join(datadir, 'training_data0_rf.pickle'), 'rb') as f:
+    fc, rf = pickle.load(f)
+
+learned_policy = agglo.classifier_probability(fc, rf)
+
+part='01'
+x_start=0
+x_end=200
+y_start=0
+y_end=200
+z_start=0
+z_end=56
+
+part='02'
+x_start=3000
+x_end=3200
+y_start=3000
+y_end=3200
+z_start=392
+z_end=448
+
+part='03'
+x_start=1200
+x_end=1400
+y_start=1200
+y_end=1400
+z_start=112
+z_end=168
+
+rag = agglo.Rag(fs['stack'][x_start:x_end,
+                            y_start:y_end,
+                            z_start:z_end], 
+                fp['stack'][x_start:x_end,
+                            y_start:y_end,
+                            z_start:z_end,:], 
+                learned_policy, 
+                feature_manager=fc)
+
+rag = agglo.Rag(fs['stack'][x_start:x_end,
+                            y_start:y_end,
+                            z_start:z_end], 
+                fp['stack'][x_start:x_end,
+                            y_start:y_end,
+                            z_start:z_end,:], merge_priority_function=agglo.boundary_median)
+
+slicout = nib.Nifti1Image(fd['stack'][x_start:x_end,
+                                      y_start:y_end,
+                                      z_start:z_end], mat)
+slicout.to_filename(os.path.join(datadir, 'test_data_part'+part+'.nii.gz'))
+
+rag00 = rag.copy()
+rag00.agglomerate(0.5, True)
+
+rag00 = rag.copy()
+rag00.agglomerate_count(1000)
+for thcount in range(0,20):
+    print(thcount)
+    rag00.agglomerate_count(10)
+    seg00 = rag00.get_segmentation()
+    slicout = nib.Nifti1Image(seg00.astype('uint32'), mat)
+    slicout.to_filename(os.path.join(datadir, 'test_data_part'+part+'_count'+str(thcount)+'.nii.gz'))
+
+rag00 = rag.copy()
+for thcount in range(2110,2120,1):
+    print(thcount)
+    rag00.agglomerate_count(thcount)
+    seg00 = rag00.get_segmentation()
+    slicout = nib.Nifti1Image(seg00.astype('uint32'), mat)
+    slicout.to_filename(os.path.join(datadir, 'test_data_part'+part+'_count'+str(thcount)+'.nii.gz'))
+
+rag00 = rag.copy()
+for thcount in range(2100,2200,10):
+    print(thcount)
+    rag00.agglomerate_count(thcount)
+    seg00 = rag00.get_segmentation()
+    slicout = nib.Nifti1Image(seg00.astype('uint32'), mat)
+    slicout.to_filename(os.path.join(datadir, 'test_data_part'+part+'_count'+str(thcount)+'.nii.gz'))
+
+
+rag00 = rag.copy()
+for thcount in range(2000,3000,100):
+    print(thcount)
+    rag00.agglomerate_count(thcount)
+    seg00 = rag00.get_segmentation()
+    slicout = nib.Nifti1Image(seg00.astype('uint32'), mat)
+    slicout.to_filename(os.path.join(datadir, 'test_data_part'+part+'_count'+str(thcount)+'.nii.gz'))
+
+
+rag00 = rag.copy()
+for thcount in 2000,3000,4000,5000,6000,7000,8000:
+    print(thcount)
+    rag00.agglomerate_count(thcount)
+    seg00 = rag00.get_segmentation()
+    slicout = nib.Nifti1Image(seg00.astype('uint32'), mat)
+    slicout.to_filename(os.path.join(datadir, 'test_data_part'+part+'_count'+str(thcount)+'.nii.gz'))
+
+
+rag00 = rag.copy()
+rag00.agglomerate(0.0005)
+seg00 = rag00.get_segmentation()
+slicout = nib.Nifti1Image(seg00.astype('uint32'), mat)
+slicout.to_filename(os.path.join(datadir, 'test_data_part'+part+'_seg00005.nii.gz'))
+
+rag00 = rag.copy()
+rag00.agglomerate(0.0005)
+rag00.agglomerate_ladder(2000, 2)
+seg00 = rag00.get_segmentation()
+slicout = nib.Nifti1Image(seg00.astype('uint32'), mat)
+slicout.to_filename(os.path.join(datadir, 'test_data_part'+part+'_seg0001_ladder2000.nii.gz'))
+
+rag00 = rag.copy()
+rag00.agglomerate_count(10000)
+seg00 = rag00.get_segmentation()
+slicout = nib.Nifti1Image(seg00.astype('uint32'), mat)
+slicout.to_filename(os.path.join(datadir, 'test_data_part'+part+'_segcount10000.nii.gz'))
+
+rag00 = rag.copy()
+rag00.agglomerate_count(2000)
+seg00 = rag00.get_segmentation()
+slicout = nib.Nifti1Image(seg00.astype('uint32'), mat)
+slicout.to_filename(os.path.join(datadir, 'test_data_part'+part+'_segcount2000.nii.gz'))
+
+rag00 = rag.copy()
+rag00.agglomerate_count(1000)
+seg00 = rag00.get_segmentation()
+slicout = nib.Nifti1Image(seg00.astype('uint32'), mat)
+slicout.to_filename(os.path.join(datadir, 'test_data_part'+part+'_segcount1000.nii.gz'))
+
+rag00 = rag.copy()
+rag00.agglomerate_count(100)
+seg00 = rag00.get_segmentation()
+slicout = nib.Nifti1Image(seg00.astype('uint32'), mat)
+slicout.to_filename(os.path.join(datadir, 'test_data_part'+part+'_segcount100.nii.gz'))
+
+rag00 = rag.copy()
+rag00.agglomerate(0.001)
+seg00 = rag00.get_segmentation()
+slicout = nib.Nifti1Image(seg00.astype('uint32'), mat)
+slicout.to_filename(os.path.join(datadir, 'test_data_part'+part+'_seg0001.nii.gz'))
+
+rag00 = rag.copy()
+rag00.agglomerate(0.01)
+seg00 = rag00.get_segmentation()
+slicout = nib.Nifti1Image(seg00.astype('uint32'), mat)
+slicout.to_filename(os.path.join(datadir, 'test_data_part'+part+'_seg001.nii.gz'))
+
+rag01 = rag.copy()
+rag01.agglomerate(0.1)
+seg01 = rag01.get_segmentation()
+slicout = nib.Nifti1Image(seg01.astype('uint32'), mat)
+slicout.to_filename(os.path.join(datadir, 'test_data_part'+part+'_seg01.nii.gz'))
+
+rag05 = rag.copy()
+rag05.agglomerate(0.5)
+seg05 = rag05.get_segmentation()
+slicout = nib.Nifti1Image(seg05.astype('uint32'), mat)
+slicout.to_filename(os.path.join(datadir, 'test_data_part'+part+'_seg05_mbp.nii.gz'))
+
+rag09 = rag.copy()
+rag09.agglomerate(0.9)
+seg09 = rag09.get_segmentation()
+slicout = nib.Nifti1Image(seg09.astype('uint32'), mat)
+slicout.to_filename(os.path.join(datadir, 'test_data_part'+part+'_seg09.nii.gz'))
+
+
+
+### relabel classifier output
+
+python /Users/michielk/workspace/EM_seg/src/EM_mpi_createh5.py \
+-o '/Users/michielk/oxdata/P01/EM/M2/I/test_data_segmentation_relabel.h5' \
+-g 'stack' \
+-d 'uint16' \
+-x 0 -X 4000 -y 0 -Y 4000 -z 0 -Z 448
+
+import os
+import getopt
+import numpy as np
+from skimage import segmentation
+import h5py
+from mpi4py import MPI
+import nibabel as nib
+
+x_start=0
+x_end=4000
+y_start=0
+y_end=4000
+z_start=0
+z_end=112
+
+datadir = '/Users/michielk/oxdata/P01/EM/M2/I/'
+inputfile = os.path.join(datadir, 'test_data_segmentation.h5')
+outputfile = os.path.join(datadir, 'test_data_segmentation_relabel.h5')
+f = h5py.File(inputfile, 'r', driver='mpio', comm=MPI.COMM_WORLD)
+g = h5py.File(outputfile, 'r+', driver='mpio', comm=MPI.COMM_WORLD)
+a = segmentation.relabel_sequential(f['stack'][x_start:x_end,
+                                               y_start:y_end,
+                                               z_start:z_end])
+g['stack'][x_start:x_end,
+           y_start:y_end,
+           z_start:z_end] = a[0]
+
+mat = np.array([[0.01, 0, 0, 0],[0, 0.01, 0, 0],[0, 0, 0.05, 0],[0, 0, 0, 1]])
+# slicout = nib.Nifti1Image(g['stack'][0:4000,0:4000,0:112], mat)
+slicout = nib.Nifti1Image(a[0], mat)
+output_image = 'test_data_segmentation_relabel.nii.gz'
+slicout.to_filename(os.path.join(datadir, output_image))
+
+slicout = nib.Nifti1Image(fd['stack'][0:4000,0:4000,0:112], mat)
+output_image = 'test_data_part.nii.gz'
+slicout.to_filename(os.path.join(datadir, output_image))
+
+
+
+### slicvoxels to segmentation
+
+import os
+import numpy as np
+import h5py
+import nibabel as nib
+from scipy.ndimage.measurements import label
+from mpi4py import MPI
+
+datadir = '/Users/michielk/oxdata/P01/EM/M2/I/'
+os.chdir(datadir)
+x_start=0
+x_end=4000
+y_start=0
+y_end=4000
+z_start=0
+z_end=224
+
+fp = h5py.File(os.path.join(datadir, 'test_data_Probabilities.h5'),'r', driver='mpio', comm=MPI.COMM_WORLD)
+fs = h5py.File(os.path.join(datadir, 'test_data_slicvoxels.h5'),'r', driver='mpio', comm=MPI.COMM_WORLD)
+fg = h5py.File(os.path.join(datadir, 'test_data_slicsegmentation.h5'), 'w', driver='mpio', comm=MPI.COMM_WORLD)
+fg.create_dataset('svoxvec', (fs['stack'][-1,-1,-1],), dtype='bool')
+
+svoxlabels = np.unique(fs['stack'][x_start:x_end,
+                                   y_start:y_end,
+                                   z_start:z_end])
+for svox in svoxlabels:
+    print(svox)
+    svox_idx = np.nonzero(fs['stack'][x_start:x_end,
+                                      y_start:y_end,
+                                      z_start:z_end]==svox)
+    block = fp['stack'][x_start+np.amin(svox_idx[0]):x_start+np.amax(svox_idx[0]) + 1,
+                        y_start+np.amin(svox_idx[1]):y_start+np.amax(svox_idx[1]) + 1,
+                        z_start+np.amin(svox_idx[2]):z_start+np.amax(svox_idx[2]) + 1,0]
+    if np.mean(block[(svox_idx[0]-np.amin(svox_idx[0]),
+                      svox_idx[1]-np.amin(svox_idx[1]),
+                      svox_idx[2]-np.amin(svox_idx[2]))]) > 0.5:
+        fg['svoxvec'][svox] = True
+
+
+
+import os
+import h5py
+from mpi4py import MPI
+import numpy as np
+datadir = '/Users/michielk/oxdata/P01/EM/M2/I/'
+g = h5py.File(os.path.join(datadir, 'test_data_segmentation.h5'), 'w', driver='mpio', comm=MPI.COMM_WORLD)
+g.create_dataset('stack', (np.prod([4000,4000,448]),1,1), dtype='bool')
+# g.create_dataset('stack', (np.prod([4000,4000,448]),1,1), dtype='bool', maxshape=(None,None,None))
+g.close()
+
+
+
+### create training dataset
+
+import os
+import nibabel as nib
+import numpy as np
+import h5py
+from mpi4py import MPI
+
+datadir = '/Users/michielk/oxdata/P01/EM/M2/I/'
+os.chdir(datadir)
+
+fd = h5py.File(os.path.join(datadir, 'test_data.h5'), 'r', driver='mpio', comm=MPI.COMM_WORLD)
+
+g = h5py.File('training_data2.h5', 'w', driver='mpio', comm=MPI.COMM_WORLD)
+g.create_dataset('stack', (500,500,448), chunks=(20,20,14), dtype='uint16')
+g['stack'][:,:,:] = fd['stack'][0:500,0:500,:].astype('uint16')
+g.close()
+
+g = h5py.File('training_data2.h5', 'r', driver='mpio', comm=MPI.COMM_WORLD)
+mat = np.array([[0.01, 0, 0, 0],[0, 0.01, 0, 0],[0, 0, 0.05, 0],[0, 0, 0, 1]])
+slicout = nib.Nifti1Image(g['stack'][:,:,:], mat)
+slicout.to_filename(os.path.join(datadir, 'training_data2.nii.gz'))
+
+g = h5py.File('training_data.h5', 'r', driver='mpio', comm=MPI.COMM_WORLD)
+mat = np.array([[0.01, 0, 0, 0],[0, 0.01, 0, 0],[0, 0, 0.05, 0],[0, 0, 0, 1]])
+slicout = nib.Nifti1Image(g['stack'][:,:,:], mat)
+slicout.to_filename(os.path.join(datadir, 'training_data.nii.gz'))
+
+
+### train on dataset
+
+import os
+import numpy as np
+import matplotlib.pyplot as plt
+import h5py
+from gala import viz
+from skimage import segmentation
+from gala import imio, classify, features, agglo, evaluate as ev
+
+
+# datadir = '/data/ndcn-fmrib-water-brain/ndcn0180/EM/M2/I/'
+datadir = '/Users/michielk/oxdata/P01/EM/M2/I/'
+
+gt_train, pr_train, ws_train = (map(imio.read_h5_stack,
+                                [os.path.join(datadir, 'training_data0_SimpleSegmentation.h5'), 
+                                 os.path.join(datadir, 'training_data0_Probabilities.h5'),
+                                 os.path.join(datadir, 'training_data0_slicvoxels002.h5')], 
+                                ['stack', 'stack', 'stack']))
+
+fm = features.moments.Manager()
+fh = features.histogram.Manager()
+fc = features.base.Composite(children=[fm, fh])
+
+gt_train = gt_train.astype('uint8') - 1
+g_train = agglo.Rag(ws_train[0:50,0:100,0:100], pr_train[0:50,0:100,0:100,1], feature_manager=fc)
+g_train = agglo.Rag(ws_train, pr_train, feature_manager=fc)
+(X, y, w, merges) = g_train.learn_agglomerate(gt_train, fc)[0]
+y = y[:, 0] # gala has 3 truth labeling schemes, pick the first one
+
+rf = classify.DefaultRandomForest().fit(X, y)
+
+with open(os.path.join(datadir, 'training_data0_rf002.pickle'), 'w') as f:
+    pickle.dump([fc,rf], f)
+

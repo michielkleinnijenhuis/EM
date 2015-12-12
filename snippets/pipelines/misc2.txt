@@ -1,0 +1,4 @@
+mpiexec -n 8
+python /Users/michielk/workspace/EM/EM_series2stack.py \
+'/Users/michielk/oxdata/P01/EM/M3/M3_S1_GNU/tifs' '/Users/michielk/oxdata/P01/EM/M3/M3_S1_GNU/stack02xx.h5' \
+-f 'stack' -o -e 0.0073 0.0073 0.05

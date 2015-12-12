@@ -1,0 +1,227 @@
+mpiexec -n 7 python /Users/michielk/workspace/EM/EM_series2stack.py \
+'/Users/michielk/oxdata/P01/EM/M3/M3_S1_GNU/reg_ds' \
+'/Users/michielk/oxdata/P01/EM/M3/M3_S1_GNU/reg_ds.h5' \
+-o \
+-f 'reg_ds_19' \
+-e 0.073 0.073 0.05 \
+-c 19 19 19
+
+mpiexec -n 4 python /Users/michielk/workspace/EM/EM_series2stack.py \
+'/Users/michielk/oxdata/P01/EM/M3/M3_S1_GNU/reg_ds' \
+'/Users/michielk/oxdata/P01/EM/M3/M3_S1_GNU/reg_ds.h5' \
+-o \
+-f 'reg_ds_20' \
+-e 0.073 0.073 0.05 \
+-c 20 20 20 \
+-Z 400
+
+mpiexec -n 1 python /Users/michielk/workspace/EM/EM_series2stack.py \
+'/Users/michielk/oxdata/P01/EM/M3/M3_S1_GNU/reg' \
+'/Users/michielk/oxdata/P01/EM/M3/M3_S1_GNU/reg.h5' \
+-m \
+-o \
+-f 'reg' \
+-e 0.0073 0.0073 0.05 \
+-Z 120
+
+mpiexec -n 1 python /Users/michielk/workspace/EM_seg/src/EM_convert2stack_blocks.py \
+'/Users/michielk/oxdata/P01/EM/M3/M3_S1_GNU/reg_ds' \
+'/Users/michielk/oxdata/P01/EM/M3/M3_S1_GNU/reg_ds.h5'
+
+
+rsync -avz ndcn0180@arcus.oerc.ox.ac.uk:/data/ndcn-fmrib-water-brain/ndcn0180/EM/M3/M3_S1_SPL/tifs/0006* /Users/michielk/oxdata/P01/EM/M3/M3_S1_SPL/tifs
+rsync -avz ndcn0180@arcus.oerc.ox.ac.uk:/data/ndcn-fmrib-water-brain/ndcn0180/EM/M3/M3_S1_SPL/tifs/0061* /Users/michielk/oxdata/P01/EM/M3/M3_S1_SPL/tifs
+rsync -avz ndcn0180@arcus.oerc.ox.ac.uk:/data/ndcn-fmrib-water-brain/ndcn0180/EM/M3/M3_S1_SPL/tifs/0168* /Users/michielk/oxdata/P01/EM/M3/M3_S1_SPL/tifs
+
+
+rsync -avz ndcn0180@arcus.oerc.ox.ac.uk:/data/ndcn-fmrib-water-brain/ndcn0180/EM/M3/M3_S1_SPL/stitched/0000.tif /Users/michielk/oxdata/P01/EM/M3/M3_S1_SPL/stitched
+rsync -avz ndcn0180@arcus.oerc.ox.ac.uk:/data/ndcn-fmrib-water-brain/ndcn0180/EM/M3/M3_S1_SPL/stitched/0?99.tif /Users/michielk/oxdata/P01/EM/M3/M3_S1_SPL/stitched
+
+rsync -avz ndcn0180@arcus.oerc.ox.ac.uk:/data/ndcn-fmrib-water-brain/ndcn0180/EM/M3/M3_S1_SPL/stitched/0168.tif /Users/michielk/oxdata/P01/EM/M3/M3_S1_SPL/stitched
+
+rsync -avz ndcn0180@arcus.oerc.ox.ac.uk:/data/ndcn-fmrib-water-brain/ndcn0180/EM/M3/M3_S1_SPL/reg/0100.tif /Users/michielk/oxdata/P01/EM/M3/M3_S1_SPL/reg
+
+
+###==========================================###
+### downsample registered slices for viewing ###
+###==========================================###
+
+mkdir -p $datadir/stitched_ds
+
+sed "s?SCRIPTDIR?$scriptdir?;\
+    s?INPUTDIR?$datadir/stitched?;\
+    s?OUTPUTDIR?$datadir/stitched_ds?;\
+    s?DS_FACTOR?10?;\
+    s?X_START?$x?;\
+    s?X_END?$X?;\
+    s?Y_START?$y?;\
+    s?Y_END?$Y?;\
+    s?Z_START?250?;\
+    s?Z_END?500?g" \
+    $scriptdir/EM_downsample_submit.sh \
+    > $datadir/EM_downsample_stitched_submit.sh
+
+qsub $datadir/EM_downsample_stitched_submit.sh
+
+
+rsync -avz ndcn0180@arcus.oerc.ox.ac.uk:/data/ndcn-fmrib-water-brain/ndcn0180/EM/M3/M3_S1_GNU/reg/0000.tif /Users/michielk/oxdata/P01/EM/M3/M3_S1_GNU/reg
+rsync -avz ndcn0180@arcus.oerc.ox.ac.uk:/data/ndcn-fmrib-water-brain/ndcn0180/EM/M3/M3_S1_GNU/reg_ds/* /Users/michielk/oxdata/P01/EM/M3/M3_S1_GNU/reg_ds
+
+
+plugin.Stitching_Grid.seperateOverlapY = true;
+
+run("Grid/Collection stitching", "type=[Grid: row-by-row] \
+order=[Right & Down                ] grid_size_x=2 grid_size_y=2 \
+tile_overlap_x=10 tile_overlap_y=2 \
+first_file_index_i=0 directory=/Users/michielk/oxdata/P01/EM/M3/M3_S1_SPL/tifs file_names=0006_m{iii}.tif output_textfile_name=TileConfiguration.txt fusion_method=[Linear Blending] regression_threshold=0.30 max/avg_displacement_threshold=2.50 absolute_displacement_threshold=3.50 compute_overlap subpixel_accuracy computation_parameters=[Save computation time (but use more RAM)] image_output=[Fuse and display]");
+close();
+
+
+for f in ``; do
+wc -c
+
+qsub -q develq -t $js $datadir/EM_montage2stitched_submit.sh
+
+
+jobstring=''
+for slc in `seq 19 20 $((Z-20))`; do
+sed "s?INPUTDIR?$datadir/tifs?;\
+    s?OUTPUTDIR?$datadir/stitched?;\
+    s?Z_START?$slc?;\
+    s?Z_END?$((slc+1))?g" \
+    $scriptdir/EM_montage2stitched.py \
+    > $datadir/EM_montage2stitched_`printf %03d $slc`.py
+    jobstring="$jobstring$slc,"
+done
+
+
+
+
+import sys
+import glob
+import argparse
+from os import path
+import numpy as np
+from math import ceil
+from skimage import io
+from mpi4py import MPI
+import h5py
+
+
+datadir='/Users/michielk/oxdata/P01/EM/M3/M3_S1_GNU'
+fieldname='reg'
+
+#f = h5py.File(path.join(datadir,'reg.h5'), 'w')
+f = h5py.File(path.join(datadir,'reg_mpi.h5'), 'w', driver='mpio', comm=MPI.COMM_WORLD)
+dset = f.create_dataset(fieldname, (120,10000,10000), chunks=(20,20,20), dtype='uint16')
+
+f[fieldname][0:20,:,:] = np.ones([20,10000,10000],dtype='uint16')
+f[fieldname][20:40,:,:] = 2*np.ones([20,10000,10000],dtype='uint16')
+f[fieldname][40:60,:,:] = 4*np.ones([20,10000,10000],dtype='uint16')
+f[fieldname][60:80,:,:] = 8*np.ones([20,10000,10000],dtype='uint16')
+f[fieldname][80:100,:,:] = 16*np.ones([20,10000,10000],dtype='uint16')
+f[fieldname][100:120,:,:] = 32*np.ones([20,10000,10000],dtype='uint16')
+
+f.close()
+
+
+import sys
+import glob
+import argparse
+from os import path
+import numpy as np
+from math import ceil
+from skimage import io
+from mpi4py import MPI
+import h5py
+
+datadir = '/Users/michielk/oxdata/P01/EM/M3/M3_S1_GNU'
+fieldname = 'reg'
+m = 3000
+
+f = h5py.File(path.join(datadir,'reg_mpi.h5'), 'w', driver='mpio', comm=MPI.COMM_WORLD)
+dset = f.create_dataset(fieldname, (460,m,m), chunks=(20,20,20), dtype='uint16')
+
+f[fieldname][0:20,:,:] = np.ones([20,m,m],dtype='uint16')
+f[fieldname][20:40,:,:] = 2*np.ones([20,m,m],dtype='uint16')
+f[fieldname][40:60,:,:] = 4*np.ones([20,m,m],dtype='uint16')
+f[fieldname][60:80,:,:] = 8*np.ones([20,m,m],dtype='uint16')
+f[fieldname][80:100,:,:] = 16*np.ones([20,m,m],dtype='uint16')
+f[fieldname][100:120,:,:] = 32*np.ones([20,m,m],dtype='uint16')
+
+f.close()
+
+
+
+
+
+python /Users/michielk/workspace/EM/EM_series2stack.py \
+'/Users/michielk/oxdata/P01/EM/M3/M3_S1_GNU/reg_ds' \
+'/Users/michielk/oxdata/P01/EM/M3/M3_S1_GNU/reg_ds.h5' \
+-o \
+-f 'reg_ds_20' \
+-e 0.073 0.073 0.05 \
+-c 20 20 20 \
+-Z 400
+
+python /Users/michielk/workspace/EM/EM_series2stack.py \
+'/Users/michielk/oxdata/P01/EM/M3/M3_S1_GNU/reg' \
+'/Users/michielk/oxdata/P01/EM/M3/M3_S1_GNU/reg.h5' \
+-o \
+-f 'reg' \
+-e 0.0073 0.0073 0.05 \
+-Z 120
+
+python /Users/michielk/workspace/EM/EM_series2stack.py \
+'/Users/michielk/oxdata/P01/EM/M3/M3_S1_GNU/reg' \
+'/Users/michielk/oxdata/P01/EM/M3/M3_S1_GNU/reg_training.h5' \
+-o \
+-f 'training' \
+-e 0.0073 0.0073 0.05 \
+-x 8000 -X 8500 -y 1000 -Y 1500 -z 250 -Z 350
+
+
+python /Users/michielk/workspace/EM/EM_stack2stack.py \
+'/Users/michielk/oxdata/P01/EM/M3/M3_S1_GNU/reg.h5' \
+'/Users/michielk/oxdata/P01/EM/M3/M3_S1_GNU/reg_training.h5' \
+-f 'reg' \
+-g 'training' \
+-x 8000 -X 8500 -y 1000 -Y 1500 -z 20 -Z 120 -n
+
+python /Users/michielk/workspace/EM/EM_stack2stack.py \
+'/Users/michielk/oxdata/P01/EM/M3/M3_S1_GNU/reg_ds.h5' \
+'/Users/michielk/oxdata/P01/EM/M3/M3_S1_GNU/reg_ds.nii.gz' -n
+
+
+
+git clone https://github.com/ilastik/ilastik.git
+
+
+ilastik --headless \
+--project=/Users/michielk/oxdata/P01/EM/M3/M3_S1_GNU/pixclass.ilp \
+--output_internal_path=/probs \
+/Users/michielk/oxdata/P01/EM/M3/M3_S1_GNU/reg.h5/reg
+
+python ilastik.py --headless \
+--project=/Users/michielk/oxdata/P01/EM/M3/M3_S1_GNU/pixclass.ilp \
+--output_internal_path=/probs \
+/Users/michielk/oxdata/P01/EM/M3/M3_S1_GNU/reg.h5/reg
+
+
+
+
+
+
+
+
+
+datadir=/Users/michielk/workspace/FlyEM/NeuroProof/examples
+python /Users/michielk/workspace/EM/EM_stack2stack.py \
+$datadir/validation_sample/grayscale_maps.h5 \
+$datadir/validation_sample/grayscale_maps_tif03490.tif \
+-f 'stack' -n 5
+python /Users/michielk/workspace/EM/EM_stack2stack.py \
+$datadir/validation_sample/results/segmentation.h5 \
+$datadir/validation_sample/segmentation_tif03490.tif \
+-f 'stack' -n 5 -i zyx
+

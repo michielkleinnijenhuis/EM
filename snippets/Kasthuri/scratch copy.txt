@@ -1,0 +1,36 @@
+Help on function get_data in module ocpy.access.download:
+get_data(token, channel, x_start, x_stop, y_start, y_stop, z_start, z_stop, resolution, fmt='hdf5', server='http://openconnecto.me', location='./', ask_before_writing=False, chunk_depth=16)
+    Get data from the OCP server.
+    Arguments:
+        :server:                ``string : DEFAULT_SERVER`` Internet-facing server. Must include protocol (e.g. ``https``).
+        :token:                 ``string`` Token to identify data to download
+        :channel:               ``string`` Channel
+        :fmt:                   ``string : 'hdf5'`` The desired output format
+        :resolution:            ``int`` Resolution level
+        :Q_start:               ``int`` The lower bound of dimension 'Q'
+        :Q_stop:                ``int`` The upper bound of dimension 'Q'
+        :location:              ``string : './'`` The on-disk location where we'll create /hdf5
+        :ask_before_writing:    ``boolean : False`` Whether to ask (y/n) before creating directories. Default value is `False`.
+    Returns:
+        :``string[]``: Filenames that were saved to disk.
+(END)
+
+
+# http://openconnecto.me/ocp/ca/kasthuri11cc/xy/1/3000,4000/5000,6000/1000/
+# http://openconnecto.me/ocp/ca/kasthuri14s1colEM/xy/1/3000,4000/5000,6000/100/
+# http://openconnecto.me/ocp/ca/kasthuri14s1colANNO/xy/1/3000,4000/5000,6000/100/
+
+http://openconnecto.me/ocp/ca/kat11segments/xy/0/10000,12000/15000,17000/1167/
+http://openconnecto.me/ocp/ca/kat11segments/xy/1/5000,6000/7500,8500/1167/
+http://openconnecto.me/ocp/ca/kat11segments/xy/2/2500,3000/3750,4250/1167/
+# http://openconnecto.me/ocp/ca/kat11segments/xy/2/1250,1500/1875,2125/580/
+
+http://openconnecto.me/ocp/ca/kat11segments/hdf5/1/5000,6000/7500,8500/1000,1200/
+http://openconnecto.me/ocp/ca/kat11segments/hdf5/1/5000,5500/8000,8500/1100,1200/
+http://openconnecto.me/ocp/ca/kasthuri11cc/hdf5/1/5000,5500/8000,8500/1100,1200/
+
+hdf5/openconnecto.me-ocp-ca-kasthuri14s1colEM-annotation-hdf5-1-000000,024576-000000,016384-000000,000016.hdf5
+
+kat11mojocylinder
+kat11redcylinder
+kat11greencylinder
