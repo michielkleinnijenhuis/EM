@@ -3,7 +3,7 @@
 import sys
 import glob
 import argparse
-from os import path
+import os
 import numpy as np
 from math import ceil
 from skimage import io
@@ -48,9 +48,9 @@ def main(argv):
     
     nzfills = args.nzfills
     regex = args.regex
-    files = glob.glob(path.join(inputdir, regex))
-    (root, ext) = path.splitext(files[0])
-    (head, tail) = path.split(root)
+    files = glob.glob(os.path.join(inputdir, regex))
+    root, ext = os.path.splitext(files[0])
+    head, tail = os.path.split(root)
     prefix = tail[:-nzfills]
     
     firstimage = io.imread(files[0])
@@ -84,7 +84,7 @@ def main(argv):
     
     
     # FIXME: somehow 'a' doesn't work if file doesnt exist
-    otype = 'a' if path.isfile(outputfile) else 'w'
+    otype = 'a' if os.path.isfile(outputfile) else 'w'
     if usempi:
         comm = MPI.COMM_WORLD
         rank = comm.Get_rank()

@@ -23,14 +23,24 @@ def main(argv):
         argv = []  # as if no args are passed
     else:
         argv = argv[argv.index("--") + 1:]  # get all args after "--"
+    
     parser = argparse.ArgumentParser(description='Combine stl objects into blender scene.')
+    
     parser.add_argument('stldir', help='the input data directory')
     parser.add_argument('outfilename', help='the output file name')
     parser.add_argument('-L', '--labelimages', default=['UA'], nargs='+', help='...')
+    parser.add_argument('-e', '--ecs_shrinkvalue', type=float, help='...')
+    parser.add_argument('-s', '--smoothparams', type=float, nargs=2, help='...')
+    parser.add_argument('-d', '--decimation', type=float, help='...')
+    
     args = parser.parse_args(argv)
+    
     stldir = args.stldir
     outfilename = args.outfilename
     compartments = args.labelimages
+    ecs_shrinkvalue = args.ecs_shrinkvalue
+    smoothparams = args.smoothparams
+    decimation = args.decimation
     
 #     compartments = ['NN', 'DD', 'MM', 'MA', 'UA', 'mito', 'vesicles', 'synapses']
     # TODO: default to all compartments in stldir
@@ -42,10 +52,13 @@ def main(argv):
             O.import_mesh.stl(filepath=fp)
             ob = C.scene.objects.active
             consistent_outward_normals(ob)
-            # if surf == 'bin':
-            #     decimate_mesh(ob, 0.1)
-#             smooth_mesh(ob, 0.5, 10)
-            # shrink_mesh(ob, 0.01)
+            if decimation:
+                decimate_mesh(ob, decimation)
+            if smoothparams:
+                print(smoothparams[0], smoothparams[1])
+                smooth_mesh(ob, smoothparams[0], smoothparams[1])
+            if ecs_shrinkvalue:
+                shrink_mesh(ob, ecs_shrinkvalue)
             colour = [random() for _ in range(0,3)]
             transparent_mat = make_material('mat', colour, 0.2)
             set_material(ob, transparent_mat)

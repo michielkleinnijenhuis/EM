@@ -1,47 +1,24 @@
-addpath(genpath('/Users/michielk/oxscripts/matlab/toolboxes/coherencefilter_version5b'));
-addpath /Users/michielk/oxscripts/matlab/toolboxes/NIFTI_20090703
+function EM_eed(datadir, invol, infield, outfield, layers)
 
-datadir='/Users/michielk/oxdata/P01/EM/M3/M3_S1_GNU/pipeline_test';
-invol = 'pixprob_training_probs';
-invol = 'segclass_training_probs';
-data = h5read([datadir filesep invol '.h5'], '/volume/predictions');
+% EM_eed('/vols/Data/km/michielk/P01/EM/M3/M3_S1_GNU', 'm000_cutout01', '/stack', '/stack', 0)
+% EM_eed('/vols/Data/km/michielk/P01/EM/M3/M3_S1_GNU', 'm000_cutout01_probs', '/volume/predictions', '/stack', [1,2,3])
 
-%%
-layer = 3;
-image = squeeze(data(layer,:,:,:));
+addpath(genpath('~/oxscripts/matlab/toolboxes/coherencefilter_version5b'));
+addpath('~/oxscripts/matlab/toolboxes/NIFTI_20090703');
 
-u = CoherenceFilter(image, struct('T',50,'dt',1,'rho',1,'Scheme','R','eigenmode',2,'verbose','full'));
-h5create([datadir filesep invol num2str(layer-1) '_eed2.h5'], '/stack', size(u));
-h5write([datadir filesep invol num2str(layer-1) '_eed2.h5'], '/stack', u);
-
-%%
-layer = [3 6];
-image = squeeze(mean(data(layer,:,:,:),1));
-image = squeeze(max(data(layer,:,:,:),[],1));
-u = CoherenceFilter(image, struct('T',50,'dt',1,'rho',1,'Scheme','R','eigenmode',2,'verbose','full'));
-h5create([datadir filesep invol '36_eed2.h5'], '/stack', size(u));
-h5write([datadir filesep invol '36_eed2.h5'], '/stack', u);
-
-
-%%
-datadir = '/Users/michielk/oxdata/P01/EM/M3/M3_S1_GNU';
-invol = 'm000_cutout01_probs';
-data = h5read([datadir filesep invol '.h5'], '/volume/predictions');
-
-for layer = 1:3;
-    image = squeeze(data(layer,:,:,:));
-    u = CoherenceFilter(image, struct('T',50,'dt',1,'rho',1,'Scheme','R','eigenmode',2,'verbose','full'));
-    h5create([datadir filesep invol num2str(layer-1) '_eed2.h5'], '/stack', size(u));
-    h5write([datadir filesep invol num2str(layer-1) '_eed2.h5'], '/stack', u);
+for layer = layers;
+    
+    if layer == 0
+        data = h5read([datadir filesep invol '.h5'], infield);
+        fname = [datadir filesep invol '_eed2.h5'];
+    else
+        data = h5read([datadir filesep invol '.h5'], infield, [layer,1,1,1], [1,Inf,Inf,Inf]);
+        data = squeeze(data(layer,:,:,:));
+        fname = [datadir filesep invol num2str(layer-1) '_eed2.h5'];
+    end
+    
+    u = CoherenceFilter(data, struct('T', 50, 'dt', 1, 'rho', 1, 'Scheme', 'R', 'eigenmode', 2, 'verbose', 'full'));
+    h5create(fname, outfield, size(u));
+    h5write(fname, outfield, u);
+    
 end
-
-%%
-
-datadir = '/Users/michielk/oxdata/P01/EM/M3/M3_S1_GNU';
-invol = 'm000_cutout01';
-data = h5read([datadir filesep invol '.h5'], '/stack');
-
-image = squeeze(data(:,:,:));
-u = CoherenceFilter(image, struct('T',50,'dt',1,'rho',1,'Scheme','R','eigenmode',2,'verbose','full'));
-h5create([datadir filesep invol '_eed2.h5'], '/stack', size(u));
-h5write([datadir filesep invol '_eed2.h5'], '/stack', u);

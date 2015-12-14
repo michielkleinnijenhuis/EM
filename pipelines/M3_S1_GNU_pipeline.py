@@ -58,29 +58,29 @@
 scriptdir="$HOME/workspace/EM"
 DATA="$HOME/oxdata"
 datadir="$DATA/P01/EM/M3/M3_S1_GNU"
-# dataset='m000'
-dataset='m000_cutout01'
 pixprob_trainingset="pixprob_training"
+dataset='m000'
+dataset='m000_cutout01'
 
 ### cutout trainingdata
 # exported data stack as HDF5 from Fiji
-python $scriptdir/EM_stack2stack.py \
+python $scriptdir/convert/EM_stack2stack.py \
 "${datadir}/${dataset}.h5" \
 "${datadir}/${dataset}_cutout01.h5" \
 -x 1000 -X 1500 -y 1000 -Y 1500 -f 'stack' -s 100 100 100 -i 'zyx'
 # exported seg stack as HDF5 from Matlab
 
-python $scriptdir/EM_stack2stack.py \
+python $scriptdir/convert/EM_stack2stack.py \
 "${datadir}/${dataset}.h5" \
 "${datadir}/${dataset}.nii.gz" -i 'zyx' -l 'xyz'
-python $scriptdir/EM_stack2stack.py \
+python $scriptdir/convert/EM_stack2stack.py \
 "${datadir}/${dataset}_seg.h5" \
 "${datadir}/${dataset}_seg.nii.gz" -i 'zyx' -l 'xyz'
 
 ### run the Ilastik classifier on the dataset
 source activate ilastik-devel
 CONDA_ROOT=`conda info --root`
-${CONDA_ROOT}/envs/ilastik-devel/run_ilastik.sh --headless \
+LAZYFLOW_THREADS=7 LAZYFLOW_TOTAL_RAM_MB=6000 ${CONDA_ROOT}/envs/ilastik-devel/run_ilastik.sh --headless \
 --preconvert_stacks \
 --project="$DATA/P01/EM/M3/M3_S1_GNU/pipeline_test/${pixprob_trainingset}.ilp" \
 --output_axis_order=xyzc \
@@ -89,7 +89,7 @@ ${CONDA_ROOT}/envs/ilastik-devel/run_ilastik.sh --headless \
 --output_internal_path=/volume/predictions \
 "${datadir}/${dataset}.h5/stack"
 
-python $scriptdir/EM_stack2stack.py \
+python $scriptdir/convert/EM_stack2stack.py \
 "${datadir}/${dataset}_probs.h5" \
 "${datadir}/${dataset}_probs.nii.gz" \
 -d 'float' -f 'volume/predictions' -i 'zyxc' -l 'xyzc'
@@ -102,6 +102,8 @@ layer=3
 python $scriptdir/EM_stack2stack.py \
 "$datadir/${dataset}_probs${layer}_eed2.h5" \
 "$datadir/${dataset}_probs${layer}_eed2.nii.gz"  -i 'zyx' -l 'xyz'
+
+
 
 ### watershed segmentations
 import os
@@ -164,8 +166,8 @@ for label in np.unique(ws):
 
 
 ### combine the MM, MA and UA segmentations
-MM = loadh5(datadir, dataset + '_probs_wssegmentation_myelin.h5')
 MA = loadh5(datadir, dataset + '_probs_wsseeds_myelin.h5')
+MM = loadh5(datadir, dataset + '_probs_wssegmentation_myelin.h5')
 UA = loadh5(datadir, dataset + '_probs_wssegmentation_axon.h5')
 segm = np.zeros_like(MM)
 nlabels = 0
@@ -174,6 +176,11 @@ for seg in [MM,MA,UA]:  # TODO: use forward map? # TODO: label in specific range
     nlabels = len(np.unique(segmentation))
 writeh5(segmentation, datadir, dataset + '_segmentation.h5')
 
+segm = MM + MA
+nlabels = len(np.unique(segm))
+UA, _, _ = relabel_sequential(UA, nlabels)
+segm = segm + UA
+writeh5(segm, datadir, dataset + '_parents.h5')
 
 
 
@@ -205,3 +212,33 @@ python $scriptdir/EM_stack2stack.py \
 python $scriptdir/EM_stack2stack.py \
 "$datadir/${dataset}_segmentation.h5" \
 "$datadir/${dataset}_segmentation.nii.gz" -i 'zyx' -l 'xyz'
+python $scriptdir/convert/EM_stack2stack.py \
+"$datadir/${dataset}_parents.h5" \
+"$datadir/${dataset}_parents.nii.gz" -i 'zyx' -l 'xyz'
+
+
+
+
+### labels to meshes
+from skimage.morphology import remove_small_objects
+labeldata = loadh5(datadir, dataset + '_parents.h5')
+zyxSpacing = [0.05,0.0073,0.0073]
+zyxOffset = [0,0,0]
+compdict = {}
+compdict['MM'] = [i for i in range(1,17)]
+compdict['UA'] = [i for i in range(17,len(np.unique(labeldata)))]
+
+labeldata = remove_small_objects(labeldata, 100)
+labels2meshes_vtk(datadir, compdict, np.transpose(labeldata), 
+                  spacing=zyxSpacing[::-1], offset=zyxOffset[::-1])
+
+
+
+
+blender -b -P $scriptdir/mesh/stl2blender.py -- $datadir/dmcsurf test_cutout01 -L 'MM' 'UA' -e 0.01 -s 0.1 100
+
+
+
+
+
+

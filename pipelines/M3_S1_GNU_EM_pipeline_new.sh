@@ -37,8 +37,8 @@ python $scriptdir/EM_stack2stack.py \
 ### watershed supervoxels
 source activate gala
 gala-segmentation-pipeline \
---image-stack "$datadir/${pixprob_trainingset}.h5" \
---ilp-file "$datadir/${pixprob_trainingset}.ilp" \
+--image-stack "$DATA/P01/EM/M3/M3_S1_GNU/pipeline_test/${pixprob_trainingset}.h5" \
+--ilp-file "$DATA/P01/EM/M3/M3_S1_GNU/pipeline_test/${pixprob_trainingset}.ilp" \
 --disable-gen-pixel --pixelprob-file "$datadir/${dataset}_probs.h5" \
 --enable-gen-supervoxels \
 --disable-gen-agglomeration \
@@ -46,22 +46,18 @@ gala-segmentation-pipeline \
 --enable-raveler-output \
 --enable-h5-output "$datadir" \
 --segmentation-thresholds 0.0
-python $scriptdir/EM_stack2stack.py \
+python $scriptdir/convert/EM_stack2stack.py \
 "$datadir/supervoxels.h5" \
 "$datadir/supervoxels.nii.gz" \
 -e 0.05 0.0073 0.0073 \
 -d 'int32' -f 'stack' -g 'stack' -i 'xyz' -l 'zyx'
 
 ### slicvoxels
-python $scriptdir/EM_slicvoxels.py \
--i "$datadir/${dataset}.h5" \
--o "$datadir/${dataset}_slicvoxels.h5" \
--f 'stack' -g 'stack' -s 500
-python $scriptdir/EM_stack2stack.py \
-"$datadir/${dataset}_slicvoxels.h5" \
-"$datadir/${dataset}_slicvoxels.nii.gz" \
--e 0.05 0.0073 0.0073 \
--d 'int32' -f 'stack' -g 'stack'
+python $scriptdir/supervoxels/EM_slicvoxels.py \
+"$datadir/${dataset}.h5" "$datadir/${dataset}_slicvoxels.h5" -s 500 -c 0.1
+python $scriptdir/convert/EM_stack2stack.py \
+"${datadir}/${dataset}_slicvoxels.h5" \
+"${datadir}/${dataset}_slicvoxels.nii.gz" -i 'zyx' -l 'xyz' -d 'uint32'
 
 python $scriptdir/EM_slicvoxels.py \
 -i "$datadir/${dataset}_probs.h5" \

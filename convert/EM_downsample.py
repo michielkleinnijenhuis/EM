@@ -5,7 +5,8 @@ Downsample a range of slices.
 """
 
 import sys
-from os import path, makedirs
+import os
+import errno
 import glob
 from argparse import ArgumentParser
 
@@ -22,8 +23,6 @@ def main(argv):
     parser = ArgumentParser(description='Downsample images.')
     parser.add_argument('inputdir', help='a directory with images')
     parser.add_argument('outputdir', help='the output directory')
-    parser.add_argument('-n', '--nzfills', type=int, default=4, 
-                        help='the number of characters at the end that define z')
     parser.add_argument('-r', '--regex', default='*.tif', 
                         help='regular expression to select files with')
     parser.add_argument('-d', '--ds_factor', type=int, default=4, 
@@ -40,15 +39,10 @@ def main(argv):
     
     inputdir = args.inputdir
     outputdir = args.outputdir
-#     if not path.exists(outputdir):
-#         makedirs(outputdir)
+    mkdir_p(outputdir)
     
-    nzfills = args.nzfills
     regex = args.regex
-    files = glob.glob(path.join(inputdir, regex))
-#     (root, ext) = path.splitext(files[0])
-#     (head, tail) = path.split(root)
-#     prefix = tail[:-nzfills]
+    files = glob.glob(os.path.join(inputdir, regex))
     
     firstimage = io.imread(files[0])
     x = args.x
@@ -81,11 +75,20 @@ def main(argv):
         local_slcnrs = slcnrs
     
     for slc in local_slcnrs:
-        original = io.imread(path.join(inputdir, str(slc).zfill(nzfills) + '.tif'))
-        sub = original[x:X,y:Y]
+        sub = io.imread(files[slc])[x:X,y:Y]
         ds_sub = resize(sub, (sub.shape[0] / ds_factor, 
-                                   sub.shape[1] / ds_factor))
-        imsave(path.join(outputdir, str(slc).zfill(nzfills) + '.tif'), ds_sub)
+                              sub.shape[1] / ds_factor))
+        root, ext = os.path.splitext(files[slc])
+        _, tail = os.path.split(root)
+        imsave(os.path.join(outputdir, tail + ext), ds_sub)
+
+def mkdir_p(filepath):
+    try:
+        os.makedirs(filepath)
+    except OSError as exc: # Python >2.5
+        if exc.errno == errno.EEXIST and os.path.isdir(filepath):
+            pass
+        else: raise
 
 if __name__ == "__main__":
     main(sys.argv[1:])
