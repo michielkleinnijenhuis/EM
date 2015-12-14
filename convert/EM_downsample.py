@@ -75,7 +75,7 @@ def main(argv):
         local_slcnrs = slcnrs
     
     for slc in local_slcnrs:
-        sub = io.imread(files[slc])[x:X,y:Y]
+        sub = io.imread(files[slc])[y:Y,x:X]
         ds_sub = resize(sub, (sub.shape[0] / ds_factor, 
                               sub.shape[1] / ds_factor))
         root, ext = os.path.splitext(files[slc])
