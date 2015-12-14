@@ -42,7 +42,7 @@ def main(argv):
     mkdir_p(outputdir)
     
     regex = args.regex
-    files = glob.glob(os.path.join(inputdir, regex))
+    files = sorted(glob.glob(os.path.join(inputdir, regex)))
     
     firstimage = io.imread(files[0])
     x = args.x

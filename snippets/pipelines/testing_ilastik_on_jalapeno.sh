@@ -111,10 +111,13 @@ echo "#SBATCH --job-name=EM_rs" >> $qsubfile
 echo "/system/software/linux-x86_64/fiji/20140602/ImageJ-linux64 --headless $datadir/EM_register.py" >> $qsubfile
 sbatch -p compute $qsubfile
 
+
+
 ###==========================================###
 ### downsample registered slices for viewing ###
 ###==========================================###
 
+# FIXME??? NOT WORKING ON ARCUS-B
 # start clean! (some incompatibilities on skimage with previous load)
 source ~/.bashrc
 module load intel-compilers/2015
@@ -127,7 +130,7 @@ scriptdir="$HOME/workspace/EM"
 datadir="$DATA/EM/M3/M3_S1_GNU"
 
 cd $datadir
-mkdir -p $datadir/m000_reg_ds
+mkdir -p $datadir/m000_reg_ds4
 
 qsubfile=$datadir/EM_downsample_submit.sh
 echo '#!/bin/bash' > $qsubfile
@@ -136,19 +139,15 @@ echo "#SBATCH --ntasks-per-node=16" >> $qsubfile
 echo "#SBATCH --time=00:10:00" >> $qsubfile
 echo "#SBATCH --job-name=EM_ds" >> $qsubfile
 echo ". enable_arcus-b_mpi.sh" >> $qsubfile
-# echo "export PATH=/home/ndcn-fmrib-water-brain/ndcn0180/miniconda/bin:\$PATH" >> $qsubfile
-# echo "source activate root" >> $qsubfile
 echo "mpirun \$MPI_HOSTS python $scriptdir/convert/EM_downsample.py \
-'$datadir/m000_reg' '$datadir/m000_reg_ds' -d 10 -m" >> $qsubfile
+'$datadir/m000_reg' '$datadir/m000_reg_ds4' -d 4 -m" >> $qsubfile
 sbatch -p devel $qsubfile
 #rsync -avz ndcn0180@arcus.oerc.ox.ac.uk:$datadir/reg_ds $local_datadir/reg_ds
 
-python $scriptdir/convert/EM_downsample.py '$datadir/m000_reg' '$datadir/m000_reg_ds' -d 10 -m
 
 
 
-
-
+# NOTE: WORKING ON ARCUS
 
 module load python/2.7
 module load mpi4py/1.3.1 
@@ -168,8 +167,23 @@ echo "#PBS -V" >> $qsubfile
 echo "cd \$PBS_O_WORKDIR" >> $qsubfile
 echo ". enable_arcus_mpi.sh" >> $qsubfile
 echo "mpirun \$MPI_HOSTS python $scriptdir/convert/EM_downsample.py \
-'$datadir/m000_reg' '$datadir/m000_reg_ds' -d 4 -m" >> $qsubfile
+'$datadir/m000_reg' '$datadir/m000_reg_ds' -d 10 -m" >> $qsubfile
 qsub -q develq $qsubfile
+
+qsubfile=$datadir/EM_series2stack_submit.sh
+echo '#!/bin/bash' > $qsubfile
+echo "#PBS -l nodes=1:ppn=16" >> $qsubfile
+echo "#PBS -l walltime=00:10:00" >> $qsubfile
+echo "#PBS -N em_s2s" >> $qsubfile
+echo "#PBS -V" >> $qsubfile
+echo "cd \$PBS_O_WORKDIR" >> $qsubfile
+echo ". enable_arcus_mpi.sh" >> $qsubfile
+echo "mpirun \$MPI_HOSTS python $scriptdir/convert/EM_series2stack.py \
+'$datadir/m000_reg_ds' '$datadir/m000_reg_ds.h5' \
+-f 'stack' -m -o -e 0.073 0.073 0.05" >> $qsubfile
+qsub -q develq $qsubfile
+#rsync -avz ndcn0180@arcus.arc.ox.ac.uk:/data/ndcn-fmrib-water-brain/ndcn0180/EM/M3/M3_S1_GNU/m000_reg_ds.h5 /Users/michielk/oxdata/P01/EM/M3/M3_S1_GNU/m000_reg_ds_arcus.h5
+
 
 
 
@@ -186,7 +200,7 @@ echo "cd \$PBS_O_WORKDIR" >> $qsubfile
 echo ". enable_arcus_mpi.sh" >> $qsubfile
 echo "mpirun \$MPI_HOSTS python $scriptdir/convert/EM_series2stack.py \
 '$datadir/m000_reg' '$datadir/m000_reg.h5' \
--f 'stack' -m -o -e 0.073 0.073 0.05" >> $qsubfile
+-f 'stack' -m -o -e 0.0073 0.0073 0.05" >> $qsubfile
 qsub $qsubfile
 #rsync -avz ndcn0180@arcus.oerc.ox.ac.uk:$datadir/reg_ds.h5 $local_datadir
 

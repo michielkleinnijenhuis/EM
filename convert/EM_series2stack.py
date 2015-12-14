@@ -48,7 +48,7 @@ def main(argv):
     
     nzfills = args.nzfills
     regex = args.regex
-    files = glob.glob(os.path.join(inputdir, regex))
+    files = sorted(glob.glob(os.path.join(inputdir, regex)))
     root, ext = os.path.splitext(files[0])
     head, tail = os.path.split(root)
     prefix = tail[:-nzfills]
