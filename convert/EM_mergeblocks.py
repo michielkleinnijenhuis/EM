@@ -8,48 +8,32 @@ import os
 import sys
 from argparse import ArgumentParser
 import h5py
+import numpy as np
 
 def main(argv):
     
     parser = ArgumentParser(description='...')
     
-    parser.add_argument('outputfile', help='...')
-    parser.add_argument('field', help='...')
-    parser.add_argument('layout', help='...')
-    parser.add_argument('-d', '--datatype', default='float32', help='...')
-    parser.add_argument('-s', '--shape', nargs=4, type=int, default=[100,4111,4235,6], help='...')
-    parser.add_argument('-c', '--chunksize', nargs=4, type=int, default=[20,20,20,6], help='...')
-    parser.add_argument('-e', '--element_size_um', nargs=4, type=float, default=[0.05,0.0073,0.0073,1], help='...')
-    parser.add_argument('-f', '--files', nargs='*', help='...')
+    parser.add_argument('-i', '--inputfiles', nargs='*', help='...')
+    parser.add_argument('-f', '--field', default='stack', help='...')
+    parser.add_argument('-o', '--outputfile', help='...')
+    parser.add_argument('-l', '--outlayout', help='...')
+    parser.add_argument('-c', '--chunksize', nargs='*', type=int, help='...')
+    parser.add_argument('-e', '--element_size_um', nargs='*', type=float, help='...')
     
     args = parser.parse_args()
     
+    inputfiles = args.inputfiles
     outputfile = args.outputfile
     field = args.field
-    layout = args.layout
-    datatype = args.datatype
-    shape = args.shape
     chunksize = args.chunksize
     element_size_um = args.element_size_um
-    files = args.files
-#     datadir = '/data/ndcn-fmrib-water-brain/ndcn0180/EM/M3/M3_S1_GNU'
-#     datadir = '/Users/michielk/oxdata/P01/EM/M3/M3_S1_GNU'
-#     dataset = 'm000'
-#     outputfile = dataset + '_probs.h5'
-#     field = '/volume/predictions'
-#     layout = 'zyxc'
-#     chunksize = [20,20,20,6]
-#     datatype = 'float32'
-#     element_size_um = f['stack'].attrs['element_size_um']
-    #shape = f['stack'].shape
-    #shape.append(6)
-#     shape = (100, 4111, 4235, 6)
-#     shape = (460, 4111, 4235, 6)
+    outlayout = args.outlayout
     
-    for i, filename in enumerate(files):
+    for i, filename in enumerate(inputfiles):
         
         f = h5py.File(filename, 'r')
-        _, tail = os.path.split(filename)
+        head, tail = os.path.split(filename)
         parts = tail.split("_")
         x = int(parts[1].split("-")[0])
         X = int(parts[1].split("-")[1])
@@ -59,16 +43,53 @@ def main(argv):
         Z = int(parts[3].split("-")[1])
         
         if i == 0:
+            
+            if not outputfile:
+                outputfile = os.path.join(head, parts[0] + '_' + parts[-1])
+            
+            if not chunksize:
+                try:
+                    chunksize = f[field].chunks
+                except:
+                    pass
+            
+            ndims = len(f[field].shape)
+            maxshape = [None] * ndims
+            
             otype = 'a' if os.path.isfile(outputfile) else 'w'
             g = h5py.File(outputfile, otype)
-            outds = g.create_dataset(field, shape, 
-                                     chunks=tuple(chunksize), 
-                                     dtype=datatype)
-            outds.attrs['element_size_um'] = element_size_um
-            for i,l in enumerate(layout):
-                outds.dims[i].label = l
+            outds = g.create_dataset(field, f[field].shape, 
+                                     chunks=chunksize, 
+                                     dtype=f[field].dtype, 
+                                     maxshape=maxshape)
+            
+            if element_size_um:
+                outds.attrs['element_size_um'] = element_size_um
+            else:
+                try:
+                    outds.attrs['element_size_um'] = f[field].attrs['element_size_um']
+                except:
+                    pass
+            
+            if outlayout:
+                for i,l in enumerate(outlayout):
+                    outds.dims[i].label = l
+            else:
+                try:
+                    for i,d in enumerate(f[field].dims):
+                        outds.dims[i].label = d.label
+                except:
+                    pass
         
-        g[field][z:Z,y:Y,x:X,:] = f[field][:,:,:,:]
+        for i, newmax in enumerate([Z,Y,X]):
+            if newmax > g[field].shape[i]:
+                g[field].resize(newmax, i)
+        
+        if ndims == 3:
+            g[field][z:Z,y:Y,x:X] = f[field][:,:,:]
+        elif ndims == 4:
+            g[field][z:Z,y:Y,x:X,:] = f[field][:,:,:,:]
+        
         f.close()
     
     g.close()

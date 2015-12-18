@@ -143,28 +143,28 @@ rm -rf $datadir/tifs_${dataset}_reg_ds4
 ### apply Ilastik classifier to stack ###
 ###===================================###
 
-z=0; Z=100;
-for x in 1000 2000 3000 4000; do
+z=0; Z=460;
+for x in 0 1000 2000 3000 4000; do
 X=$((x+1000))
 qsubfile=$datadir/EM_stack2stack_submit_${x}-${X}.sh
 echo '#!/bin/bash' > $qsubfile
-echo "#PBS -l nodes=1:ppn=1" >> $qsubfile
-echo "#PBS -l walltime=00:10:00" >> $qsubfile
-echo "#PBS -N em_s2s" >> $qsubfile
-echo "#PBS -V" >> $qsubfile
-echo "cd \$PBS_O_WORKDIR" >> $qsubfile
+echo "#SBATCH --nodes=1" >> $qsubfile
+echo "#SBATCH --ntasks-per-node=1" >> $qsubfile
+echo "#SBATCH --time=00:10:00" >> $qsubfile
+echo "#SBATCH --job-name=EM_s2s" >> $qsubfile
 for y in 0 1000 2000 3000 4000; do
 Y=$((y+1000))
 echo "python $scriptdir/convert/EM_stack2stack.py \
-$datadir/${dataset}.h5 $datadir/${dataset}_${x}-${X}_${y}-${Y}_${z}-${Z}.h5 \
+$datadir/${dataset}.h5 \
+$datadir/${dataset}_`printf %05d ${x}`-`printf %05d ${X}`_`printf %05d ${y}`-`printf %05d ${Y}`_`printf %05d ${z}`-`printf %05d ${Z}`.h5 \
 -f 'stack' -g 'stack' -s 20 20 20 -i zyx -l zyx \
 -x $x -X $X -y $y -Y $Y -z $z -Z $Z" >> $qsubfile
 done
-qsub -q develq $qsubfile
+sbatch -p devel $qsubfile
 done
 #rsync -avz ndcn0180@arcus.arc.ox.ac.uk:/data/ndcn-fmrib-water-brain/ndcn0180/EM/M3/M3_S1_GNU/m000_0-*.h5 /Users/michielk/oxdata/P01/EM/M3/M3_S1_GNU/
 
-z=0; Z=100;
+z=0; Z=460;
 for x in 0 1000 2000 3000 4000; do
 X=$((x+1000))
 for y in 0 1000 2000 3000 4000; do
@@ -183,9 +183,9 @@ echo "\${CONDA_ROOT}/envs/ilastik-devel/run_ilastik.sh --headless \
 --project=$datadir/${pixprob_trainingset}_arcus.ilp \
 --output_axis_order=xyzc \
 --output_format=hdf5 \
---output_filename_format=$datadir/${dataset}_${x}-${X}_${y}-${Y}_${z}-${Z}_probs.h5 \
+--output_filename_format=$datadir/${dataset}_`printf %05d ${x}`-`printf %05d ${X}`_`printf %05d ${y}`-`printf %05d ${Y}`_`printf %05d ${z}`-`printf %05d ${Z}`_probs.h5 \
 --output_internal_path=/volume/predictions \
-$datadir/${dataset}_${x}-${X}_${y}-${Y}_${z}-${Z}.h5/stack" >> $qsubfile
+$datadir/${dataset}_`printf %05d ${x}`-`printf %05d ${X}`_`printf %05d ${y}`-`printf %05d ${Y}`_`printf %05d ${z}`-`printf %05d ${Z}`.h5/stack" >> $qsubfile
 sbatch -p compute $qsubfile
 # sbatch -p devel $qsubfile
 done
@@ -200,14 +200,19 @@ echo "#SBATCH --nodes=1" >> $qsubfile
 echo "#SBATCH --ntasks-per-node=1" >> $qsubfile
 echo "#SBATCH --time=12:00:00" >> $qsubfile
 echo "#SBATCH --job-name=EM_mb" >> $qsubfile
-echo "python $datadir/EM_mergeblocks.py" >> $qsubfile
+echo "python $scriptdir/convert/EM_mergeblocks.py \
+$datadir/${dataset}_probs.h5 '/volume/predictions' 'zyxc' -s 460 4111 4235 6 \
+-f $datadir/${dataset}_*-*_*-*_*-*_probs.h5" >> $qsubfile
 sbatch -p compute $qsubfile
-mkdir -p partials && mv ${dataset}_[0-9]*.h5 ${dataset}_*_probs.h5 partials/
-
+mkdir -p partials && mv $datadir/${dataset}_*-*_*-*_*-*.h5 partials/
 
 python $scriptdir/convert/EM_mergeblocks.py \
-$datadir/${dataset}_probs.h5 '/volume/predictions' 'zyxc' -s 100 4111 4235 6 \
--f $datadir/${dataset}_*-*_*-*_*-*_probs.h5
+-i $datadir/${dataset}_*-*_*-*_*-*_probs.h5 \
+-f 'volume/predictions' -e 0.05 0.0073 0.0073 1 -l 'zyxc'
+
+python $scriptdir/convert/EM_mergeblocks.py \
+-i $datadir/${dataset}_*-*_*-*_*-*_probs0_eed2.h5 \
+-f 'stack' -e 0.05 0.0073 0.0073 -l 'zyx'
 
 
 # create cutouts to evaluate edge effects
