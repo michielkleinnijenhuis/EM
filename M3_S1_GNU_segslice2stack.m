@@ -52,6 +52,7 @@ mvol1 = nii_zip([segdir filesep '0250_m000_seg.nii']);
 
 datadir='/Users/michielk/oxdata/P01/EM/M3/M3_S1_GNU';
 invol = 'm000_cutout01'; xstart = 1001; ystart = 1001;
+invol = 'm000'; xstart = 1; ystart = 1;
 h5disp([datadir filesep invol '.h5']);
 data_info = h5info([datadir filesep invol '.h5']); % data_info.Datasets.Attributes.Value
 data = h5read([datadir filesep invol '.h5'], '/stack');
@@ -73,3 +74,16 @@ h5writeatt([datadir filesep invol '_seg.h5'],'/stack','element_size_um', av);
 % av = h5readatt([datadir filesep invol '.h5'],'/stack','DIMENSION_LABELS');
 % h5writeatt([datadir filesep invol '_seg.h5'],'/stack','DIMENSION_LABELS', av);
 % h5disp([datadir filesep invol '_seg.h5']);
+
+%%
+datadir='/Users/michielk/oxdata/P01/EM/M3/M3_S1_GNU';
+invol = 'm000';
+segdir = '~/workspace/DifSim/utilities/geoms/2DEM/M3_S1_GNU/0250_m000';
+mvol = nii_zip([segdir filesep '0250_m000_seg.nii']);
+
+h5create([datadir filesep '0250_m000_seg.h5'], '/stack', ...
+    size(mvol.img), 'Datatype','int16');
+h5write([datadir filesep '0250_m000_seg.h5'], '/stack', mvol.img);
+
+av = h5readatt([datadir filesep invol '.h5'],'/stack','element_size_um');
+h5writeatt([datadir filesep '0250_m000_seg.h5'],'/stack','element_size_um', av);
