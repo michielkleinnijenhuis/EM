@@ -12,9 +12,11 @@ from argparse import ArgumentParser
 
 import h5py
 import numpy as np
-from skimage.morphology import watershed, remove_small_objects, dilation, erosion, square
+from skimage.morphology import watershed, remove_small_objects, erosion, square  #, dilation
+from scipy.ndimage.morphology import grey_dilation, grey_erosion, binary_fill_holes, binary_closing, generate_binary_structure
+from scipy.special import expit
 from skimage.segmentation import random_walker, relabel_sequential
-from scipy.ndimage.measurements import label
+from scipy.ndimage.measurements import label, labeled_comprehension
 from scipy.ndimage import distance_transform_edt
 from scipy.ndimage.filters import gaussian_filter
 from skimage.morphology import medial_axis
@@ -32,6 +34,10 @@ def main(argv):
     parser.add_argument('--MMfile', help='...')
     parser.add_argument('--UAfile', help='...')
     parser.add_argument('--PAfile', help='...')
+    parser.add_argument('-n', '--nzfills', type=int, default=5, 
+                        help='number of characters for section ranges')
+    parser.add_argument('-s', '--fullshape', nargs=3, type=int, default=(430, 4460, 5217), 
+                        help='number of characters for section ranges')
 #     parser.add_argument('-m', '--MAseeds', default=[0.6,100], nargs=2, help='...')
     parser.add_argument('-x', default=0, type=int, help='first x-index')
     parser.add_argument('-X', type=int, help='last x-index')
@@ -49,6 +55,8 @@ def main(argv):
     MMfile = args.MMfile
     UAfile = args.UAfile
     PAfile = args.PAfile
+    nzfills = args.nzfills
+    fullshape = args.fullshape
 #     MAseeds = args.MAseeds
     x = args.x
     X = args.X
@@ -60,13 +68,18 @@ def main(argv):
 #     dataset = 'm000'
 #     dataset = 'm000_0-1000_0-1000_0-100'
 #     dataset = 'm000_2000-3000_2000-3000_0-100'
-    dataset = dataset + '_' + str(x) + '-' + str(X) + '_' + str(y) + '-' + str(Y) + '_' + str(z) + '-' + str(Z)
+#     fullshape = (100, 4111, 4235)
+#     fullshape = (430, 4460, 5217)
+#     dataset = dataset + '_' + str(x) + '-' + str(X) + '_' + str(y) + '-' + str(Y) + '_' + str(z) + '-' + str(Z)
+    dataset = dataset + '_' + str(x).zfill(nzfills) + '-' + str(X).zfill(nzfills) + \
+                        '_' + str(y).zfill(nzfills) + '-' + str(Y).zfill(nzfills) + \
+                        '_' + str(z).zfill(nzfills) + '-' + str(Z).zfill(nzfills)
     
     segmOffset = [50,60,122]  #zyx for m000 (100 section full FOV)
     if SEfile:
         segm = loadh5(datadir, dataset + SEfile)
     else:
-        segm = np.zeros((100, 4111, 4235), dtype='uint16')
+        segm = np.zeros(fullshape, dtype='uint16')
         segmOrig = loadh5(datadir, '0250_m000_seg.h5')
         segm[segmOffset[0],
              segmOffset[1]:segmOffset[1]+segmOrig.shape[0],
@@ -75,14 +88,17 @@ def main(argv):
         writeh5(segm, datadir, dataset + '_seg.h5')
     
     ### load the dataset
+    data = loadh5(datadir, dataset + '.h5')
+    datamask = data == 0
     if not MAfile:
         prob_myel = loadh5(datadir, dataset + '_probs0_eed2.h5')
+#         prob_mito = loadh5(datadir, dataset + '_probs2_eed2.h5')
         myelin = prob_myel > 0.2
+#         myelin = np.logical_and(prob_myel > 0.2, prob_mito < 0.2)
     if not MMfile:
         prob_myel = loadh5(datadir, dataset + '_probs0_eed2.h5')
         myelin = prob_myel > 0.2
     if not UAfile:
-        data = loadh5(datadir, dataset + '.h5')
         gaussian_filter(data, [0.146,1,1], output=data)  # TODO: get from argument or h5
     
     ### get the myelinated axons (MA)
@@ -93,36 +109,84 @@ def main(argv):
         #     ws = watershed(prob_myel, seeds_MA, mask=~myelin)
         #     writeh5(ws, datadir, dataset + '_probs_ws_MAws.h5')
         #     MA = label(ws > 0)[0]  # TODO!
-        seeds_MA = segm
+        seeds_MA = np.copy(segm)
         seeds_MA[np.logical_or(seeds_MA<1000,seeds_MA>2000)] = 0
-        MA = watershed(prob_myel, seeds_MA, mask=~myelin)
+        MA = watershed(prob_myel, seeds_MA, mask=np.logical_and(~myelin, ~datamask))
         bc = np.bincount(np.ravel(MA))
         largest_label = bc[1:].argmax() + 1
+        print("largest label {!s} was removed".format(largest_label))
         MA[MA==largest_label] = 0  # NOTE that the worst separated MA is lost this way
         writeh5(MA, datadir, dataset + '_probs_ws_MA.h5')
+        # fill holes
+        for l in np.unique(MA)[1:]:
+            ### fill holes
+            labels = label(MA!=l)[0]
+            labelCount = np.bincount(labels.ravel())
+            background = np.argmax(labelCount)
+            MA[labels != background] = l
+            ### closing
+            binim = MA==l
+            binim = binary_closing(binim, iterations=10)
+            MA[binim] = l
+            ### fill holes
+            labels = label(MA!=l)[0]
+            labelCount = np.bincount(labels.ravel())
+            background = np.argmax(labelCount)
+            MA[labels != background] = l
+            ### update myelin mask
+            myelin[MA != 0] = False
+            print(l)
+        writeh5(MA, datadir, dataset + '_probs_ws_MAfilled.h5')
     
     ### watershed on the myelin to separate individual sheaths
     if MMfile:
         MM = loadh5(datadir, dataset + MMfile)
     else:
         distance = distance_transform_edt(MA==0, sampling=[0.05,0.0073,0.0073])  # TODO: get from h5 (also for writes)
-        distance[~myelin] = 0
-        MM = watershed(distance, dilation(MA), mask=myelin)
+        writeh5(distance, datadir, dataset + '_distance.h5', dtype='float')
+        #MM = watershed(distance, dilation(MA), mask=myelin)  # when skimage >0.11.3 is available
+        MM = watershed(distance, grey_dilation(MA, size=(3,3,3)), mask=np.logical_and(myelin, ~datamask))
         writeh5(MM, datadir, dataset + '_probs_ws_MM.h5')
+        
+        distsum = np.ones_like(MM, dtype='float')
+        lmask = np.zeros((MM.shape[0],MM.shape[1],MM.shape[2],len(np.unique(MA)[1:])), dtype='bool')
+        medwidth = {}
+        for i,l in enumerate(np.unique(MA)[1:]):  # TODO: implement mpi
+            dist = distance_transform_edt(MA!=l, sampling=[0.05,0.0073,0.0073])  # TODO: get from h5 (also for writes)
+            # labelmask for voxels further than nmed medians from the object (mem? write to disk?)
+            nmed = 2  # TODO: make into argument
+            maxdist = nmed * medwidth[l]
+            lmask[:,:,:,i] = dist > maxdist
+            # get the median distance at the outer rim:
+            MMfilled = MA+MM
+            binim = MMfilled == l
+            rim = np.logical_xor(erosion(binim), binim)
+            medwidth[l] = np.median(dist[rim])
+            # median width weighted sigmoid transform on distance function
+            weighteddist = expit(dist/medwidth[l])  # TODO: create more pronounced transform
+            distsum = np.minimum(distsum, weighteddist)
+            print(l)
+        writeh5(distsum, datadir, dataset + '_probs_ws_distsum.h5', dtype='float')
+        
+        MM = watershed(distsum, grey_dilation(MA, size=(3,3,3)), mask=np.logical_and(myelin, ~datamask))
+        writeh5(MM, datadir, dataset + '_probs_ws_MMdistsum.h5')
+        
+        for i,l in enumerate(np.unique(MA)[1:]):
+            MM[np.logical_and(lmask[:,:,:,i], MM==l)] = 0
+        writeh5(MM, datadir, dataset + '_probs_ws_MMdistsum_distfilter.h5')
     
     ### watershed the unmyelinated axons
     if UAfile:
         UA = loadh5(datadir, dataset + UAfile)
     else:
-        seeds_UA = segm
-        seeds_UA[seeds_UA<2000] = 0
-        seedslice = np.zeros(seeds_UA.shape[1:])
-        for label in np.unique(seeds_UA)[1:]:
-            binim = seeds_UA[segmOffset[0],:,:]==label
-            mask = erosion(binim, square(5))
-            seedslice[mask] = label
+        seeds_UA = np.copy(segm)
+        seedslice = seeds_UA[segmOffset[0],:,:]
+        seedslice[seedslice<2000] = 0
+        for l in np.unique(seeds_UA)[1:]:
+            seedslice[erosion(seedslice==l, square(5))] = l
         seeds_UA[segmOffset[0],:,:] = seedslice
-        UA = watershed(-data, seeds_UA, mask=~np.logical_or(MM,MA))
+        UA = watershed(-data, seeds_UA, 
+                       mask=np.logical_and(~datamask, ~np.logical_or(MM,MA)))
         writeh5(UA, datadir, dataset + '_probs_ws_UA.h5')
     
     ### combine the MM, MA and UA segmentations
@@ -145,7 +209,7 @@ def loadh5(datadir, dname, fieldname='stack'):
 def writeh5(stack, datadir, fp_out, fieldname='stack', dtype='uint16'):
     """"""
     g = h5py.File(os.path.join(datadir, fp_out), 'w')
-    g.create_dataset(fieldname, stack.shape, dtype=dtype)
+    g.create_dataset(fieldname, stack.shape, dtype=dtype, compression="gzip")
     g[fieldname][:,:,:] = stack
     g.close()
 

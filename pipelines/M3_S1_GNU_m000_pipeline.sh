@@ -142,8 +142,7 @@ rm -rf $datadir/tifs_${dataset}_reg_ds4
 ###===================================###
 ### apply Ilastik classifier to stack ###
 ###===================================###
-
-z=0; Z=460;
+z=0; Z=430;
 for x in 0 1000 2000 3000 4000; do
 X=$((x+1000))
 qsubfile=$datadir/EM_stack2stack_submit_${x}-${X}.sh
@@ -163,9 +162,10 @@ done
 sbatch -p devel $qsubfile
 done
 #rsync -avz ndcn0180@arcus.arc.ox.ac.uk:/data/ndcn-fmrib-water-brain/ndcn0180/EM/M3/M3_S1_GNU/m000_0-*.h5 /Users/michielk/oxdata/P01/EM/M3/M3_S1_GNU/
+# FIXME: naming goes wrong for $Z
 
-z=0; Z=460;
-for x in 0 1000 2000 3000 4000; do
+z=0; Z=430;
+for x in 0 1000 2000 3000 4000 5000; do
 X=$((x+1000))
 for y in 0 1000 2000 3000 4000; do
 Y=$((y+1000))
@@ -174,7 +174,7 @@ echo '#!/bin/bash' > $qsubfile
 echo "#SBATCH --nodes=1" >> $qsubfile
 echo "#SBATCH --ntasks-per-node=16" >> $qsubfile
 echo "#SBATCH --time=12:00:00" >> $qsubfile
-echo "#SBATCH --job-name=EM_lc" >> $qsubfile
+echo "#SBATCH --job-name=EM_il_${x}-${X}_${y}-${Y}" >> $qsubfile
 echo "export PATH=/home/ndcn-fmrib-water-brain/ndcn0180/miniconda/bin:\$PATH" >> $qsubfile
 echo "source activate ilastik-devel" >> $qsubfile
 echo "CONDA_ROOT=\`conda info --root\`" >> $qsubfile
@@ -201,60 +201,40 @@ echo "#SBATCH --ntasks-per-node=1" >> $qsubfile
 echo "#SBATCH --time=12:00:00" >> $qsubfile
 echo "#SBATCH --job-name=EM_mb" >> $qsubfile
 echo "python $scriptdir/convert/EM_mergeblocks.py \
-$datadir/${dataset}_probs.h5 '/volume/predictions' 'zyxc' -s 460 4111 4235 6 \
--f $datadir/${dataset}_*-*_*-*_*-*_probs.h5" >> $qsubfile
+-i $datadir/${dataset}_*-*_*-*_*-*_probs.h5 \
+-f 'volume/predictions' -e 0.05 0.0073 0.0073 1 -l 'zyxc'" >> $qsubfile
 sbatch -p compute $qsubfile
 mkdir -p partials && mv $datadir/${dataset}_*-*_*-*_*-*.h5 partials/
 
-python $scriptdir/convert/EM_mergeblocks.py \
--i $datadir/${dataset}_*-*_*-*_*-*_probs.h5 \
--f 'volume/predictions' -e 0.05 0.0073 0.0073 1 -l 'zyxc'
-
-python $scriptdir/convert/EM_mergeblocks.py \
--i $datadir/${dataset}_*-*_*-*_*-*_probs0_eed2.h5 \
--f 'stack' -e 0.05 0.0073 0.0073 -l 'zyx'
-
 
 # create cutouts to evaluate edge effects
-z=0; Z=100;
-for x in 500 3500; do
-X=$((x+1000))
-qsubfile=$datadir/EM_stack2stack_submit_${x}-${X}.sh
-echo '#!/bin/bash' > $qsubfile
-echo "#SBATCH --nodes=1" >> $qsubfile
-echo "#SBATCH --ntasks-per-node=1" >> $qsubfile
-echo "#SBATCH --time=00:10:00" >> $qsubfile
-echo "#SBATCH --job-name=EM_cu" >> $qsubfile
-for y in 500 3500; do
-Y=$((y+1000))
-echo "python $scriptdir/convert/EM_stack2stack.py \
-$datadir/${dataset}_probs.h5 $datadir/${dataset}_${x}-${X}_${y}-${Y}_${z}-${Z}_probs.h5 \
--f '/volume/predictions' -g '/volume/predictions' -s 20 20 20 6 -i zyxc -l zyxc -e 0.05 0.0073 0.0073 1 \
--x $x -X $X -y $y -Y $Y -z $z -Z $Z" >> $qsubfile
-done
-sbatch -p devel $qsubfile
-done
-#rsync -avz ndcn0180@arcus.arc.ox.ac.uk:/data/ndcn-fmrib-water-brain/ndcn0180/EM/M3/M3_S1_GNU/m000_500-*.h5 /Users/michielk/oxdata/P01/EM/M3/M3_S1_GNU/
+### edge effect occur from applying Ilastik classifier
+### they also appear to be more prominent in eed2
 
-
-
-# EED on probs  (5GB per 100x1000x1000 block)
+###=======================###
+### EED on probabilities  ###  (5GB per 100x1000x1000 block) (20GB per 430x1000x1000 block: +2min per iteration)
+###=======================###
 #rsync -avz  /Users/michielk/oxscripts/matlab/toolboxes/coherencefilter_version5b/* ndcn0180@arcus.arc.ox.ac.uk:/home/ndcn-fmrib-water-brain/ndcn0180/oxscripts/matlab/toolboxes/coherencefilter_version5b/
-# TODO: write the executable to a different directory (e.g. create bin in $datadir)
-mcc -v -R -nojvm -R -singleCompThread -f ./mbuildopts.sh -m $scriptdir/snippets/eed/EM_eed.m -a /home/ndcn-fmrib-water-brain/ndcn0180/oxscripts/matlab/toolboxes/coherencefilter_version5b
-z=0; Z=100;
-for layer in 1 2 3; do
+mkdir -p $datadir/bin && cd $datadir/bin
+mcc -v -R -nojvm -R -singleCompThread -f ./mbuildopts.sh -m $scriptdir/snippets/eed/EM_eed.m -a $HOME/oxscripts/matlab/toolboxes/coherencefilter_version5b
+z=0; Z=460;
 for x in 0 1000 2000 3000 4000; do
 X=$((x+1000))
-qsubfile=$datadir/EM_eed_submit_${x}-${X}_${layer}.sh
-echo '#!/bin/bash' > $qsubfile
-echo "#SBATCH --nodes=1" >> $qsubfile
-#echo "#SBATCH --ntasks-per-node=3" >> $qsubfile
-echo "#SBATCH --time=02:00:00" >> $qsubfile
-echo "#SBATCH --job-name=EM_eed" >> $qsubfile
 for y in 0 1000 2000 3000 4000; do
 Y=$((y+1000))
-echo "$datadir/EM_eed '$datadir' '${dataset}_${x}-${X}_${y}-${Y}_${z}-${Z}_probs' '/volume/predictions' '/stack' $layer > $datadir/${dataset}_${x}-${X}_${y}-${Y}_${z}-${Z}_probs.log &" >> $qsubfile
+qsubfile=$datadir/EM_eed_submit_${x}-${X}_${y}-${Y}.sh
+echo '#!/bin/bash' > $qsubfile
+echo "#SBATCH --nodes=1" >> $qsubfile
+echo "#SBATCH --ntasks-per-node=3" >> $qsubfile
+echo "#SBATCH --time=05:00:00" >> $qsubfile
+echo "#SBATCH --mem=60000" >> $qsubfile
+echo "#SBATCH --job-name=EM_eed" >> $qsubfile
+for layer in 1 2 3; do
+[ -f $datadir/${dataset}_`printf %05d ${x}`-`printf %05d ${X}`_`printf %05d ${y}`-`printf %05d ${Y}`_`printf %05d ${z}`-`printf %05d ${Z}`_probs$((layer-1))_eed2.h5 ] || {
+echo "$datadir/bin/EM_eed '$datadir' \
+'${dataset}_`printf %05d ${x}`-`printf %05d ${X}`_`printf %05d ${y}`-`printf %05d ${Y}`_`printf %05d ${z}`-`printf %05d ${Z}`_probs' \
+'/volume/predictions' '/stack' $layer \
+> $datadir/${dataset}_`printf %05d ${x}`-`printf %05d ${X}`_`printf %05d ${y}`-`printf %05d ${Y}`_`printf %05d ${z}`-`printf %05d ${Z}`_probs.log &" >> $qsubfile ; }
 done
 echo "wait" >> $qsubfile
 sbatch -p compute $qsubfile
@@ -265,14 +245,40 @@ done
 
 
 
-# watersheds on EED
+# watersheds on EED  (5GB per 100x1000x1000 block)
+#rsync -avz /Users/michielk/oxdata/P01/EM/M3/M3_S1_GNU/0250_m000_seg.h5 ndcn0180@arcus.arc.ox.ac.uk:/data/ndcn-fmrib-water-brain/ndcn0180/EM/M3/M3_S1_GNU/archive/m000_z0000-z0100/
+z=0; Z=100;
+for x in 0 1000 2000 3000 4000; do
+[ $x == 4000 ] && X=4235 || X=$((y+1000))
+qsubfile=$datadir/EM_p2l_${x}-${X}.sh
+echo '#!/bin/bash' > $qsubfile
+echo "#SBATCH --nodes=1" >> $qsubfile
+echo "#SBATCH --ntasks-per-node=5" >> $qsubfile
+echo "#SBATCH --time=10:00:00" >> $qsubfile
+echo "#SBATCH --job-name=EM_ws" >> $qsubfile
+for y in 0 1000 2000 3000 4000; do
+[ $y == 4000 ] && Y=4111 || Y=$((y+1000))
+echo "python $scriptdir/mesh/prob2labels.py $datadir $dataset \
+-x $x -X $X -y $y -Y $Y -z $z -Z $Z > $datadir/output_${x}-${X}_${y}-${Y} &" >> $qsubfile
+done
+echo "wait" >> $qsubfile
+sbatch -p compute $qsubfile
+done
+
+
+
+
+
 scriptdir="$HOME/workspace/EM"
 DATA="$HOME/oxdata"
 datadir="$DATA/P01/EM/M3/M3_S1_GNU"
 pixprob_trainingset="pixprob_training"
 dataset='m000'
-python $scriptdir/mesh/prob2labels.py $datadir $dataset -x 0 -X 1000 -y 0 -Y 1000 -z 0 -Z 100
-python $scriptdir/mesh/prob2labels.py $datadir $dataset -x 2000 -X 3000 -y 2000 -Y 3000 -z 0 -Z 100
+python $scriptdir/mesh/prob2labels.py $datadir $dataset \
+-x 0 -X 1000 -y 0 -Y 1000 -z 0 -Z 100
+python $scriptdir/mesh/prob2labels.py $datadir $dataset \
+-x 2000 -X 3000 -y 2000 -Y 3000 -z 0 -Z 100
+
 
 
 python $scriptdir/mesh/prob2labels.py $datadir $dataset \
@@ -284,25 +290,25 @@ python $scriptdir/mesh/prob2labels.py $datadir $dataset \
 
 
 dataset='m000_0-1000_0-1000_0-100'
-dataset='m000_2000-3000_2000-3000_0-100'
+#dataset='m000_2000-3000_2000-3000_0-100'
 python $scriptdir/convert/EM_stack2stack.py \
 "${datadir}/${dataset}.h5" \
-"${datadir}/${dataset}.nii.gz" -i 'zyx' -l 'xyz'
+"${datadir}/${dataset}.nii.gz" -i 'zyx' -l 'xyz' -e -0.0073 -0.0073 0.05
 python $scriptdir/convert/EM_stack2stack.py \
 "${datadir}/${dataset}_seg.h5" \
-"${datadir}/${dataset}_seg.nii.gz" -i 'zyx' -l 'xyz'
+"${datadir}/${dataset}_seg.nii.gz" -i 'zyx' -l 'xyz' -e -0.0073 -0.0073 0.05
 python $scriptdir/convert/EM_stack2stack.py \
 "${datadir}/${dataset}_probs_ws_MA.h5" \
-"${datadir}/${dataset}_probs_ws_MA.nii.gz" -i 'zyx' -l 'xyz'
+"${datadir}/${dataset}_probs_ws_MA.nii.gz" -i 'zyx' -l 'xyz' -e -0.0073 -0.0073 0.05
 python $scriptdir/convert/EM_stack2stack.py \
 "${datadir}/${dataset}_probs_ws_MM.h5" \
-"${datadir}/${dataset}_probs_ws_MM.nii.gz" -i 'zyx' -l 'xyz'
+"${datadir}/${dataset}_probs_ws_MM.nii.gz" -i 'zyx' -l 'xyz' -e -0.0073 -0.0073 0.05
 python $scriptdir/convert/EM_stack2stack.py \
 "${datadir}/${dataset}_probs_ws_UA.h5" \
-"${datadir}/${dataset}_probs_ws_UA.nii.gz" -i 'zyx' -l 'xyz'
+"${datadir}/${dataset}_probs_ws_UA.nii.gz" -i 'zyx' -l 'xyz' -e -0.0073 -0.0073 0.05
 python $scriptdir/convert/EM_stack2stack.py \
 "${datadir}/${dataset}_probs_ws_PA.h5" \
-"${datadir}/${dataset}_probs_ws_PA.nii.gz" -i 'zyx' -l 'xyz'
+"${datadir}/${dataset}_probs_ws_PA.nii.gz" -i 'zyx' -l 'xyz' -e -0.0073 -0.0073 0.05
 
 
 python $scriptdir/convert/EM_stack2stack.py \

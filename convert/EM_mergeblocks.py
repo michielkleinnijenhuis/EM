@@ -45,7 +45,7 @@ def main(argv):
         if i == 0:
             
             if not outputfile:
-                outputfile = os.path.join(head, parts[0] + '_' + parts[-1])
+                outputfile = os.path.join(head, parts[0] + '_' + "_".join(parts[4:]))
             
             if not chunksize:
                 try:
@@ -61,7 +61,8 @@ def main(argv):
             outds = g.create_dataset(field, f[field].shape, 
                                      chunks=chunksize, 
                                      dtype=f[field].dtype, 
-                                     maxshape=maxshape)
+                                     maxshape=maxshape,
+                                     compression="gzip")
             
             if element_size_um:
                 outds.attrs['element_size_um'] = element_size_um
