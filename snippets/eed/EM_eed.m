@@ -10,6 +10,8 @@ else
     addpath(genpath('~/oxscripts/matlab/toolboxes/coherencefilter_version5b'));
 end
 
+stackinfo = h5info([datadir filesep invol '.h5'], infield);
+
 if layer == 0
     data = h5read([datadir filesep invol '.h5'], infield);
     fname = [datadir filesep invol '_eed2.h5'];
@@ -20,5 +22,5 @@ else
 end
 
 u = CoherenceFilter(data, struct('T', 50, 'dt', 1, 'rho', 1, 'Scheme', 'R', 'eigenmode', 2, 'verbose', 'full'));
-h5create(fname, outfield, size(u));
+h5create(fname, outfield, size(u), 'Deflate', 4, 'Chunksize', stackinfo.Chunksize(2:4));
 h5write(fname, outfield, u);
