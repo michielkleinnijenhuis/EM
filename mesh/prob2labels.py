@@ -153,15 +153,15 @@ def main(argv):
         medwidth = {}
         for i,l in enumerate(np.unique(MA)[1:]):  # TODO: implement mpi
             dist = distance_transform_edt(MA!=l, sampling=[0.05,0.0073,0.0073])  # TODO: get from h5 (also for writes)
-            # labelmask for voxels further than nmed medians from the object (mem? write to disk?)
-            nmed = 2  # TODO: make into argument
-            maxdist = nmed * medwidth[l]
-            lmask[:,:,:,i] = dist > maxdist
             # get the median distance at the outer rim:
             MMfilled = MA+MM
             binim = MMfilled == l
             rim = np.logical_xor(erosion(binim), binim)
             medwidth[l] = np.median(dist[rim])
+            # labelmask for voxels further than nmed medians from the object (mem? write to disk?)
+            nmed = 2  # TODO: make into argument
+            maxdist = nmed * medwidth[l]
+            lmask[:,:,:,i] = dist > maxdist
             # median width weighted sigmoid transform on distance function
             weighteddist = expit(dist/medwidth[l])  # TODO: create more pronounced transform
             distsum = np.minimum(distsum, weighteddist)

@@ -27,7 +27,7 @@ module load matlab/R2015a
 
 scriptdir="$HOME/workspace/EM"
 oddir=$DATA/EM/M3/20Mar15/montage/Montage_
-datadir="$DATA/EM/M3/M3_S1_GNU"
+datadir="$DATA/EM/M3/M3_S1_GNU" && cd $datadir
 dataset='m000'
 refsect='0250'
 pixprob_trainingset="pixprob_training"
@@ -227,7 +227,7 @@ echo '#!/bin/bash' > $qsubfile
 echo "#SBATCH --nodes=1" >> $qsubfile
 echo "#SBATCH --ntasks-per-node=3" >> $qsubfile
 echo "#SBATCH --time=05:00:00" >> $qsubfile
-echo "#SBATCH --mem=60000" >> $qsubfile
+echo "#SBATCH --mem=250000" >> $qsubfile
 echo "#SBATCH --job-name=EM_eed" >> $qsubfile
 for layer in 1 2 3; do
 [ -f $datadir/${dataset}_`printf %05d ${x}`-`printf %05d ${X}`_`printf %05d ${y}`-`printf %05d ${Y}`_`printf %05d ${z}`-`printf %05d ${Z}`_probs$((layer-1))_eed2.h5 ] || {
@@ -245,7 +245,7 @@ done
 
 
 
-# watersheds on EED  (5GB per 100x1000x1000 block)
+# watersheds on EED  (5GB per 100x1000x1000 bloc
 #rsync -avz /Users/michielk/oxdata/P01/EM/M3/M3_S1_GNU/0250_m000_seg.h5 ndcn0180@arcus.arc.ox.ac.uk:/data/ndcn-fmrib-water-brain/ndcn0180/EM/M3/M3_S1_GNU/archive/m000_z0000-z0100/
 z=0; Z=100;
 for x in 0 1000 2000 3000 4000; do
