@@ -5,6 +5,7 @@ import argparse
 from os import path
 from nibabel import Nifti1Image
 from skimage.io import imsave
+from skimage import img_as_ubyte
 from skimage.transform import downscale_local_mean
 from os import path, makedirs
 import h5py
@@ -35,6 +36,8 @@ def main(argv):
                         help='output the stack in jpg,png,tif,nii,h5')
     parser.add_argument('-r', '--downscale', type=int, nargs='*', default=[], 
                         help='factors to downscale (in order of outlayout)')
+    parser.add_argument('-u', '--uint8conv', action='store_true',
+                        help='convert data to uint8')
     parser.add_argument('-x', default=0, type=int, help='first x-index')
     parser.add_argument('-X', type=int, help='last x-index')
     parser.add_argument('-y', default=0, type=int, help='first y-index')
@@ -50,6 +53,8 @@ def main(argv):
     
     inputfile = args.inputfile
     outputfile = args.outputfile
+    
+    uint8conv = args.uint8conv
     
     f = h5py.File(inputfile, 'r')
     
@@ -186,10 +191,12 @@ def main(argv):
             element_size_um = [el * downscale[i] 
                                for i,el in enumerate(element_size_um)]
     if datatype != img.dtype:
-        img = img.astype(datatype,copy=False)
+        img = img.astype(datatype, copy=False)
+    if uint8conv:
+        img = img_as_ubyte(img)
     
     for ext in outexts:
-        if '.nii' in ext:  # TODO?: nifti is always xyzct?
+        if '.nii' in ext:  # TODO?: nifti is always xyztc?
             mat = [[1, 0, 0, 0],[0, 1, 0, 0],[0, 0, 1, 0],[0, 0, 0, 1]]
             if element_size_um is not None:
                 mat[0][0] = element_size_um[0]

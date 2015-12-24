@@ -86,16 +86,16 @@ def main(argv):
     ### load the dataset
     data, elsize = loadh5(datadir, dataset + '.h5')
     
-    if elsize.any():
+    if elsize is not None:
         pass
-    elif args.element_size_um.any():
+    elif args.element_size_um is not None:
         elsize = args.element_size_um
     
     datamask = data == 0
     if not MAfile:
         prob_myel = loadh5(datadir, dataset + '_probs0_eed2.h5')[0]
-#         prob_mito = loadh5(datadir, dataset + '_probs2_eed2.h5')
         myelin = prob_myel > 0.2
+#         prob_mito = loadh5(datadir, dataset + '_probs2_eed2.h5')
 #         myelin = np.logical_and(prob_myel > 0.2, prob_mito < 0.2)
     if not MMfile:
         prob_myel = loadh5(datadir, dataset + '_probs0_eed2.h5')[0]
@@ -106,7 +106,7 @@ def main(argv):
 #     segmOffset = [50,60,122]  #zyx for m000 (100 section full FOV)
 #     segmOffset = [220,491,235]  #zyx for m000 (430 section full FOV)
     if SEfile:
-        segm = loadh5(datadir, dataset + SEfile)
+        segm = loadh5(datadir, dataset + SEfile)[0]
     else:
         segm = np.zeros(fullshape, dtype='uint16')
         segmOrig = loadh5(datadir, '0250_m000_seg.h5')[0]
@@ -115,6 +115,7 @@ def main(argv):
              segmOffset[2]:segmOffset[2]+segmOrig.shape[1]] = segmOrig
         segm = segm[z:Z,y:Y,x:X]
         writeh5(segm, datadir, dataset + '_seg.h5', element_size_um=elsize)
+        segsliceno = segmOffset[0] - z  # TODO: check TODO: check if _seg.h5 is the correct slice
     
     ### get the myelinated axons (MA)
     if MAfile:
@@ -125,7 +126,10 @@ def main(argv):
         #     writeh5(ws, datadir, dataset + '_probs_ws_MAws.h5')
         #     MA = label(ws > 0)[0]  # TODO!
         seeds_MA = np.copy(segm)
-        seeds_MA[np.logical_or(seeds_MA<1000,seeds_MA>2000)] = 0
+        # include a seed here for the ECS, i.e set all non-MA to 1 instead of 0:
+        seeds_MA[seeds_MA<1000] = 0
+        seeds_MA[seeds_MA>2000] = 1
+        writeh5(seeds_MA, datadir, dataset + '_seeds_MA.h5', element_size_um=elsize)
         MA = watershed(prob_myel, seeds_MA, mask=np.logical_and(~myelin, ~datamask))
         bc = np.bincount(np.ravel(MA))
         largest_label = bc[1:].argmax() + 1
@@ -230,7 +234,7 @@ def writeh5(stack, datadir, fp_out, fieldname='stack', dtype='uint16', element_s
     g = h5py.File(os.path.join(datadir, fp_out), 'w')
     g.create_dataset(fieldname, stack.shape, dtype=dtype, compression="gzip")
     g[fieldname][:,:,:] = stack
-    if element_size_um.any():
+    if element_size_um is not None:
         g[fieldname].attrs['element_size_um'] = element_size_um
     g.close()
 

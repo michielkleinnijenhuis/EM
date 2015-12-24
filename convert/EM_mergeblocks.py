@@ -34,7 +34,8 @@ def main(argv):
         
         f = h5py.File(filename, 'r')
         head, tail = os.path.split(filename)
-        parts = tail.split("_")
+        fname, ext = os.path.splitext(tail)
+        parts = fname.split("_")
         x = int(parts[1].split("-")[0])
         X = int(parts[1].split("-")[1])
         y = int(parts[2].split("-")[0])
@@ -45,7 +46,7 @@ def main(argv):
         if i == 0:
             
             if not outputfile:
-                outputfile = os.path.join(head, parts[0] + '_' + "_".join(parts[4:]))
+                outputfile = os.path.join(head, parts[0] + '_' + "_".join(parts[4:]) + ext)
             
             if not chunksize:
                 try:
