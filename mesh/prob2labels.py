@@ -31,6 +31,7 @@ def main(argv):
     parser.add_argument('dataset', help='...')
     parser.add_argument('--SEfile', help='...')
     parser.add_argument('--MAfile', help='...')
+    parser.add_argument('--MAsegfile', help='...')
     parser.add_argument('--MMfile', help='...')
     parser.add_argument('--UAfile', help='...')
     parser.add_argument('--PAfile', help='...')
@@ -58,6 +59,7 @@ def main(argv):
     dataset = args.dataset
     SEfile = args.SEfile
     MAfile = args.MAfile
+    MAsegfile = args.MAsegfile
     MMfile = args.MMfile
     UAfile = args.UAfile
     PAfile = args.PAfile
@@ -115,7 +117,7 @@ def main(argv):
              segmOffset[2]:segmOffset[2]+segmOrig.shape[1]] = segmOrig
         segm = segm[z:Z,y:Y,x:X]
         writeh5(segm, datadir, dataset + '_seg.h5', element_size_um=elsize)
-        segsliceno = segmOffset[0] - z  # TODO: check TODO: check if _seg.h5 is the correct slice
+#         segsliceno = segmOffset[0] - z  # TODO: check TODO: check if _seg.h5 is the correct slice
     
     ### get the myelinated axons (MA)
     if MAfile:
@@ -125,17 +127,40 @@ def main(argv):
         #     ws = watershed(prob_myel, seeds_MA, mask=~myelin)
         #     writeh5(ws, datadir, dataset + '_probs_ws_MAws.h5')
         #     MA = label(ws > 0)[0]  # TODO!
-        seeds_MA = np.copy(segm)
-        # include a seed here for the ECS, i.e set all non-MA to 1 instead of 0:
-        seeds_MA[seeds_MA<1000] = 0
-        seeds_MA[seeds_MA>2000] = 1
-        writeh5(seeds_MA, datadir, dataset + '_seeds_MA.h5', element_size_um=elsize)
+        ### include seeds from neighbouring blocks
+        if MAsegfile:
+            seeds_MA = loadh5(datadir, dataset + '_seeds_MA.h5')[0]
+            for i, side in enumerate([[-1000,0,0], [1000,0,0], [0,-1000,0], [0,1000,0]]):
+                otherset = dataset + '_' + str(x + side[0]).zfill(nzfills) + '-' + str(X + side[0]).zfill(nzfills) + \
+                                     '_' + str(y + side[1]).zfill(nzfills) + '-' + str(Y + side[1]).zfill(nzfills) + \
+                                     '_' + str(z + side[2]).zfill(nzfills) + '-' + str(Z + side[2]).zfill(nzfills)
+                try:
+                    sidesection = loadh5(datadir, otherset + MAsegfile + '.h5')[0]
+                    if i == 0:
+                        seeds_MA[:,:,0] = sidesection[:,:,-1]  # right
+                    elif i == 1:
+                        seeds_MA[:,:,-1] = sidesection[:,:,0]  # left
+                    elif i == 2:
+                        seeds_MA[:,0,:] = sidesection[:,-1,:]  # anterior
+                    elif i == 3:
+                        seeds_MA[:,-1,:] = sidesection[:,0,:]  # posterior
+                except:
+                    pass
+            writeh5(seeds_MA, datadir, dataset + '_seeds_MA2.h5', element_size_um=elsize)
+        else:
+            ### seeds from manual section segmentation 
+            ### include a seed here for the ECS, i.e set all non-MA to 1 instead of 0
+            seeds_MA = np.copy(segm)
+            seeds_MA[seeds_MA<1000] = 0
+            seeds_MA[seeds_MA>2000] = 1
+            writeh5(seeds_MA, datadir, dataset + '_seeds_MA.h5', element_size_um=elsize)
+            MAsegfile = ''
         MA = watershed(prob_myel, seeds_MA, mask=np.logical_and(~myelin, ~datamask))
         bc = np.bincount(np.ravel(MA))
         largest_label = bc[1:].argmax() + 1
         print("largest label {!s} was removed".format(largest_label))
         MA[MA==largest_label] = 0  # NOTE that the worst separated MA is lost this way
-        writeh5(MA, datadir, dataset + '_probs_ws_MA.h5', element_size_um=elsize)
+        writeh5(MA, datadir, dataset + MAsegfile + '_probs_ws_MA.h5', element_size_um=elsize)
         # fill holes
         for l in np.unique(MA)[1:]:
             ### fill holes
@@ -155,7 +180,7 @@ def main(argv):
             ### update myelin mask
             myelin[MA != 0] = False
             print(l)
-        writeh5(MA, datadir, dataset + '_probs_ws_MAfilled.h5', element_size_um=elsize)
+        writeh5(MA, datadir, dataset + MAsegfile + '_probs_ws_MAfilled.h5', element_size_um=elsize)
     
     ### watershed on the myelin to separate individual sheaths
     if MMfile:

@@ -262,7 +262,7 @@ for y in 0 1000 2000 3000 4000; do
 [ $y == 4000 ] && Y=4460 || Y=$((y+1000))
 #[ $y == 4000 ] && Y=4111 || Y=$((y+1000))
 echo "python $scriptdir/mesh/prob2labels.py $datadir $dataset \
--n 5 -o 220 235 491 -s 460 4460 5217 \
+-n 5 -o 250 235 491 -s 460 4460 5217 \
 -x $x -X $X -y $y -Y $Y -z $z -Z $Z > \
 $datadir/output_`printf %05d ${x}`-`printf %05d ${X}`_`printf %05d ${y}`-`printf %05d ${Y}` &" >> $qsubfile
 done
@@ -270,6 +270,32 @@ echo "wait" >> $qsubfile
 sbatch -p compute $qsubfile
 done
 
+# watersheds on EED  (5GB per 100x1000x1000 bloc
+#rsync -avz /Users/michielk/oxdata/P01/EM/M3/M3_S1_GNU/0250_m000_seg.h5 ndcn0180@arcus.arc.ox.ac.uk:/data/ndcn-fmrib-water-brain/ndcn0180/EM/M3/M3_S1_GNU/archive/m000_z0000-z0100/
+z=30; Z=460;
+for x in 0 1000 2000 3000 4000 5000; do
+[ $x == 5000 ] && X=5217 || X=$((x+1000))
+#[ $x == 4000 ] && X=4235 || X=$((y+1000))
+qsubfile=$datadir/EM_p2l_`printf %05d ${x}`-`printf %05d ${X}`.sh
+echo '#!/bin/bash' > $qsubfile
+echo "#SBATCH --nodes=1" >> $qsubfile
+echo "#SBATCH --ntasks-per-node=5" >> $qsubfile
+echo "#SBATCH --time=100:00:00" >> $qsubfile
+echo "#SBATCH --mem=256000" >> $qsubfile
+echo "#SBATCH --job-name=EM_ws" >> $qsubfile
+for y in 0 1000 2000 3000 4000; do
+[ $y == 4000 ] && Y=4460 || Y=$((y+1000))
+#[ $y == 4000 ] && Y=4111 || Y=$((y+1000))
+echo "python $scriptdir/mesh/prob2labels.py $datadir $dataset \
+--SEfile '_seg.h5' --MAsegfile '_probs_ws_MA.h5' --MMfile '_probs_ws_MM.h5' --UAfile '_probs_ws_UA.h5' --PAfile '_probs_ws_PA.h5' \
+-n 5 -o 250 235 491 -s 460 4460 5217 \
+-x $x -X $X -y $y -Y $Y -z $z -Z $Z > \
+$datadir/output_`printf %05d ${x}`-`printf %05d ${X}`_`printf %05d ${y}`-`printf %05d ${Y}` &" >> $qsubfile
+done
+echo "wait" >> $qsubfile
+sbatch -p compute $qsubfile
+done
+--SEfile '_segman.h5' --MMfile '_probs_ws_MMdistsum_distfilter.h5' --UAfile '_probs_ws_UA.h5' --PAfile '_probs_ws_PA.h5' \
 
 
 
