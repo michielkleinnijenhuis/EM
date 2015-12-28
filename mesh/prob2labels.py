@@ -81,6 +81,7 @@ def main(argv):
 #     fullshape = (100, 4111, 4235)
 #     fullshape = (430, 4460, 5217)
 #     dataset = dataset + '_' + str(x) + '-' + str(X) + '_' + str(y) + '-' + str(Y) + '_' + str(z) + '-' + str(Z)
+    origset = dataset
     dataset = dataset + '_' + str(x).zfill(nzfills) + '-' + str(X).zfill(nzfills) + \
                         '_' + str(y).zfill(nzfills) + '-' + str(Y).zfill(nzfills) + \
                         '_' + str(z).zfill(nzfills) + '-' + str(Z).zfill(nzfills)
@@ -151,11 +152,12 @@ def main(argv):
             ### seeds from manual section segmentation 
             ### include a seed here for the ECS, i.e set all non-MA to 1 instead of 0
             seeds_MA = np.copy(segm)
+            seedmask = seeds_MA==1
             seeds_MA[seeds_MA<1000] = 0
             seeds_MA[seeds_MA>2000] = 1
             writeh5(seeds_MA, datadir, dataset + '_seeds_MA.h5', element_size_um=elsize)
             MAsegfile = ''
-        MA = watershed(prob_myel, seeds_MA, mask=np.logical_and(~myelin, ~datamask))
+        MA = watershed(prob_myel, seeds_MA, mask=np.logical_and(~myelin, ~datamask, ~seedmask))
         bc = np.bincount(np.ravel(MA))
         largest_label = bc[1:].argmax() + 1
         print("largest label {!s} was removed".format(largest_label))
