@@ -321,7 +321,35 @@ sbatch -p compute $qsubfile
 done
 
 
+# merge the labelimages (_probs_ws_PA; _probs_ws_MAfilled)
+z=30; Z=460;
+pf=_probs_ws_MAfilled
+qsubfile=$datadir/EM_mb.sh
+echo '#!/bin/bash' > $qsubfile
+echo "#SBATCH --nodes=1" >> $qsubfile
+echo "#SBATCH --ntasks-per-node=1" >> $qsubfile
+echo "#SBATCH --time=00:10:00" >> $qsubfile
+echo "#SBATCH --mem=56000" >> $qsubfile
+echo "#SBATCH --job-name=EM_ws" >> $qsubfile
+echo "python $scriptdir/convert/EM_mergeblocks.py -i \\" >> $qsubfile
+for x in 1000 2000; do
+[ $x == 5000 ] && X=5217 || X=$((x+1000))
+for y in 1000 2000; do
+[ $y == 4000 ] && Y=4460 || Y=$((y+1000))
+echo "$datadir/${dataset}_`printf %05d ${x}`-`printf %05d ${X}`_`printf %05d ${y}`-`printf %05d ${Y}`_`printf %05d ${z}`-`printf %05d ${Z}`${pf}.h5 \\" >> $qsubfile
+done
+done
+echo "-o $datadir/${dataset}_01000-03000_01000-03000_00030-00460_probs_ws_MA.h5 \\" >> $qsubfile
+echo "-f 'stack' -l 'zyx' -b 1000 1000 30" >> $qsubfile
+echo "wait" >> $qsubfile
+sbatch -p devel $qsubfile
 
+
+
+# convert labelimages to stl
+
+
+# convert stl to blender
 
 
 

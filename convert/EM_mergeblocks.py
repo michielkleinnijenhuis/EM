@@ -18,6 +18,7 @@ def main(argv):
     parser.add_argument('-f', '--field', default='stack', help='...')
     parser.add_argument('-o', '--outputfile', help='...')
     parser.add_argument('-l', '--outlayout', help='...')
+    parser.add_argument('-b', '--blockoffset', nargs='*', type=int, help='...')
     parser.add_argument('-c', '--chunksize', nargs='*', type=int, help='...')
     parser.add_argument('-e', '--element_size_um', nargs='*', type=float, help='...')
     
@@ -27,6 +28,7 @@ def main(argv):
     outputfile = args.outputfile
     field = args.field
     chunksize = args.chunksize
+    blockoffset = args.blockoffset
     element_size_um = args.element_size_um
     outlayout = args.outlayout
     
@@ -36,12 +38,12 @@ def main(argv):
         head, tail = os.path.split(filename)
         fname, ext = os.path.splitext(tail)
         parts = fname.split("_")
-        x = int(parts[1].split("-")[0])
-        X = int(parts[1].split("-")[1])
-        y = int(parts[2].split("-")[0])
-        Y = int(parts[2].split("-")[1])
-        z = int(parts[3].split("-")[0])
-        Z = int(parts[3].split("-")[1])
+        x = int(parts[1].split("-")[0]) - blockoffset[0]
+        X = int(parts[1].split("-")[1]) - blockoffset[0]
+        y = int(parts[2].split("-")[0]) - blockoffset[1]
+        Y = int(parts[2].split("-")[1]) - blockoffset[1]
+        z = int(parts[3].split("-")[0]) - blockoffset[2]
+        Z = int(parts[3].split("-")[1]) - blockoffset[2]
         
         if i == 0:
             

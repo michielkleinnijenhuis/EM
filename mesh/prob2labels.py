@@ -118,7 +118,8 @@ def main(argv):
              segmOffset[2]:segmOffset[2]+segmOrig.shape[1]] = segmOrig
         segm = segm[z:Z,y:Y,x:X]
         writeh5(segm, datadir, dataset + '_seg.h5', element_size_um=elsize)
-#         segsliceno = segmOffset[0] - z  # TODO: check TODO: check if _seg.h5 is the correct slice
+    
+    segsliceno = segmOffset[0] - z  # TODO: check TODO: check if _seg.h5 is the correct slice
     
     ### get the myelinated axons (MA)
     if MAfile:
@@ -226,11 +227,11 @@ def main(argv):
         UA = loadh5(datadir, dataset + UAfile)[0]
     else:
         seeds_UA = np.copy(segm)
-        seedslice = seeds_UA[segmOffset[0],:,:]
+        seedslice = seeds_UA[segsliceno,:,:]
         seedslice[seedslice<2000] = 0
         for l in np.unique(seeds_UA)[1:]:
             seedslice[erosion(seedslice==l, square(5))] = l
-        seeds_UA[segmOffset[0],:,:] = seedslice
+        seeds_UA[segsliceno,:,:] = seedslice
         UA = watershed(-data, seeds_UA, 
                        mask=np.logical_and(~datamask, ~np.logical_or(MM,MA)))
         writeh5(UA, datadir, dataset + '_probs_ws_UA.h5', element_size_um=elsize)
