@@ -104,7 +104,7 @@ def main(argv):
         prob_myel = loadh5(datadir, dataset + '_probs0_eed2.h5')[0]
         myelin = prob_myel > 0.2
     if not UAfile:
-        gaussian_filter(data, gsigma, output=data)
+        data = gaussian_filter(data, gsigma)
     
 #     segmOffset = [50,60,122]  #zyx for m000 (100 section full FOV)
 #     segmOffset = [220,491,235]  #zyx for m000 (430 section full FOV)
@@ -229,9 +229,12 @@ def main(argv):
         seeds_UA = np.copy(segm)
         seedslice = seeds_UA[segsliceno,:,:]
         seedslice[seedslice<2000] = 0
-        for l in np.unique(seeds_UA)[1:]:
-            seedslice[erosion(seedslice==l, square(5))] = l
+        final_seedslice = np.zeros_like(seedslice)
+        for l in np.unique(seedslice)[1:]:
+#             seedslice[erosion(seedslice==l, square(5))] = l
+            final_seedslice[binary_erosion(seedslice == l, square(5))] = l
         seeds_UA[segsliceno,:,:] = seedslice
+        writeh5(seeds_UA, datadir, dataset + '_seeds_UA.h5', element_size_um=elsize)
         UA = watershed(-data, seeds_UA, 
                        mask=np.logical_and(~datamask, ~np.logical_or(MM,MA)))
         writeh5(UA, datadir, dataset + '_probs_ws_UA.h5', element_size_um=elsize)
@@ -261,7 +264,12 @@ def writeh5(stack, datadir, fp_out, fieldname='stack', dtype='uint16', element_s
     """"""
     g = h5py.File(os.path.join(datadir, fp_out), 'w')
     g.create_dataset(fieldname, stack.shape, dtype=dtype, compression="gzip")
-    g[fieldname][:,:,:] = stack
+    if len(stack.shape) == 2:
+        g[fieldname][:,:] = stack
+    elif len(stack.shape) == 3:
+        g[fieldname][:,:,:] = stack
+    elif len(stack.shape) == 4:
+        g[fieldname][:,:,:,:] = stack
     if element_size_um is not None:
         g[fieldname].attrs['element_size_um'] = element_size_um
     g.close()

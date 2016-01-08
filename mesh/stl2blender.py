@@ -55,7 +55,6 @@ def main(argv):
             if decimation:
                 decimate_mesh(ob, decimation)
             if smoothparams:
-                print(smoothparams[0], smoothparams[1])
                 smooth_mesh(ob, smoothparams[0], smoothparams[1])
             if ecs_shrinkvalue:
                 shrink_mesh(ob, ecs_shrinkvalue)
@@ -111,6 +110,7 @@ def activate_viewport_transparency(ob):
     ob.show_transparent = True
 
 def non_manifold_vertices(ob):
+    """"""
     O.object.select_all(action='DESELECT')
     ob.select = True
     O.object.mode_set(mode='EDIT')
@@ -125,6 +125,7 @@ def non_manifold_vertices(ob):
     return idxs
 
 def decimate_mesh(ob, ratio):
+    """"""
     O.object.select_all(action='DESELECT')
     ob.select = True
     O.object.modifier_add(type='DECIMATE')
@@ -132,6 +133,7 @@ def decimate_mesh(ob, ratio):
     O.object.modifier_apply(apply_as='DATA', modifier="Decimate")
 
 def shrink_mesh(ob, value):
+    """"""
     O.object.select_all(action='DESELECT')
     ob.select = True
     O.object.mode_set(mode='EDIT')
@@ -139,6 +141,7 @@ def shrink_mesh(ob, value):
     O.object.mode_set(mode='OBJECT')
 
 def smooth_mesh(ob, factor, iterations):
+    """"""
     O.object.select_all(action='DESELECT')
     ob.select = True
     O.object.modifier_add(type='SMOOTH')

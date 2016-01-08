@@ -8,7 +8,7 @@ import h5py
 
 def main(argv):
     
-    parser = argparse.ArgumentParser(description='Juggle around stacks.')
+    parser = argparse.ArgumentParser(description='...')
     
     parser.add_argument('inputfile', help='the inputfile')
     parser.add_argument('outputfile', help='the outputfile')
@@ -72,10 +72,10 @@ def main(argv):
                                  spacing=spac, 
                                  multichannel=mc, 
                                  convert2lab=False, 
-                                 enforce_connectivity=False)
+                                 enforce_connectivity=False)  # TODO: conn???
     segments = segments + 1
     sv = h5py.File(outputfile, 'w')
-    sv.create_dataset(outfield, data=segments)
+    sv.create_dataset(outfield, data=segments, compression="gzip")
     if element_size_um is not None:
         sv[outfield].attrs['element_size_um'] = element_size_um
     sv.close()

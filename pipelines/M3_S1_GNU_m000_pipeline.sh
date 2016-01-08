@@ -244,8 +244,9 @@ done
 #rsync -avz ndcn0180@arcus.arc.ox.ac.uk:/data/ndcn-fmrib-water-brain/ndcn0180/EM/M3/M3_S1_GNU/m000_2000-3000_2000-3000_0-100*.h5 /Users/michielk/oxdata/P01/EM/M3/M3_S1_GNU/
 
 
-
-# watersheds on EED  (5GB per 100x1000x1000 bloc
+###===================###
+### watersheds on EED ###
+###===================###
 #rsync -avz /Users/michielk/oxdata/P01/EM/M3/M3_S1_GNU/0250_m000_seg.h5 ndcn0180@arcus.arc.ox.ac.uk:/data/ndcn-fmrib-water-brain/ndcn0180/EM/M3/M3_S1_GNU/archive/m000_z0000-z0100/
 z=30; Z=460;
 for x in 0 1000 2000 3000 4000 5000; do
@@ -270,8 +271,6 @@ echo "wait" >> $qsubfile
 sbatch -p compute $qsubfile
 done
 
-# watersheds on EED  (5GB per 100x1000x1000 bloc
-#rsync -avz /Users/michielk/oxdata/P01/EM/M3/M3_S1_GNU/0250_m000_seg.h5 ndcn0180@arcus.arc.ox.ac.uk:/data/ndcn-fmrib-water-brain/ndcn0180/EM/M3/M3_S1_GNU/archive/m000_z0000-z0100/
 z=30; Z=460;
 for x in 0 1000 2000 3000 4000 5000; do
 [ $x == 5000 ] && X=5217 || X=$((x+1000))
@@ -320,17 +319,18 @@ echo "wait" >> $qsubfile
 sbatch -p compute $qsubfile
 done
 
-
-# merge the labelimages (_probs_ws_PA; _probs_ws_MAfilled)
+###=======================###
+### merge the labelimages ###(_probs_ws_PA; _probs_ws_MAfilled)
+###=======================###
 z=30; Z=460;
-pf=_probs_ws_MAfilled
 qsubfile=$datadir/EM_mb.sh
 echo '#!/bin/bash' > $qsubfile
 echo "#SBATCH --nodes=1" >> $qsubfile
-echo "#SBATCH --ntasks-per-node=1" >> $qsubfile
+echo "#SBATCH --ntasks-per-node=2" >> $qsubfile
 echo "#SBATCH --time=00:10:00" >> $qsubfile
 echo "#SBATCH --mem=56000" >> $qsubfile
 echo "#SBATCH --job-name=EM_ws" >> $qsubfile
+for pf in _probs_ws_MAfilled _probs_ws_PA; do
 echo "python $scriptdir/convert/EM_mergeblocks.py -i \\" >> $qsubfile
 for x in 1000 2000; do
 [ $x == 5000 ] && X=5217 || X=$((x+1000))
@@ -339,17 +339,59 @@ for y in 1000 2000; do
 echo "$datadir/${dataset}_`printf %05d ${x}`-`printf %05d ${X}`_`printf %05d ${y}`-`printf %05d ${Y}`_`printf %05d ${z}`-`printf %05d ${Z}`${pf}.h5 \\" >> $qsubfile
 done
 done
-echo "-o $datadir/${dataset}_01000-03000_01000-03000_00030-00460_probs_ws_MA.h5 \\" >> $qsubfile
-echo "-f 'stack' -l 'zyx' -b 1000 1000 30" >> $qsubfile
+echo "-o $datadir/${dataset}_01000-03000_01000-03000_00030-00460${pf}.h5 \\" >> $qsubfile
+echo "-f 'stack' -l 'zyx' -b 1000 1000 30 &" >> $qsubfile
+done
 echo "wait" >> $qsubfile
 sbatch -p devel $qsubfile
 
 
+###============================###
+### convert labelimages to stl ###
+###============================###
+x=1000; X=3000; y=1000; Y=3000; z=30; Z=460;
+qsubfile=$datadir/EM_l2s.sh
+echo '#!/bin/bash' > $qsubfile
+echo "#SBATCH --nodes=1" >> $qsubfile
+echo "#SBATCH --ntasks-per-node=1" >> $qsubfile
+echo "#SBATCH --time=00:10:00" >> $qsubfile
+echo "#SBATCH --mem=56000" >> $qsubfile
+echo "#SBATCH --job-name=EM_l2s" >> $qsubfile
+echo "python $scriptdir/mesh/label2stl.py $datadir $dataset \
+-L '_probs_ws_MAfilled' '_probs_ws_PA' -c 'MA' 'PA' -f '/stack' -n 5 -o $z $y $x \
+-x $x -X $X -y $y -Y $Y -z $z -Z $Z" >> $qsubfile
+sbatch -p devel $qsubfile
 
-# convert labelimages to stl
+# TODO: labelclass names, memoryfootprint (about 15GB per 460x1000x1000 block), parallelize?, mirror labelimages in z?
+
+scriptdir="$HOME/workspace/EM"
+DATA="$HOME/oxdata"
+datadir="$DATA/P01/EM/M3/M3_S1_GNU"
+dataset='m000'
+x=1000; X=2000; y=1000; Y=2000; z=30; Z=460;
+python $scriptdir/mesh/label2stl.py $datadir $dataset \
+-L '_probs_ws_MAfilled' '_probs_ws_PA' -c 'MA' 'PA' -f '/stack' -n 5 -o $z $y $x \
+-x $x -X $X -y $y -Y $Y -z $z -Z $Z
+python $scriptdir/mesh/label2stl.py $datadir $dataset \
+-L '_probs_ws_MAfilled' -f '/stack' -n 5 -o $z $y $x \
+-x $x -X $X -y $y -Y $Y -z $z -Z $Z
+python $scriptdir/mesh/label2stl.py $datadir $dataset \
+-L '_probs_ws_PA' -f '/stack' -n 5 -o $z $y $x \
+-x $x -X $X -y $y -Y $Y -z $z -Z $Z
+
+###========================###
+### convert stl to blender ###
+###========================###
+blender -b -P $scriptdir/mesh/stl2blender.py -- \
+$datadir/dmcsurf UA -L 'UA' -e 0.1 -s 0.5 10 -d 0.2
+blender -b -P $scriptdir/mesh/stl2blender.py -- \
+$datadir/dmcsurf ECS -L 'ECS' -e -0.2 -s 0.5 10 -d 0.2
+
+###============================###
+### convert stl to MCell model ###
+###============================###
 
 
-# convert stl to blender
 
 
 
@@ -409,22 +451,34 @@ python $scriptdir/convert/EM_stack2stack.py \
 # (label2mesh)
 
 # slicvoxels (TODO: adapt commands and prepare for slurm)
+x=1000; X=2000; y=1000; Y=2000; z=30; Z=460;
 qsubfile=$datadir/EM_slic.sh
 echo '#!/bin/bash' > $qsubfile
-echo "#PBS -l nodes=1:ppn=1" >> $qsubfile
-echo "#PBS -l walltime=00:10:00" >> $qsubfile
-echo "#PBS -N em_slic" >> $qsubfile
-echo "#PBS -V" >> $qsubfile
-echo "cd \$PBS_O_WORKDIR" >> $qsubfile
+echo "#SBATCH --nodes=1" >> $qsubfile
+echo "#SBATCH --ntasks-per-node=1" >> $qsubfile
+echo "#SBATCH --time=10:00:00" >> $qsubfile
+#echo "#SBATCH --mem=56000" >> $qsubfile
+echo "#SBATCH --job-name=EM_slic" >> $qsubfile
+datastem="${dataset}_`printf %05d ${x}`-`printf %05d ${X}`_`printf %05d ${y}`-`printf %05d ${Y}`_`printf %05d ${z}`-`printf %05d ${Z}`"
 echo "python $scriptdir/supervoxels/EM_slicvoxels.py \
--i $datadir/$stack.h5 \
--o $datadir/${stack}_slic.h5 \
--f 'stack' -g 'stack' -s 500" >> $qsubfile
+${datadir}/${datastem}.h5 ${datadir}/${datastem}_slic.h5 \
+-f 'stack' -g 'stack' -s 500 -c 0.2 -o 1" >> $qsubfile
+sbatch -p compute $qsubfile
+
+x=1000; X=2000; y=1000; Y=2000; z=30; Z=460;
+qsubfile=$datadir/EM_slic.sh
+echo '#!/bin/bash' > $qsubfile
+echo "#SBATCH --nodes=1" >> $qsubfile
+echo "#SBATCH --ntasks-per-node=1" >> $qsubfile
+echo "#SBATCH --time=01:00:00" >> $qsubfile
+echo "#SBATCH --mem=256000" >> $qsubfile
+echo "#SBATCH --job-name=EM_slic" >> $qsubfile
+datastem="${dataset}_`printf %05d ${x}`-`printf %05d ${X}`_`printf %05d ${y}`-`printf %05d ${Y}`_`printf %05d ${z}`-`printf %05d ${Z}`"
 echo "python $scriptdir/supervoxels/EM_slicvoxels.py \
--i $datadir/${stack}_probabilities.h5 \
--o $datadir/${stack}_probabilities_slic.h5 \
--f 'probs' -g 'stack' -s 500" >> $qsubfile
-qsub -q develq $qsubfile
+${datadir}/${datastem}_probs.h5 ${datadir}/${datastem}_probs_slic.h5 \
+-f 'volume/predictions' -g 'stack' -s 500 -c 0.2 -o 1 -e 0.05 0.0073 0.0073" >> $qsubfile
+sbatch -p compute $qsubfile
+
 
 # agglomeration
 # label2mesh
