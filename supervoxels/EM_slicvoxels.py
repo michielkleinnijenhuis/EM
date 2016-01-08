@@ -21,6 +21,7 @@ def main(argv):
     parser.add_argument('-s', '--supervoxelsize', type=int, default=500, help='...')
     parser.add_argument('-c', '--compactness', type=float, default=0.2, help='...')
     parser.add_argument('-o', '--sigma', type=float, default=1, help='...')
+    parser.add_argument('-u', '--enforceconnectivity', action='store_true', help='...')
     
     
     args = parser.parse_args()  # shouldnt argv be an argument here?
@@ -60,6 +61,7 @@ def main(argv):
     compactness = args.compactness
     spac = [es for es in element_size_um]
     sigma = [es*args.sigma for es in spac]
+    ec = args.enforceconnectivity
     
     segments = segmentation.slic(inds, 
                                  n_segments=n_segm, 
@@ -68,7 +70,7 @@ def main(argv):
                                  sigma=sigma, 
                                  multichannel=mc, 
                                  convert2lab=False, 
-                                 enforce_connectivity=False)  # TODO: conn???
+                                 enforce_connectivity=ec)  # TODO: conn???
     segments = segments + 1
     sv = h5py.File(outputfile, 'w')
     sv.create_dataset(outfield, data=segments, 
