@@ -44,7 +44,6 @@ def main(argv):
         outfield = 'stack'
     
     mc = True if len(f[infield].dims) == 4 else False
-    
     if mc:
         inds = f[infield][:,:,:,:]
     else:
@@ -56,26 +55,24 @@ def main(argv):
         element_size_um = f[infield].attrs['element_size_um']
     else:
         element_size_um = None
-#     element_size_um = [0.05, 0.0073, 0.0073] #[6.85,1,1] #[1,1,1]
     
-    supervoxelsize = args.supervoxelsize
+    n_segm = inds.size / args.supervoxelsize
     compactness = args.compactness
-    sigma = args.sigma
-    
-    n_segm = inds.size / supervoxelsize
     spac = [es for es in element_size_um]
+    sigma = [es*args.sigma for es in spac]
     
     segments = segmentation.slic(inds, 
                                  n_segments=n_segm, 
                                  compactness=compactness, 
-                                 sigma=sigma, 
                                  spacing=spac, 
+                                 sigma=sigma, 
                                  multichannel=mc, 
                                  convert2lab=False, 
                                  enforce_connectivity=False)  # TODO: conn???
     segments = segments + 1
     sv = h5py.File(outputfile, 'w')
-    sv.create_dataset(outfield, data=segments, compression="gzip")
+    sv.create_dataset(outfield, data=segments, 
+                      dtype='int32', compression="gzip")
     if element_size_um is not None:
         sv[outfield].attrs['element_size_um'] = element_size_um
     sv.close()
