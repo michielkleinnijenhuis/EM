@@ -73,8 +73,7 @@ def main(argv):
                                  enforce_connectivity=ec)  # TODO: conn???
     segments = segments + 1
     sv = h5py.File(outputfile, 'w')
-    sv.create_dataset(outfield, data=segments, 
-                      dtype='int32', compression="gzip")
+    sv.create_dataset(outfield, data=segments, compression="gzip")
     if element_size_um is not None:
         sv[outfield].attrs['element_size_um'] = element_size_um
     sv.close()

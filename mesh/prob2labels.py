@@ -35,6 +35,7 @@ def main(argv):
     parser.add_argument('--MMfile', help='...')
     parser.add_argument('--UAfile', help='...')
     parser.add_argument('--PAfile', help='...')
+    parser.add_argument('--KNfile', help='...')
     parser.add_argument('-n', '--nzfills', type=int, default=5, 
                         help='number of characters for section ranges')
     parser.add_argument('-e', '--element_size_um', type=float, nargs='*', default=None, 
@@ -63,6 +64,7 @@ def main(argv):
     MMfile = args.MMfile
     UAfile = args.UAfile
     PAfile = args.PAfile
+    KNfile = args.KNfile
     nzfills = args.nzfills
     gsigma = args.gsigma
     segmOffset = [o for o in args.segmOffset]
@@ -233,8 +235,18 @@ def main(argv):
         for l in np.unique(seedslice)[1:]:
 #             seedslice[erosion(seedslice==l, square(5))] = l
             final_seedslice[binary_erosion(seedslice == l, square(5))] = l
-        seeds_UA[segsliceno,:,:] = seedslice
+        seeds_UA[segsliceno,:,:] = final_seedslice
         writeh5(seeds_UA, datadir, dataset + '_seeds_UA.h5', element_size_um=elsize)
+        if KNfile:
+            # add knossos seedpoints to seed image
+            objs = get_knossos_groundtruth(datadir, dataset)
+            for obj in objs:
+                objval = int(obj['name'][3:7])
+                # TODO: handle splits and doubles
+                for _, coords in obj['nodedict'].iteritems():
+                    # x and y are swapped in knossos; knossos is in xyz coordframe
+                    seeds_UA[coords[2]-1,coords[0]-1,coords[1]-1] = objval
+            writeh5(seeds_UA, datadir, dataset + '_seeds_UA_knossos.h5', element_size_um=elsize)
         UA = watershed(-data, seeds_UA, 
                        mask=np.logical_and(~datamask, ~np.logical_or(MM,MA)))
         writeh5(UA, datadir, dataset + '_probs_ws_UA.h5', element_size_um=elsize)
@@ -242,6 +254,34 @@ def main(argv):
     ### combine the MM, MA and UA segmentations
     if not PAfile:
         writeh5(MA+MM+UA, datadir, dataset + '_probs_ws_PA.h5', element_size_um=elsize)
+
+def get_knossos_groundtruth(datadir, dataset):
+    import xml.etree.ElementTree
+    things = xml.etree.ElementTree.parse(os.path.join(datadir, dataset + '_knossos', 'annotation.xml')).getroot()
+    objs = []
+    for thing in things.findall('thing'):
+        obj = {}
+        obj['name'] = thing.get('comment')
+        # nodes
+        nodedict = {}
+        nodes = thing.findall('nodes')[0]
+        for node in nodes.findall('node'):
+            coord = [int(node.get(ax)) for ax in 'xyz']
+            nodedict[node.get('id')] = coord
+        obj['nodedict'] = nodedict
+        # edges
+        edgelist = []
+        edges = thing.findall('edges')[0]
+        for edge in edges.findall('edge'):
+            edgelist.append([edge.get('source'),edge.get('target')])
+        obj['edgelist'] = edgelist
+        # polylines
+        # add the nodes in nodedict to the seedpoints
+        # add the voxels intersected by each edge to the seedpoints
+        # NOTE: knossos has a base-1 coordinate system
+        # append
+        objs.append(obj)
+    return objs
 
 
 def loadh5(datadir, dname, fieldname='stack'):

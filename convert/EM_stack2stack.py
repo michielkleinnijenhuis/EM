@@ -154,11 +154,11 @@ def main(argv):
     outexts.append(e1 + e2)
     outexts = list(set(outexts))
     nzfills = args.nzfills
-    if b[-nzfills:].isdigit():
-        slcoffset = int(b[-nzfills:])
-        b = b[:-nzfills]
-    else:
-        slcoffset = 0
+#     if b[-nzfills:].isdigit():
+#         slcoffset = int(b[-nzfills:])
+#         b = b[:-nzfills]
+#     else:
+#         slcoffset = 0
     
     
     
@@ -226,7 +226,7 @@ def main(argv):
             if not path.exists(b):
                 makedirs(b)
             for slc in range(0, img.shape[outlayout.index('z')]):
-                slcno = slc + slcoffset
+                slcno = slc #+ slcoffset
                 if outlayout.index('z') == 0:
                     slcdata = img[slc,:,:]
                 elif outlayout.index('z') == 1:

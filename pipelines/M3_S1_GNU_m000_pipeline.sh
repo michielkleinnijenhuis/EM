@@ -451,19 +451,24 @@ python $scriptdir/convert/EM_stack2stack.py \
 # (label2mesh)
 
 # slicvoxels (TODO: adapt commands and prepare for slurm)
-x=1000; X=2000; y=1000; Y=2000; z=30; Z=460;
-qsubfile=$datadir/EM_slic.sh
+
+nvox=500
+for comp in 0.01 0.1 1 10 100; do
+smooth=0
+qsubfile=$datadir/EM_slic_s${nvox}_c${comp}_o${smooth}.sh
 echo '#!/bin/bash' > $qsubfile
 echo "#SBATCH --nodes=1" >> $qsubfile
 echo "#SBATCH --ntasks-per-node=1" >> $qsubfile
 echo "#SBATCH --time=10:00:00" >> $qsubfile
 #echo "#SBATCH --mem=56000" >> $qsubfile
 echo "#SBATCH --job-name=EM_slic" >> $qsubfile
+x=1000; X=2000; y=1000; Y=2000; z=30; Z=460;
 datastem="${dataset}_`printf %05d ${x}`-`printf %05d ${X}`_`printf %05d ${y}`-`printf %05d ${Y}`_`printf %05d ${z}`-`printf %05d ${Z}`"
 echo "python $scriptdir/supervoxels/EM_slicvoxels.py \
-${datadir}/${datastem}.h5 ${datadir}/${datastem}_slic.h5 \
--f 'stack' -g 'stack' -s 500 -c 0.2 -o 1" >> $qsubfile
+${datadir}/${datastem}.h5 ${datadir}/${datastem}_slic_s${nvox}_c${comp}_o${smooth}.h5 \
+-f 'stack' -g 'stack' -s ${nvox} -c ${comp} -o ${smooth} -u" >> $qsubfile
 sbatch -p compute $qsubfile
+done
 
 x=1000; X=2000; y=1000; Y=2000; z=30; Z=460;
 qsubfile=$datadir/EM_slic.sh
