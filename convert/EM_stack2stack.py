@@ -209,12 +209,13 @@ def main(argv):
             otype = 'a' if path.isfile(outputfile) else 'w'
             g = h5py.File(b + '.h5', otype)
 #             datalayout = tuple(stdsel[i][1]-stdsel[i][0] for i in std2out)
-            if all(chunksize):
+            if 'chunksize' in locals():
                 outds = g.create_dataset(outfield, img.shape, 
                                          chunks=tuple(chunksize), 
-                                         dtype=datatype)
+                                         dtype=datatype, compression='gzip')
             else:
-                outds = g.create_dataset(outfield, img.shape, dtype=datatype)
+                outds = g.create_dataset(outfield, img.shape, 
+                                         dtype=datatype, compression='gzip')
             outds[:] = img
             if element_size_um is not None:
                 outds.attrs['element_size_um'] = element_size_um
