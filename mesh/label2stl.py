@@ -87,7 +87,7 @@ def main(argv):
             compdict['MA'] = np.unique(labeldata)
         labeldata = remove_small_objects(labeldata, 100)
         labels2meshes_vtk(datadir, compdict, np.transpose(labeldata), 
-                          spacing=elsize[::-1], offset=zyxOffset[::-1])
+                          spacing=np.absolute(elsize)[::-1], offset=zyxOffset[::-1])
         ECSmask[labeldata>0] = True
     
     compdict['ECS'] = [1]

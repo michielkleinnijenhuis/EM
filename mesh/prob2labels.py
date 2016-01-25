@@ -16,7 +16,7 @@ import numpy as np
 import xml.etree.ElementTree
 from skimage.morphology import watershed, square
 from scipy.ndimage.morphology import grey_dilation, \
-    binary_erosion, binary_closing
+    binary_erosion, binary_dilation, binary_closing, binary_fill_holes
 from scipy.special import expit
 from scipy.ndimage.measurements import label
 from scipy.ndimage import distance_transform_edt
@@ -102,11 +102,12 @@ def main(argv):
     
     ### load (and smooth) the dataset
     data, elsize = loadh5(datadir, dset_name)
+    # TODO: handle negative elsize here?
     if element_size_um is not None:
         elsize = element_size_um
     dset_info['elsize'] = elsize
-    if not UAfile:
-        data = gaussian_filter(data, gsigma)
+#     if not UAfile:
+    data = gaussian_filter(data, gsigma)
     
     ### load the probabilities and extract the myelin
     if (not MAfile or not MMfile):
@@ -121,7 +122,8 @@ def main(argv):
     if maskfile:
         datamask = loadh5(datadir, dset_name + maskfile)[0]
     else:
-        datamask = data == 0
+        datamask = data != 0
+        datamask = binary_dilation(binary_fill_holes(datamask))  # TODO
     
     ### get the single-section segmentation
     if SEfile:
@@ -159,19 +161,19 @@ def main(argv):
             seeds_MA = seeds_knossos(dset_info, seeds_MA, 'MA', outpf)
         if UAknossosfile:
             outpf = outpf + UAknossosfile
-            seeds_MA = seeds_knossos(dset_info, seeds_MA, 'UA', UAknossosfile)
+            seeds_MA = seeds_knossos(dset_info, seeds_MA, 'UA', outpf, 1)
         # watershed
         outpf = outpf + '_ws'
-        MA = watershed(prob_myel, seeds_MA, 
-                       mask=np.logical_and(~myelin, ~datamask))
-        MA = remove_largest(MA)  # FIXME
-#         # fill holes
-        if fillholes_MA:
-            MA = fill_holes(MA)
-            myelin[MA != 0] = False
-            outpf = outpf + '_filled'
-        # save results
+        MA = watershed(-data, seeds_MA, 
+                       mask=np.logical_and(~myelin, datamask))
+        MA[MA==1] = 0  # MA = remove_largest(MA)
         writeh5(MA, datadir, dset_name + outpf, element_size_um=elsize)
+        # fill holes
+        if fillholes_MA:
+            outpf = outpf + '_filled'
+            MA = fill_holes(MA)
+            writeh5(MA, datadir, dset_name + outpf, element_size_um=elsize)
+    myelin[MA != 0] = False
     
     ### watershed on myelin to separate individual sheaths
     if MMfile:
@@ -179,16 +181,18 @@ def main(argv):
     else:
         outpf = '_MM'
         # watershed on simple distance transform
-        distance = distance_transform_edt(MA==0, sampling=elsize)
+        distance = distance_transform_edt(MA==0, sampling=np.absolute(elsize))
         outpf = outpf + '_ws'
         MM = watershed(distance, grey_dilation(MA, size=(3,3,3)), 
-                       mask=np.logical_and(myelin, ~datamask))
+                       mask=np.logical_and(myelin, datamask))
+        writeh5(MM, datadir, dset_name + outpf, element_size_um=elsize)
         # watershed on sigmoid-modulated distance transform
         if sigmoidweighting_MM:
             outpf = outpf + '_sw'
-            distsum, lmask = sigmoid_weighted_distance(MM,MA)
+            distsum, lmask = sigmoid_weighted_distance(MM, MA, elsize)
             MM = watershed(distsum, grey_dilation(MA, size=(3,3,3)), 
-                           mask=np.logical_and(myelin, ~datamask))
+                           mask=np.logical_and(myelin, datamask))
+            writeh5(MM, datadir, dset_name + outpf, element_size_um=elsize)
         else:  # TODO simple distance th
             lmask = np.zeros((MM.shape[0], MM.shape[1], MM.shape[2], 
                       len(np.unique(MA)[1:])), dtype='bool')
@@ -196,8 +200,7 @@ def main(argv):
             outpf = outpf + '_df'
             for i,l in enumerate(np.unique(MA)[1:]):
                 MM[np.logical_and(lmask[:,:,:,i], MM==l)] = 0
-        # save the results
-        writeh5(MM, datadir, dset_name + outpf, element_size_um=elsize)
+            writeh5(MM, datadir, dset_name + outpf, element_size_um=elsize)
     
     ### watershed the unmyelinated axons (almost identical to MA)
     if UAfile:
@@ -222,7 +225,7 @@ def main(argv):
             seeds_UA = seeds_knossos(dset_info, seeds_UA, 'UA', UAknossosfile)
         # watershed
         UA = watershed(-data, seeds_UA, 
-                       mask=np.logical_and(~datamask, ~np.logical_or(MM,MA)))
+                       mask=np.logical_and(datamask, ~np.logical_or(MM,MA)))
         # save results
         writeh5(UA, datadir, dset_name + outpf, element_size_um=elsize)
     
@@ -244,7 +247,7 @@ def dataset_name(dname_info):
     
     return dname
 
-def seeds_section(dset_info, seeds, write_pf='_seeds_MA_section'):
+def seeds_section(dset_info, seeds, write_pf='_sMAse'):
     """"""
     dset_name = dataset_name(dset_info)
     
@@ -259,8 +262,8 @@ def seeds_section(dset_info, seeds, write_pf='_seeds_MA_section'):
     return seeds
 
 def seeds_neighbours(dset_info, seeds, segfile, 
-                     load_pf='_seeds_MA_section', 
-                     write_pf='_seeds_MA_neighbours'):
+                     load_pf='_sMAse', 
+                     write_pf='_sMAnb'):
     """"""
     dset_name = dataset_name(dset_info)
     
@@ -310,8 +313,8 @@ def seeds_knossos(dset_info, seeds, comp, write_pf, fixval=None):
         else:
             objval = int(obj['name'][3:7])
         for _, coords in obj['nodedict'].iteritems():
-            # knossos-coords are in 1-based, yxz-order, 1000x1000x430 frame 
-            # (for m000_01000-02000_01000-02000_00030-00460.h5)
+            # knossos-coords are in 1-based, yxz-order, 1000x1000x430 frame
+            # (for m000_01000-02000_01000-02000_00030-00460.h5)q
             knossosoffset = [1000,1000,30]  # (yxz)  # FIXME!!!
             # index into the main dataset (5217x4460x460)
             coord_x = coords[1] + knossosoffset[1] - 1 # - dset_info['x']
@@ -321,7 +324,7 @@ def seeds_knossos(dset_info, seeds, comp, write_pf, fixval=None):
             coord_x = coord_x - dset_info['x']
             coord_y = coord_y - dset_info['y']
             coord_z = coord_z - dset_info['z']  # - 100  # FIXME!!!
-            print(coords, [coord_z,coord_y,coord_x])
+#             print(coords, [coord_z,coord_y,coord_x])
             try:
                 seeds[coord_z,coord_y,coord_x] = objval
             except:
@@ -401,7 +404,7 @@ def sigmoid_weighted_distance(MM, MA, elsize):
     distsum = np.ones_like(MM, dtype='float')
     medwidth = {}
     for i,l in enumerate(np.unique(MA)[1:]):  # TODO: implement mpi?
-        dist = distance_transform_edt(MA!=l, sampling=elsize)
+        dist = distance_transform_edt(MA!=l, sampling=np.absolute(elsize))
         # get the median distance at the outer rim:
         MMfilled = MA+MM
         binim = MMfilled == l
