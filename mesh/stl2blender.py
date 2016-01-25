@@ -32,6 +32,8 @@ def main(argv):
     parser.add_argument('-e', '--ecs_shrinkvalue', type=float, help='...')
     parser.add_argument('-s', '--smoothparams', type=float, nargs=2, help='...')
     parser.add_argument('-d', '--decimation', type=float, help='...')
+    parser.add_argument('-c', '--connect', action='store_true',
+                        help='connect fibres into one object')
     
     args = parser.parse_args(argv)
     
@@ -41,6 +43,7 @@ def main(argv):
     ecs_shrinkvalue = args.ecs_shrinkvalue
     smoothparams = args.smoothparams
     decimation = args.decimation
+    connect = args.connect
     
 #     compartments = ['NN', 'DD', 'MM', 'MA', 'UA', 'mito', 'vesicles', 'synapses']
     # TODO: default to all compartments in stldir
@@ -66,7 +69,8 @@ def main(argv):
             if idxs:
                 nonmanifolds[ob.name] = idxs
         print(nonmanifolds.keys())
-        ob = connect_fibres(comp, comp + '*', ob.name)
+        if connect:
+            ob = connect_fibres(comp, comp + '*', ob.name)
     
     blendfile = os.path.join(stldir, outfilename + '.blend')
     O.wm.save_as_mainfile(filepath=blendfile)

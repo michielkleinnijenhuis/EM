@@ -13,8 +13,7 @@ import numpy as np
 import vtk
 from skimage.morphology import remove_small_objects
 from skimage.measure import label
-from skimage.transform import downscale_local_mean
-from scipy.ndimage.interpolation import shift, zoom
+from scipy.ndimage.interpolation import shift
 from scipy.ndimage.morphology import binary_fill_holes
 
 
@@ -87,14 +86,16 @@ def main(argv):
         else:
             compdict['MA'] = np.unique(labeldata)
         labeldata = remove_small_objects(labeldata, 100)
-#         labels2meshes_vtk(datadir, compdict, np.transpose(labeldata), 
-#                           spacing=elsize[::-1], offset=zyxOffset[::-1])
+        labels2meshes_vtk(datadir, compdict, np.transpose(labeldata), 
+                          spacing=elsize[::-1], offset=zyxOffset[::-1])
         ECSmask[labeldata>0] = True
     
     compdict['ECS'] = [1]
     binary_fill_holes(ECSmask, output=ECSmask)
+    
     labels2meshes_vtk(datadir, compdict, np.transpose(ECSmask), 
-                      spacing=elsize[::-1], offset=zyxOffset[::-1])
+                      spacing=np.absolute(elsize)[::-1], 
+                      offset=zyxOffset[::-1])
 
 
 def remove_small_objects(labeldata, minvoxelcount):
