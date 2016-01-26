@@ -450,7 +450,7 @@ python $scriptdir/convert/EM_stack2stack.py \
 
 # (label2mesh)
 
-# slicvoxels (TODO: adapt commands and prepare for slurm)
+# slicvoxels
 
 nvox=500
 for comp in 0.01 0.1 1 10 100; do

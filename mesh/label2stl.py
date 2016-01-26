@@ -30,6 +30,7 @@ def main(argv):
                         help='number of characters for section ranges')
     parser.add_argument('-e', '--element_size_um', type=float, nargs='*', default=None, 
                         help='dataset element sizes')
+    parser.add_argument('-E', '--enforceECS', action='store_true')
     parser.add_argument('-o', '--zyxOffset', nargs=3, type=int, default=[0,0,0], help='...')
     parser.add_argument('-L', '--labelimages', default=[], nargs='+', help='...')
     parser.add_argument('-r', '--rsfac', default=(1,1,1), type=float, nargs=3, help='...')
@@ -50,6 +51,7 @@ def main(argv):
     zyxOffset = args.zyxOffset
     labelimages = args.labelimages
     maskimages = args.maskimages
+    enforceECS = args.enforceECS
     
     x = args.x
     X = args.X
@@ -63,19 +65,19 @@ def main(argv):
     
     ### load the mask
     if maskimages:
-        mask = loadh5(datadir, dataset + maskimages[0] + '.h5', fieldnamein)[0]
+        mask = loadh5(datadir, dataset + maskimages[0], fieldnamein)[0]
         for m in maskimages[1:]:
-            newmask = loadh5(datadir, dataset + m + '.h5', fieldnamein)[0]
+            newmask = loadh5(datadir, dataset + m, fieldnamein)[0]
             mask = mask | np.array(newmask, dtype='bool')
     else:
-        mask, _ = loadh5(datadir, dataset + labelimages[0] + '.h5', fieldnamein)
+        mask, _ = loadh5(datadir, dataset + labelimages[0], fieldnamein)
         mask = np.ones_like(mask, dtype='bool')
     
     ECSmask = np.zeros_like(mask, dtype='bool')
     ### process the labelimages
     for l in labelimages:
         compdict = {}
-        labeldata, elsize = loadh5(datadir, dataset + l + '.h5', fieldnamein)
+        labeldata, elsize = loadh5(datadir, dataset + l, fieldnamein)
         labeldata[~mask] = 0
 #         labeldata, elsize = resample_volume(labeldata, True, elsize, res)
         if 'PA' in l:
@@ -86,6 +88,10 @@ def main(argv):
         else:
             compdict['MA'] = np.unique(labeldata)
         labeldata = remove_small_objects(labeldata, 100)
+        if enforceECS:
+            labeldata = enforce_ECS(labeldata)
+            writeh5(labeldata, datadir, dataset + l + '_enforceECS', 
+                    element_size_um=elsize)
         labels2meshes_vtk(datadir, compdict, np.transpose(labeldata), 
                           spacing=np.absolute(elsize)[::-1], offset=zyxOffset[::-1])
         ECSmask[labeldata>0] = True
@@ -120,7 +126,7 @@ def mkdir_p(path):
 
 def loadh5(datadir, dname, fieldname='stack'):
     """"""
-    f = h5py.File(os.path.join(datadir, dname), 'r')
+    f = h5py.File(os.path.join(datadir, dname + '.h5'), 'r')
     if len(f[fieldname].shape) == 2:
         stack = f[fieldname][:,:]
     if len(f[fieldname].shape) == 3:
@@ -136,9 +142,14 @@ def loadh5(datadir, dname, fieldname='stack'):
 
 def writeh5(stack, datadir, fp_out, fieldname='stack', dtype='uint16', element_size_um=None):
     """"""
-    g = h5py.File(os.path.join(datadir, fp_out), 'w')
+    g = h5py.File(os.path.join(datadir, fp_out + '.h5'), 'w')
     g.create_dataset(fieldname, stack.shape, dtype=dtype, compression="gzip")
-    g[fieldname][:,:,:] = stack
+    if len(stack.shape) == 2:
+        g[fieldname][:,:] = stack
+    elif len(stack.shape) == 3:
+        g[fieldname][:,:,:] = stack
+    elif len(stack.shape) == 4:
+        g[fieldname][:,:,:,:] = stack
     if element_size_um is not None:
         g[fieldname].attrs['element_size_um'] = element_size_um
     g.close()

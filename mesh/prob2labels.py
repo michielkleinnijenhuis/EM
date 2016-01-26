@@ -110,9 +110,9 @@ def main(argv):
     data = gaussian_filter(data, gsigma)
     
     ### load the probabilities and extract the myelin
-    if (not MAfile or not MMfile):
-        prob_myel = loadh5(datadir, dset_name + '_probs0_eed2')[0]
-        myelin = prob_myel > 0.2
+#     if (not MAfile or not MMfile):
+    prob_myel = loadh5(datadir, dset_name + '_probs0_eed2')[0]
+    myelin = prob_myel > 0.2
         # TODO: more intelligent way to select myelin 
         # (e.g. remove mito first)
 #         prob_mito = loadh5(datadir, dataset + '_probs2_eed2.h5')
@@ -190,6 +190,8 @@ def main(argv):
         if sigmoidweighting_MM:
             outpf = outpf + '_sw'
             distsum, lmask = sigmoid_weighted_distance(MM, MA, elsize)
+            writeh5(distsum, datadir, dset_name + outpf + '_distsum', 
+                    element_size_um=elsize, dtype='float')
             MM = watershed(distsum, grey_dilation(MA, size=(3,3,3)), 
                            mask=np.logical_and(myelin, datamask))
             writeh5(MM, datadir, dset_name + outpf, element_size_um=elsize)
@@ -222,8 +224,9 @@ def main(argv):
             seeds_UA = seeds_neighbours(dset_info, seeds_UA, UAsegfile)
         if UAknossosfile:
             outpf = outpf + UAknossosfile
-            seeds_UA = seeds_knossos(dset_info, seeds_UA, 'UA', UAknossosfile)
+            seeds_UA = seeds_knossos(dset_info, seeds_UA, 'UA', outpf)
         # watershed
+        outpf = outpf + '_ws'
         UA = watershed(-data, seeds_UA, 
                        mask=np.logical_and(datamask, ~np.logical_or(MM,MA)))
         # save results
@@ -231,7 +234,7 @@ def main(argv):
     
     ### combine the MM, MA and UA segmentations
     if not PAfile:
-        outpf = 'PA'
+        outpf = '_PA'
         writeh5(MA+MM+UA, datadir, dset_name + outpf, element_size_um=elsize)
 
 def dataset_name(dname_info):
@@ -404,9 +407,10 @@ def sigmoid_weighted_distance(MM, MA, elsize):
     distsum = np.ones_like(MM, dtype='float')
     medwidth = {}
     for i,l in enumerate(np.unique(MA)[1:]):  # TODO: implement mpi?
+        print(i,l)
         dist = distance_transform_edt(MA!=l, sampling=np.absolute(elsize))
         # get the median distance at the outer rim:
-        MMfilled = MA+MM
+        MMfilled = MA + MM
         binim = MMfilled == l
         rim = np.logical_xor(binary_erosion(binim), binim)
         medwidth[l] = np.median(dist[rim])
@@ -417,6 +421,8 @@ def sigmoid_weighted_distance(MM, MA, elsize):
         # median width weighted sigmoid transform on distance function
         weighteddist = expit(dist/medwidth[l])  # TODO: create more pronounced transform
         distsum = np.minimum(distsum, weighteddist)
+    
+    return distsum, lmask
 
 def loadh5(datadir, dname, fieldname='stack'):
     """"""

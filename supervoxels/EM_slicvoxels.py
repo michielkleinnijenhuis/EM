@@ -5,6 +5,7 @@ import sys
 import argparse
 from skimage import segmentation
 import h5py
+import numpy as np
 
 def main(argv):
     
@@ -28,6 +29,7 @@ def main(argv):
     
     inputfile = args.inputfile
     outputfile = args.outputfile
+    sigma = args.sigma
     
     f = h5py.File(inputfile, 'r')
     
@@ -59,8 +61,7 @@ def main(argv):
     
     n_segm = inds.size / args.supervoxelsize
     compactness = args.compactness
-    spac = [es for es in element_size_um]
-    sigma = [es*args.sigma for es in spac]
+    spac = [es for es in np.absolute(element_size_um)]
     ec = args.enforceconnectivity
     
     segments = segmentation.slic(inds, 
@@ -70,10 +71,13 @@ def main(argv):
                                  sigma=sigma, 
                                  multichannel=mc, 
                                  convert2lab=False, 
-                                 enforce_connectivity=ec)  # TODO: conn???
+                                 enforce_connectivity=ec)
     segments = segments + 1
+    print("Number of supervoxels: ", np.amax(segments))
     sv = h5py.File(outputfile, 'w')
-    sv.create_dataset(outfield, data=segments, compression="gzip")
+    dset = sv.create_dataset(outfield, segments.shape, 
+                             dtype='int64', compression='gzip')
+    dset[:] = segments
     if element_size_um is not None:
         sv[outfield].attrs['element_size_um'] = element_size_um
     sv.close()
