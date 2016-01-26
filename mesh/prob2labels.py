@@ -301,7 +301,7 @@ def seeds_neighbours(dset_info, seeds, segfile,
     
     return seeds
 
-def seeds_knossos(dset_info, seeds, comp, write_pf, fixval=None):
+def seeds_knossos(dset_info, seeds, comp, write_pf, fixval=None, fill_edges=True, dilate_seeds=False):
     """"""
     dset_name = dataset_name(dset_info)
     
@@ -311,33 +311,52 @@ def seeds_knossos(dset_info, seeds, comp, write_pf, fixval=None):
     objs = get_knossos_controlpoints(annotationfile)
     for obj in objs:
         print(obj['name'])
+        # ...
         if fixval:
             objval = fixval
         else:
             objval = int(obj['name'][3:7])
+        # ...
+        points = []
         for _, coords in obj['nodedict'].iteritems():
-            # knossos-coords are in 1-based, yxz-order, 1000x1000x430 frame
-            # (for m000_01000-02000_01000-02000_00030-00460.h5)q
-            knossosoffset = [1000,1000,30]  # (yxz)  # FIXME!!!
-            # index into the main dataset (5217x4460x460)
-            coord_x = coords[1] + knossosoffset[1] - 1 # - dset_info['x']
-            coord_y = coords[0] + knossosoffset[0] - 1 # - dset_info['y']
-            coord_z = coords[2] + knossosoffset[2] - 1 # - dset_info['z']
-            # index into loaded subset
-            coord_x = coord_x - dset_info['x']
-            coord_y = coord_y - dset_info['y']
-            coord_z = coord_z - dset_info['z']  # - 100  # FIXME!!!
-#             print(coords, [coord_z,coord_y,coord_x])
+            points.append(knossoscoord2dataset(dset_info, coords))
+        # ...
+        if fill_edges:
+            for edge in obj['edgelist']:
+                point0 = knossoscoord2dataset(dset_info, obj['nodedict'][edge[0]])
+                point1 = knossoscoord2dataset(dset_info, obj['nodedict'][edge[1]])
+                points_z = np.linspace(point0[0], point1[0], 100).astype(int)
+                points_y = np.linspace(point0[1], point1[1], 100).astype(int)
+                points_x = np.linspace(point0[2], point1[2], 100).astype(int)
+                p = [[z,y,x] for z,y,x in zip(points_z, points_y, points_x)]
+                points = points + p
+        # ...
+        for point in points:
             try:
-                seeds[coord_z,coord_y,coord_x] = objval
+                seeds[point[0],point[1],point[2]] = objval
             except:
                 pass
-#                 print([coord_z,coord_y,coord_x], 'in ', str(objval), ' out of range')
+    if dilate_seeds:
+        seeds = grey_dilation(seeds, size=(3,3,3))
     
     writeh5(seeds, dset_info['datadir'], dset_name + write_pf, 
             element_size_um=dset_info['elsize'])
     
     return seeds
+
+def knossoscoord2dataset(dset_info, coords, knossosoffset=[1000,1000,30]):
+    # knossos-coords are in 1-based, yxz-order, 1000x1000x430 frame
+    # (for m000_01000-02000_01000-02000_00030-00460.h5)q
+    # index into the main dataset (5217x4460x460)
+    coord_x = coords[1] + knossosoffset[1] - 1 # - dset_info['x']
+    coord_y = coords[0] + knossosoffset[0] - 1 # - dset_info['y']
+    coord_z = coords[2] + knossosoffset[2] - 1 # - dset_info['z']
+    # index into loaded subset
+    coord_x = coord_x - dset_info['x']
+    coord_y = coord_y - dset_info['y']
+    coord_z = coord_z - dset_info['z']  # - 100  # FIXME!!!
+#     print(coords, [coord_z,coord_y,coord_x])
+    return [coord_z, coord_y, coord_x]
 
 
 def remove_largest(MA):
