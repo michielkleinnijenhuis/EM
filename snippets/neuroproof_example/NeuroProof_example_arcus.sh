@@ -4,6 +4,8 @@ datadir=$DATA/EM/NeuroProof/examples
 
 
 ###############################################################################
+# convert to h5
+
 module load python/2.7 mpi4py/1.3.1 
 module load hdf5-parallel/1.8.14_mvapich2
 
@@ -32,6 +34,7 @@ rsync -avz ndcn0180@arcus.oerc.ox.ac.uk:/data/ndcn-fmrib-water-brain/ndcn0180/EM
 
 
 ###############################################################################
+# boundary prediction
 
 module unload python/2.7 mpi4py/1.3.1 
 module unload hdf5-parallel/1.8.14_mvapich2
@@ -77,6 +80,7 @@ qsub -q develq $datadir/submit.sh
 
 
 ###############################################################################
+# gala segmentation
 
 module load python/2.7 mpi4py/1.3.1 
 module load hdf5-parallel/1.8.14_mvapich2
@@ -114,6 +118,7 @@ qsub -q develq $datadir/submit.sh
 
 
 ###############################################################################
+# neuroproof graph
 
 module unload python/2.7 mpi4py/1.3.1 
 module unload hdf5-parallel/1.8.14_mvapich2

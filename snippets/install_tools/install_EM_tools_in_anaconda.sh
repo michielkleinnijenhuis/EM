@@ -81,3 +81,18 @@ pip install git+git://github.com/Rhoana/fast64counter@master
 cd ~/workspace/h5py
 python setup.py install --record files.txt && cat files.txt | xargs rm -rf
 python setup.py install
+
+
+### development version 0.12-dev0 of scikit-image to circumvent segfault when running slic with enforce_connectivity=True ###
+# local
+conda create --name scikit-image-devel_p35 python=3.5
+source activate scikit-image-devel_p35
+conda install numpy
+pip install git+git://github.com/scikit-image/scikit-image@master
+
+# ARC
+module load python/3.4__gcc-4.8
+conda create --name scikit-image-devel_p34 python=3.4 numpy scipy h5py matplotlib six networkx pillow dask
+source activate scikit-image-devel_p34
+pip install git+git://github.com/scikit-image/scikit-image@master
+# NOTE: start from scratch or unload module first before running slic
