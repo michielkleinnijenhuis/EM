@@ -7,7 +7,6 @@ import pickle
 import math
 
 import numpy as np
-import matplotlib.pyplot as plt
 from time import time
 from scipy.signal import gaussian
 from mpi4py import MPI
@@ -65,6 +64,8 @@ def main(argv):
     num_inliers = args.num_inliers
     usempi = args.usempi
     plotpairs = args.plotpairs
+    if plotpairs:
+        import matplotlib.pyplot as plt
     
     # get the image collection
     imgs = io.ImageCollection(path.join(datadir,'*.tif'))
