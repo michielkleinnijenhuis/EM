@@ -9,7 +9,6 @@ import glob
 
 import numpy as np
 
-from matplotlib.pylab import c_, r_
 from scipy.optimize import minimize
 from skimage.transform import SimilarityTransform
 
@@ -20,11 +19,11 @@ def main(argv):
     
     # parse arguments
     parser = ArgumentParser(description=
-        'Generate matching point-pairs for stack registration.')
+        'Optimize transformation matrices for all pointpairs.')
     parser.add_argument('inputdir', help='a directory with pickles')
+    parser.add_argument('outputfile', help='file to write results to')
     parser.add_argument('-r', '--regex', default='*.pickle', 
                         help='regular expression to select files with')
-    parser.add_argument('outputfile', help='file to write results to')
     parser.add_argument('-a', '--method', default='L-BGFS-B', 
                         help='minimization method')
     parser.add_argument('-i', '--maxiter', type=int, default=100, 
@@ -181,14 +180,14 @@ def obj_fun_global(pars, pairs, pc_factors, n_slcs, n_tiles, local_nrs, usempi=0
                    if i in local_nrs]
     for i, (p,s,d,_,w) in local_pairs:
         # homogenize pointsets
-        d = c_[d, np.ones(d.shape[0])]
-        s = c_[s, np.ones(s.shape[0])]
+        d = np.c_[d, np.ones(d.shape[0])]
+        s = np.c_[s, np.ones(s.shape[0])]
         # transform d/s points to image000 space
         d = d.dot(H[p[0][0],p[0][1],:,:].T)[:,:2]
         s = s.dot(H[p[1][0],p[1][1],:,:].T)[:,:2]
         wse = w * (d - s)**2
         # concatenate the weighted squared errors of all the pairs
-        wses = r_[wses, wse]
+        wses = np.r_[wses, wse]
     # and sum
     sse = np.sum(wses)
     
