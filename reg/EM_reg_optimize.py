@@ -6,7 +6,7 @@ from argparse import ArgumentParser
 import pickle
 import math
 import glob
-
+from random import sample
 import numpy as np
 
 from scipy.optimize import minimize
@@ -24,6 +24,8 @@ def main(argv):
     parser.add_argument('outputfile', help='file to write results to')
     parser.add_argument('-r', '--regex', default='*.pickle', 
                         help='regular expression to select files with')
+    parser.add_argument('-n', '--npairs', type=int, default=100, 
+                        help='number of pairs to use in optimization')
     parser.add_argument('-a', '--method', default='L-BGFS-B', 
                         help='minimization method')
     parser.add_argument('-i', '--maxiter', type=int, default=100, 
@@ -36,11 +38,12 @@ def main(argv):
     args = parser.parse_args()
     
     inputdir = args.inputdir
-    regex = args.regex
     outputfile = args.outputfile
     p,_ = path.split(outputfile)
     if not path.exists(p):
         makedirs(p)
+    regex = args.regex
+    npairs = args.npairs
     method = args.method
     maxiter = args.maxiter
     pc_factors = args.pc_factors
@@ -48,7 +51,7 @@ def main(argv):
     
     
     # load pairs
-    pairs, n_slcs, n_tiles = load_pairs(inputdir, regex)
+    pairs, n_slcs, n_tiles = load_pairs(inputdir, regex, npairs)
     
     
     # distribute the job
@@ -107,7 +110,7 @@ def scatter_series(n, comm, size, rank):
     
     return local_nrs
 
-def load_pairs(inputdir, regex):
+def load_pairs(inputdir, regex, npairs=100):
     """Load a previously generated set of pairs."""
     
     pairfiles = glob.glob(path.join(inputdir, regex))
@@ -117,7 +120,13 @@ def load_pairs(inputdir, regex):
     tilenr = 0
     for pairfile in pairfiles:
         p, src, dst, model, w = pickle.load(open(pairfile, 'rb'))
-        pairs.append((p, src, dst, model, w))
+        population = range(0, src.shape[0])
+        try:
+            pairnrs = sample(population, npairs)
+        except ValueError:
+            pairnrs = [i for i in population]
+            print("TOO LITTLE DATA for pair in %s!" % pairfile)
+        pairs.append((p, src[pairnrs,:], dst[pairnrs,:], model, w))
         slcnr = max(p[0][0], slcnr)
         tilenr = max(p[0][1], tilenr)
     
