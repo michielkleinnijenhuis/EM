@@ -25,7 +25,7 @@ def main(argv):
     # parse arguments
     parser = ArgumentParser(description=
         'Generate matching point-pairs for stack registration.')
-    parser.add_argument('datadir', help='a directory with images')
+    parser.add_argument('imgdir', help='a directory with images')
     parser.add_argument('-o', '--outputdir', 
                         help='directory to write results')
     parser.add_argument('-t', '--n_tiles', type=int, default=4, 
@@ -44,13 +44,15 @@ def main(argv):
                         help='the number of ransac inliers to look for')
     parser.add_argument('-p', '--plotpairs', action='store_true', 
                         help='create plots of point-pairs')
+    parser.add_argument('-u', '--pairs', 
+                        help='pickle with pairs to process')
     parser.add_argument('-m', '--usempi', action='store_true', 
                         help='use mpi4py')
     args = parser.parse_args()
     
-    datadir = args.datadir
+    imgdir = args.imgdir
     if not args.outputdir:
-        outputdir = datadir
+        outputdir = imgdir
     else:
         outputdir = args.outputdir
         if not path.exists(outputdir):
@@ -64,11 +66,9 @@ def main(argv):
     num_inliers = args.num_inliers
     usempi = args.usempi
     plotpairs = args.plotpairs
-    if plotpairs:
-        import matplotlib.pyplot as plt
     
     # get the image collection
-    imgs = io.ImageCollection(path.join(datadir,'*.tif'))
+    imgs = io.ImageCollection(path.join(imgdir,'*.tif'))
     n_slcs = len(imgs) / n_tiles
     imgs = [imgs[(slc+1)*n_tiles-n_tiles:slc*n_tiles+4] 
             for slc in range(0, n_slcs)]
@@ -79,12 +79,17 @@ def main(argv):
                       ['y', 0, 2],['y', 1, 3],
                       ['x', 0, 1],['x', 2, 3],
                       ['d1', 0, 3]]
-    unique_pairs = generate_unique_pairs(n_slcs, offsets, connectivities)
-    pairstring = 'unique_pairs' + \
-                 '_c' + str(offsets) + \
-                 '_d' + str(downsample_factor)
-    pairfile = path.join(outputdir, pairstring + '.pickle')
-    pickle.dump(unique_pairs, open(pairfile, 'wb'))
+    if args.pairs:
+        with open(args.pairs, 'rb') as f:
+            pairs = pickle.load(f)
+    else:
+        pairs = generate_unique_pairs(n_slcs, offsets, connectivities)
+        pairstring = 'unique_pairs' + \
+                     '_c' + str(offsets) + \
+                     '_d' + str(downsample_factor)
+        pairfile = path.join(outputdir, pairstring + '.pickle')
+        with open(pairfile, 'wb') as f:
+            pickle.dump(pairs, f)
     
     
     # get the feature class
@@ -98,17 +103,17 @@ def main(argv):
         rank = comm.Get_rank()
         size = comm.Get_size()
         # scatter the pairs
-        local_nrs = scatter_series(len(unique_pairs), comm, size, rank)
+        local_nrs = scatter_series(len(pairs), comm, size, rank)
     else:
-        local_nrs = np.array(range(0, len(unique_pairs)), dtype=int)
+        local_nrs = np.array(range(0, len(pairs)), dtype=int)
     
     # process the assigned pairs
-    local_pairs = [(i,up) for i,up in enumerate(unique_pairs) 
+    local_pairs = [(i,up) for i,up in enumerate(pairs) 
                    if i in local_nrs]
     for pid, p in local_pairs:  # FIXME: handle case where get_pair fails
-        pair = get_pair(outputdir, imgs, p, pid, offsets, 
-                        downsample_factor, overlap_fraction, orb, k, plotpairs, 
-                        residual_threshold, num_inliers)
+        get_pair(outputdir, imgs, p, pid, offsets, 
+                 downsample_factor, overlap_fraction, orb, k, plotpairs, 
+                 residual_threshold, num_inliers)
     
     return 0
 
@@ -212,6 +217,9 @@ def reset_imregions(ptype, kp_im1, kp_im2, overlap_pixels, imshape):
 
 def plot_pair_ransac(outputdir, pairstring, p, full_im1, full_im2, kp_im1, kp_im2, matches, inliers):
     """Create plots of orb keypoints vs. ransac inliers."""
+
+    import matplotlib.pyplot as plt
+
     fig, (ax1,ax2) = plt.subplots(2,1)
     plot_matches(ax1, full_im1, full_im2, kp_im1, kp_im2, 
                  matches, only_matches=True)
@@ -264,8 +272,8 @@ def get_pair(outputdir, imgs, p, pid, offsets, downsample_factor,
     if plotpairs:
         plot_pair_ransac(outputdir, pairstring, p, f1, f2, kp1, kp2, matches, inliers)
     
-    print('Pair %04d done in: %6.2f s; matches: %05d; inliers: %05d' 
-          % (pid, time() - pair_tstart, len(matches), np.sum(inliers)))
+    print('%s (no %04d) done in: %6.2f s; matches: %05d; inliers: %05d' 
+          % (pairstring, pid, time() - pair_tstart, len(matches), np.sum(inliers)))
     
     return pair
 
