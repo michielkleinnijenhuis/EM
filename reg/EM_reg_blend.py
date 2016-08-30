@@ -10,7 +10,6 @@ from skimage import io
 
 from skimage.transform import rescale
 import math
-from matplotlib.pylab import c_
 from scipy.ndimage.interpolation import map_coordinates
 from scipy.misc import imsave
 from mpi4py import MPI
@@ -69,7 +68,7 @@ def main(argv):
     y = np.linspace(canvas_bounds[0,1], canvas_bounds[1,1], 
                     canvas_bounds[1,1]-canvas_bounds[0,1])
     X, Y = np.meshgrid(x, y)  # [y,x] shape
-    coordinates = c_[np.ndarray.flatten(X), np.ndarray.flatten(Y),
+    coordinates = np.c_[np.ndarray.flatten(X), np.ndarray.flatten(Y),
                      np.ones_like(np.ndarray.flatten(X))]  # [x,y]
     canvasshape = X.shape
     
@@ -144,7 +143,7 @@ def get_canvas_bounds(imshape, n_slcs, n_tiles, H):
     c = np.empty([n_slcs, n_tiles, 4, 2])
     for i in range(0, n_slcs):
         for j in range(0, n_tiles):
-            ch = c_[corner_coords, np.ones(corner_coords.shape[0])]
+            ch = np.c_[corner_coords, np.ones(corner_coords.shape[0])]
             c[i,j,:,:] = ch.dot(H[i,j,:,:].T)[:,:2]
     
     # determine the bounds of the final canvas
