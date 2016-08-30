@@ -258,7 +258,13 @@ def get_pair(outputdir, imgs, p, pid, offsets, downsample_factor,
     
     w = k[offsets - (p[1][0] - p[0][0])]
     
-    pair = (p, src[inliers], dst[inliers], model, w)
+    # transform from downsampled space to full
+    S = np.array([[downsample_factor, 0, 0],
+                  [0, downsample_factor, 0],
+                  [0,0,1]])
+    s = np.c_[src, np.ones(src.shape[0])].dot(S)[inliers,:2]
+    d = np.c_[dst, np.ones(dst.shape[0])].dot(S)[inliers,:2]
+    pair = (p, s, d, model, w)
     
     pairstring = 'pair' + \
                  '_c' + str(offsets) + \
