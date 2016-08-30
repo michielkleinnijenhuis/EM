@@ -20,7 +20,7 @@ def main(argv):
     
     # parse arguments
     parser = ArgumentParser(description=
-        'Generate matching point-pairs for stack registration.')
+        'Blend tiles to montage.')
     parser.add_argument('inputdir', help='a directory with original images')
     parser.add_argument('betasfile', 
                         help='files with transformations [theta,tx,ty]: \
