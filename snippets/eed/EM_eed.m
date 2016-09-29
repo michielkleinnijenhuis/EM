@@ -22,5 +22,5 @@ else
 end
 
 u = CoherenceFilter(data, struct('T', 50, 'dt', 1, 'rho', 1, 'Scheme', 'R', 'eigenmode', 2, 'verbose', 'full'));
-h5create(fname, outfield, size(u), 'Deflate', 4, 'Chunksize', stackinfo.Chunksize(2:4));
+h5create(fname, outfield, size(u), 'Deflate', 4, 'Chunksize', stackinfo.ChunkSize(2:4));
 h5write(fname, outfield, u);
