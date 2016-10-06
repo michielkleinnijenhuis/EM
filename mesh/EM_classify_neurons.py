@@ -21,32 +21,30 @@ def main(argv):
     parser = ArgumentParser(description=""".""")
     parser.add_argument('datadir', help='...')
     parser.add_argument('dset_name', help='...')
-    parser.add_argument('-p', '--input_prob', default='_probs', help='...')
-    parser.add_argument('-f', '--fieldnamein', default='volume/predictions', help='...')
-    parser.add_argument('-c', '--channels', type=int, nargs=2, default=[0, 2], help='...')
+    parser.add_argument('-p', '--input_probs', nargs=2, 
+                        default=['_myelin', '_membrane'], help='...')
+    parser.add_argument('-f', '--fieldnamesin', nargs=2, 
+                        default=['stack', 'stack'], help='...')
     parser.add_argument('-w', '--input_watershed', default='_ws', help='...')
     parser.add_argument('-o', '--output_postfix', default='_per', help='...')
-    parser.add_argument('-l', '--lower_thresholds', type=float, nargs=2, default=[0.2, 0.3], help='...')
-    parser.add_argument('-m', '--usempi', action='store_true', help='use mpi4py')
+    parser.add_argument('-m', '--usempi', action='store_true', 
+                        help='use mpi4py')
     args = parser.parse_args()
 
     datadir = args.datadir
     dset_name = args.dset_name
-    input_prob = args.input_prob
-    fieldnamein = args.fieldnamein
-    channels = args.channels
+    input_probs = args.input_probs
+    fieldnamesin = args.fieldnamesin
     input_watershed = args.input_watershed
     output_postfix = args.output_postfix
-    lower_thresholds = args.lower_thresholds
     usempi = args.usempi & ('mpi4py' in sys.modules)
 
 
-    prob, elsize = loadh5(datadir, dset_name + input_prob, fieldname=fieldnamein)
-    probmask1 = prob[:,:,:,channels[0]] > lower_thresholds[0]
-    probmask2 = prob[:,:,:,channels[1]] > lower_thresholds[1]
-    prob = None
+    probmask1, elsize = loadh5(datadir, dset_name + input_probs[0], 
+                               fieldname=fieldnamesin[0])
+    probmask2, elsize = loadh5(datadir, dset_name + input_probs[1], 
+                               fieldname=fieldnamesin[1])
     ws = loadh5(datadir, dset_name + input_watershed)[0]
-
     labels = np.unique(ws)[1:]  # assumes there is a 0 background label!
 
     if usempi:
@@ -76,7 +74,6 @@ def main(argv):
         p1 = float(nvox_myel)/nvox
         p2 = float(nvox_unmyel)/nvox
         perc.append([p1, p2, p1-p2])
-
     perc = np.array(perc, dtype='float')
 
     if usempi:
