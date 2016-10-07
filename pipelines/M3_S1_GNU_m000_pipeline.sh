@@ -14,20 +14,18 @@ module load hdf5-parallel/1.8.14_mvapich2
 # ssh -Y ndcn0180@arcus-b.arc.ox.ac.uk
 source ~/.bashrc
 module load hdf5-parallel/1.8.14_mvapich2_intel #module load hdf5-parallel/1.8.14_mvapich2
-module load mvapich2/2.0.1__intel-2015
+#module load mvapich2/2.0.1__intel-2015
 module load mpi4py/1.3.1
 module load python/2.7__gcc-4.8
 module load matlab/R2015a
 # sacct --format=JobID,Timelimit,elapsed,ReqMem,MaxRss,AllocCPUs,AveVMSize,MaxVMSize,CPUTime,ExitCode | less
 
-
 ###=====================###
 ### variable definition ###
 ###=====================###
-
-scriptdir="$HOME/workspace/EM"
-oddir=$DATA/EM/M3/20Mar15/montage/Montage_
-datadir="$DATA/EM/M3/M3_S1_GNU" && cd $datadir
+scriptdir="${HOME}/workspace/EM"
+oddir="${DATA}/EM/M3/20Mar15/montage/Montage_"
+datadir="${DATA}/EM/M3/M3_S1_GNU" && cd ${datadir}
 dataset='m000'
 refsect='0250'
 pixprob_trainingset="pixprob_training"
