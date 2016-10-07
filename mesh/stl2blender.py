@@ -29,11 +29,13 @@ def main(argv):
     parser.add_argument('stldir', help='the input data directory')
     parser.add_argument('outfilename', help='the output file name')
     parser.add_argument('-L', '--labelimages', default=['UA'], nargs='+', help='...')
+    parser.add_argument('-d', '--decimationparams', type=float, nargs='+', help='...')
+    parser.add_argument('-s', '--smoothparams', type=float, nargs='+', help='...')
     parser.add_argument('-e', '--ecs_shrinkvalue', type=float, help='...')
-    parser.add_argument('-s', '--smoothparams', type=float, nargs=2, help='...')
-    parser.add_argument('-d', '--decimation', type=float, help='...')
     parser.add_argument('-c', '--connect', action='store_true',
                         help='connect fibres into one object')
+    parser.add_argument('-r', '--randomcolour', action='store_true',
+                        help='assign a random colour to each axon')
     
     args = parser.parse_args(argv)
     
@@ -42,8 +44,9 @@ def main(argv):
     compartments = args.labelimages
     ecs_shrinkvalue = args.ecs_shrinkvalue
     smoothparams = args.smoothparams
-    decimation = args.decimation
+    decimationparams = args.decimationparams
     connect = args.connect
+    randomcolour = args.randomcolour
     
 #     compartments = ['NN', 'DD', 'MM', 'MA', 'UA', 'mito', 'vesicles', 'synapses']
     # TODO: default to all compartments in stldir
@@ -51,19 +54,30 @@ def main(argv):
     for comp in compartments:
         fps = glob(os.path.join(stldir, comp + '*.stl'))
         nonmanifolds = {}
+        colour = [random() for _ in range(0,3)]
+        mat = make_material('mat', colour, 0.2)
         for fp in fps:
             O.import_mesh.stl(filepath=fp)
             ob = C.scene.objects.active
             consistent_outward_normals(ob)
-            if decimation:
-                decimate_mesh(ob, decimation)
-            if smoothparams:
-                smooth_mesh(ob, smoothparams[0], smoothparams[1])
-            if ecs_shrinkvalue:
-                shrink_mesh(ob, ecs_shrinkvalue)
-            colour = [random() for _ in range(0,3)]
-            transparent_mat = make_material('mat', colour, 0.2)
-            set_material(ob, transparent_mat)
+            decimate_mesh_planar(ob)
+            triangulate_mesh(ob)
+            smooth_mesh_default(ob, use_x=False, use_y=False)
+            smooth_mesh_laplacian(ob)
+#             if decimationparams is not None:
+#                 decimate_mesh_planar(ob)
+#                 triangulate_mesh(ob)
+#             if smoothparams is not None:
+#                 if smoothparams[0]:
+#                     smooth_mesh_laplacian(ob, smoothparams[1], smoothparams[2], smoothparams[3])
+#                 else:
+#                     smooth_mesh_default(ob, smoothparams[1], smoothparams[2])
+#             if ecs_shrinkvalue:
+#                 shrink_mesh(ob, ecs_shrinkvalue)
+            if randomcolour:
+                colour = [random() for _ in range(0,3)]
+                mat = make_material('mat', colour, 0.2)
+            set_material(ob, mat)
             activate_viewport_transparency(ob)
             idxs = non_manifold_vertices(ob)
             if idxs:
@@ -128,30 +142,70 @@ def non_manifold_vertices(ob):
     # [i.co for i in ob.data.vertices if i.select]
     return idxs
 
-def decimate_mesh(ob, ratio):
+def decimate_mesh_default(ob, ratio=0.1, vg=""):
     """"""
-    O.object.select_all(action='DESELECT')
-    ob.select = True
-    O.object.modifier_add(type='DECIMATE')
-    C.object.modifiers["Decimate"].ratio = ratio
-    O.object.modifier_apply(apply_as='DATA', modifier="Decimate")
+    mod = ob.modifiers.new("decimate", type='DECIMATE')
+    mod.decimate_type = 'COLLAPSE'
+    mod.ratio = ratio
+    mod.vertex_group = vg
+    mod.use_collapse_triangulate = True
+    O.object.modifier_apply(modifier=mod.name)
+    print('mesh ' + vg + 
+          ' collapsed according to ratio: ' + 
+          str(ratio))
+
+def decimate_mesh_planar(ob, angle_limit=0.0174533, vg=""):
+    """"""
+    mod = ob.modifiers.new("decimate", type='DECIMATE')
+    mod.decimate_type = 'DISSOLVE'
+    mod.angle_limit = angle_limit
+    mod.vertex_group = vg
+    O.object.modifier_apply(modifier=mod.name)
+    print('mesh ' + vg + 
+          ' dissolved according to angle: ' + 
+          str(angle_limit))
 
 def shrink_mesh(ob, value):
     """"""
     O.object.select_all(action='DESELECT')
     ob.select = True
     O.object.mode_set(mode='EDIT')
-    O.transform.shrink_fatten(value=value)
+    O.transform.shrink_fatten(value=value)  # (value=0.0, mirror=False, proportional='DISABLED', proportional_edit_falloff='SMOOTH', proportional_size=1.0, snap=False, snap_target='CLOSEST', snap_point=(0.0, 0.0, 0.0), snap_align=False, snap_normal=(0.0, 0.0, 0.0), release_confirm=False)
     O.object.mode_set(mode='OBJECT')
 
-def smooth_mesh(ob, factor, iterations):
+def smooth_mesh_default(ob, iterations=10, factor=0.5, use_x=True, use_y=True, use_z=True):
     """"""
-    O.object.select_all(action='DESELECT')
-    ob.select = True
-    O.object.modifier_add(type='SMOOTH')
-    C.object.modifiers["Smooth"].factor = factor
-    C.object.modifiers["Smooth"].iterations = iterations
-    O.object.modifier_apply(apply_as='DATA', modifier="Smooth")
+    mod = ob.modifiers.new("smooth", type='SMOOTH')
+    mod.iterations = iterations
+    mod.factor = factor
+    mod.use_x = use_x
+    mod.use_y = use_y
+    mod.use_z = use_z
+    O.object.modifier_apply(modifier=mod.name)
+
+def smooth_mesh_laplacian(ob, iterations=100, lambda_factor=0.2, lambda_border=0.01, use_x=True, use_y=True, use_z=True, vg=""):
+    """"""
+    mod = ob.modifiers.new("laplaciansmooth", type='LAPLACIANSMOOTH')
+    mod.iterations = iterations
+    mod.lambda_factor = lambda_factor
+    mod.lambda_border = lambda_border
+    mod.use_x = use_x
+    mod.use_y = use_y
+    mod.use_z = use_z
+    mod.vertex_group = vg
+    mod.use_volume_preserve = True
+    mod.use_normalized = True
+    O.object.modifier_apply(modifier=mod.name)
+
+def triangulate_mesh(ob):
+    """Triangulate the mesh."""
+    C.scene.objects.active = ob
+    C.tool_settings.mesh_select_mode=(True,False,False)
+    O.object.mode_set(mode = 'EDIT')
+    O.mesh.select_all(action='SELECT')
+    O.mesh.quads_convert_to_tris()
+    O.object.mode_set(mode='OBJECT')
+
 
 if __name__ == "__main__":
     main(sys.argv)
