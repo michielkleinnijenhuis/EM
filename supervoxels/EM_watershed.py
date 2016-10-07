@@ -52,8 +52,8 @@ def main(argv):
     seeds = label(np.logical_and(prob_ics>lower_threshold, prob_ics<=upper_threshold))[0]
     remove_small_objects(seeds, min_size=seed_size, in_place=True)
     seeds = relabel_sequential(seeds)[0]
-    writeh5(seeds, datadir, dset_name + outpf + "seeds", element_size_um=elsize, dtype='int32')
-    print(len(np.unique(seeds)))
+#     writeh5(seeds, datadir, dset_name + outpf + "seeds", element_size_um=elsize, dtype='int32')
+#     print(len(np.unique(seeds)))
     MA = watershed(-prob_ics, seeds, mask=np.logical_and(~myelin, datamask))
     writeh5(MA, datadir, dset_name + outpf, element_size_um=elsize, dtype='int32')
 
