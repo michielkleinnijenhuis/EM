@@ -63,6 +63,12 @@ def main(argv):
                         '_' + str(y).zfill(nzfills) + '-' + str(Y).zfill(nzfills) + \
                         '_' + str(z).zfill(nzfills) + '-' + str(Z).zfill(nzfills)
     
+    surfname = 'dmcsurf'
+    if enforceECS:
+        surfname = surfname + '_enforceECS'
+    surfdir = os.path.join(datadir, dataset, surfname)
+    mkdir_p(surfdir)
+    
     ### load the mask
     if maskimages:
         mask = loadh5(datadir, dataset + maskimages[0], fieldnamein)[0]
@@ -92,14 +98,16 @@ def main(argv):
             labeldata = enforce_ECS(labeldata)
             writeh5(labeldata, datadir, dataset + l + '_enforceECS', 
                     element_size_um=elsize)
-        labels2meshes_vtk(datadir, compdict, np.transpose(labeldata), 
+        labels2meshes_vtk(surfdir, compdict, np.transpose(labeldata), 
                           spacing=np.absolute(elsize)[::-1], offset=zyxOffset[::-1])
         ECSmask[labeldata>0] = True
     
     compdict['ECS'] = [1]
     binary_fill_holes(ECSmask, output=ECSmask)
+    writeh5(~ECSmask, datadir, dataset + '_ECSmask', 
+            element_size_um=elsize)
     
-    labels2meshes_vtk(datadir, compdict, np.transpose(ECSmask), 
+    labels2meshes_vtk(surfdir, compdict, np.transpose(~ECSmask), 
                       spacing=np.absolute(elsize)[::-1], 
                       offset=zyxOffset[::-1])
 
@@ -175,7 +183,7 @@ def enforce_ECS(labelimage, MA_labels=[]):
     #     L[labelimage==MA] = MA
     return L
 
-def labels2meshes_vtk(datadir, compdict, labelimage, labels=[], spacing=[1,1,1], offset=[0,0,0], nvoxthr=0):
+def labels2meshes_vtk(surfdir, compdict, labelimage, labels=[], spacing=[1,1,1], offset=[0,0,0], nvoxthr=0):
     """"""
     if not labels:
         labels = np.unique(labelimage)
@@ -201,9 +209,6 @@ def labels2meshes_vtk(datadir, compdict, labelimage, labels=[], spacing=[1,1,1],
     dmc.SetInput(vol)
     dmc.ComputeNormalsOn()
     
-    surfdir = 'dmcsurf'
-    mkdir_p(os.path.join(datadir, surfdir))
-    
     for ii,label in enumerate(labels):
         for labelclass, labels in compdict.items():
             if label in labels:
@@ -211,8 +216,7 @@ def labels2meshes_vtk(datadir, compdict, labelimage, labels=[], spacing=[1,1,1],
             else:
                 labelclass = 'NN'
         ndepth = 1
-        fpath = os.path.join(datadir, surfdir,
-                             labelclass + 
+        fpath = os.path.join(surfdir, labelclass + 
                              '.{:05d}.{:02d}.stl'.format(label, ndepth))
         print("Processing labelnr " + str(ii) + 
               " of class " + labelclass + 
