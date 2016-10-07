@@ -15,6 +15,7 @@ import h5py
 import numpy as np
 import xml.etree.ElementTree
 from skimage.morphology import watershed, square
+from skimage.measure import label
 from scipy.ndimage.morphology import grey_dilation, \
     binary_erosion, binary_dilation, binary_closing, binary_fill_holes
 from scipy.special import expit
@@ -106,6 +107,14 @@ def main(argv):
     if element_size_um is not None:
         elsize = element_size_um
     dset_info['elsize'] = elsize
+
+    ### get a mask for invalid data ranges
+    if maskfile:
+        datamask = loadh5(datadir, dset_name + maskfile)[0]
+    else:
+        datamask = data != 0
+        datamask = binary_dilation(binary_fill_holes(datamask))  # TODO
+
 #     if not UAfile:
     data = gaussian_filter(data, gsigma)
     
@@ -115,15 +124,13 @@ def main(argv):
     myelin = prob_myel > 0.2
         # TODO: more intelligent way to select myelin 
         # (e.g. remove mito first)
-#         prob_mito = loadh5(datadir, dataset + '_probs2_eed2.h5')
+#     probs = loadh5(datadir, dset_name + '_probs', 'volume/predictions')[0]
+#     prob_mito = probs[:,:,:,2]
+    prob_mito = loadh5(datadir, dataset + '_probs2_eed2.h5')[0]
+    mito = prob_mito > 0.3
+    writeh5(mito, datadir, dset_name + '_mito', element_size_um=elsize)
 #         myelin = np.logical_and(prob_myel > 0.2, prob_mito < 0.2)
     
-    ### get a mask for invalid data ranges
-    if maskfile:
-        datamask = loadh5(datadir, dset_name + maskfile)[0]
-    else:
-        datamask = data != 0
-        datamask = binary_dilation(binary_fill_holes(datamask))  # TODO
     
     ### get the single-section segmentation
     if SEfile:
@@ -159,9 +166,11 @@ def main(argv):
         if MAknossosfile:
             outpf = outpf + MAknossosfile
             seeds_MA = seeds_knossos(dset_info, seeds_MA, 'MA', outpf)
+#             seeds_MA = seeds_knossos(dset_info, seeds_MA, 'MA', outpf, dilate_seeds=(3,3,3))
         if UAknossosfile:
             outpf = outpf + UAknossosfile
             seeds_MA = seeds_knossos(dset_info, seeds_MA, 'UA', outpf, 1)
+#             seeds_MA = seeds_knossos(dset_info, seeds_MA, 'UA', outpf, 1, dilate_seeds=(3,3,3))
         # watershed
         outpf = outpf + '_ws'
         MA = watershed(-data, seeds_MA, 
@@ -224,11 +233,16 @@ def main(argv):
             seeds_UA = seeds_neighbours(dset_info, seeds_UA, UAsegfile)
         if UAknossosfile:
             outpf = outpf + UAknossosfile
-            seeds_UA = seeds_knossos(dset_info, seeds_UA, 'UA', outpf)
+#             seeds_UA = seeds_knossos(dset_info, seeds_UA, 'UA', outpf)
+        # for a single uninterupted skeleton, it should be one connected component (8-conn?)
+        # it might be good to create an immutable 'core' tube first and ws from there (interpolate knossos control points?)
+            seeds_UA = seeds_knossos(dset_info, seeds_UA, 'UA', outpf, dilate_seeds=(7,7,7))
         # watershed
         outpf = outpf + '_ws'
         UA = watershed(-data, seeds_UA, 
                        mask=np.logical_and(datamask, ~np.logical_or(MM,MA)))
+        # might need a smoothing step here
+
         # save results
         writeh5(UA, datadir, dset_name + outpf, element_size_um=elsize)
     
@@ -301,7 +315,7 @@ def seeds_neighbours(dset_info, seeds, segfile,
     
     return seeds
 
-def seeds_knossos(dset_info, seeds, comp, write_pf, fixval=None, fill_edges=True, dilate_seeds=False):
+def seeds_knossos(dset_info, seeds, comp, write_pf, fixval=None, fill_edges=True, dilate_seeds=None):
     """"""
     dset_name = dataset_name(dset_info)
     
@@ -309,13 +323,14 @@ def seeds_knossos(dset_info, seeds, comp, write_pf, fixval=None, fill_edges=True
                                   dset_name + '_knossos', 
                                   'annotation_' + comp + '.xml')
     objs = get_knossos_controlpoints(annotationfile)
-    for obj in objs:
-        print(obj['name'])
+    for i, obj in enumerate(objs):
         # ...
         if fixval:
             objval = fixval
-        else:
+        elif obj['name'] is not None:
             objval = int(obj['name'][3:7])
+        else:
+            objval = i
         # ...
         points = []
         for _, coords in obj['nodedict'].iteritems():
@@ -336,8 +351,9 @@ def seeds_knossos(dset_info, seeds, comp, write_pf, fixval=None, fill_edges=True
                 seeds[point[0],point[1],point[2]] = objval
             except:
                 pass
-    if dilate_seeds:
-        seeds = grey_dilation(seeds, size=(3,3,3))
+        print(objval, points)
+    if dilate_seeds is not None:
+        seeds = grey_dilation(seeds, size=dilate_seeds)
     
     writeh5(seeds, dset_info['datadir'], dset_name + write_pf, 
             element_size_um=dset_info['elsize'])
@@ -358,35 +374,6 @@ def knossoscoord2dataset(dset_info, coords, knossosoffset=[1000,1000,30]):
 #     print(coords, [coord_z,coord_y,coord_x])
     return [coord_z, coord_y, coord_x]
 
-
-def remove_largest(MA):
-    """"""
-    bc = np.bincount(np.ravel(MA))
-    largest_label = bc[1:].argmax() + 1
-    MA[MA==largest_label] = 0
-    print("largest label {!s} was removed".format(largest_label))
-    
-    return MA
-
-def fill_holes(MA):
-    """"""
-    for l in np.unique(MA)[1:]:
-        # fill holes
-        labels = label(MA!=l)[0]
-        labelCount = np.bincount(labels.ravel())
-        background = np.argmax(labelCount)
-        MA[labels != background] = l
-        # closing
-        binim = MA==l
-        binim = binary_closing(binim, iterations=10)
-        MA[binim] = l
-        # fill holes
-        labels = label(MA!=l)[0]
-        labelCount = np.bincount(labels.ravel())
-        background = np.argmax(labelCount)
-        MA[labels != background] = l
-    
-    return MA
 
 def get_knossos_controlpoints(annotationfile):
     """"""
@@ -418,6 +405,37 @@ def get_knossos_controlpoints(annotationfile):
         objs.append(obj)
     
     return objs
+
+
+def remove_largest(MA):
+    """"""
+    bc = np.bincount(np.ravel(MA))
+    largest_label = bc[1:].argmax() + 1
+    MA[MA==largest_label] = 0
+    print("largest label {!s} was removed".format(largest_label))
+    
+    return MA
+
+
+def fill_holes(MA):
+    """"""
+    for l in np.unique(MA)[1:]:
+        # fill holes
+        labels = label(MA!=l)[0]
+        labelCount = np.bincount(labels.ravel())
+        background = np.argmax(labelCount)
+        MA[labels != background] = l
+        # closing
+        binim = MA==l
+        binim = binary_closing(binim, iterations=10)
+        MA[binim] = l
+        # fill holes
+        labels = label(MA!=l)[0]
+        labelCount = np.bincount(labels.ravel())
+        background = np.argmax(labelCount)
+        MA[labels != background] = l
+    
+    return MA
 
 def sigmoid_weighted_distance(MM, MA, elsize):
     """"""
