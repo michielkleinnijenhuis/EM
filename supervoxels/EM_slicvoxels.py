@@ -6,6 +6,8 @@ import argparse
 import numpy as np
 from skimage import segmentation
 import h5py
+import matplotlib.pyplot as plt
+import plotly.plotly as py
 
 def main(argv):
     
@@ -63,7 +65,7 @@ def main(argv):
     
     n_segm = int(inds.size / args.supervoxelsize)
     compactness = args.compactness
-    spac = [es for es in np.absolute(element_size_um)]
+    spac = [es for es in np.absolute(element_size_um)]  # TODO: set spac for elsize=None
     ec = args.enforceconnectivity
     
     segments = segmentation.slic(inds, 
@@ -76,6 +78,13 @@ def main(argv):
                                  enforce_connectivity=ec)
     segments = segments + 1
     print("Number of supervoxels: ", np.amax(segments))
+#     
+#     plt.hist(np.bincount(np.ravel(segments)), 1000)
+#     plt.title("supervoxelsizes")
+#     plt.xlabel("Value")
+#     plt.ylabel("Frequency")
+#     fig = plt.gcf()
+#     plot_url = py.plot_mpl(fig, filename='mpl-basic-histogram')
     
     sv = h5py.File(outputfile, 'w')
     dset = sv.create_dataset(outfield, segments.shape, 
