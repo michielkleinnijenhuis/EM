@@ -12,6 +12,7 @@ from skimage.transform import rescale
 import math
 from scipy.ndimage.interpolation import map_coordinates
 from scipy.misc import imsave
+from skimage import transform as tf
 
 try:
     from mpi4py import MPI
@@ -25,15 +26,21 @@ def main(argv):
     # parse arguments
     parser = ArgumentParser(description="""
         Transform, blend and write images.""")
-    parser.add_argument('inputdir', help='a directory with original images')
+    parser.add_argument('inputdir',
+                        help='a directory with original images')
     parser.add_argument('betasfile',
                         help='files with transformations [theta,tx,ty]: \
                         numpy array n_slcs x n_tiles x 3')
-    parser.add_argument('outputdir', help='directory to write results')
+    parser.add_argument('outputdir',
+                        help='directory to write results')
     parser.add_argument('-d', '--downsample_factor', type=int, default=1,
                         help='the factor to downsample the images by')
     parser.add_argument('-i', '--interpolation_order', type=int, default=1,
                         help='the order for the interpolation')
+    parser.add_argument('-f', '--fixedtile', type=int, nargs=2, default=[0, 0],
+                        help='fixed tile')
+    parser.add_argument('-w', '--transformname', default="EuclideanTransform",
+                        help='scikit-image transform class name')
     parser.add_argument('-m', '--usempi', action='store_true',
                         help='use mpi4py')
     args = parser.parse_args()
@@ -45,6 +52,8 @@ def main(argv):
         makedirs(outputdir)
     downsample_factor = args.downsample_factor
     interpolation_order = args.interpolation_order
+    fixedtile = args.fixedtile
+    transformname = args.transformname
     usempi = args.usempi & ('mpi4py' in sys.modules)
 
     # load betas and make transformation matrices
@@ -52,6 +61,7 @@ def main(argv):
     n_slcs = betas.shape[0]
     n_tiles = betas.shape[1]
     H = tfs_to_H(betas, n_slcs, n_tiles)
+    H = recalculate_transforms(H, fixedtile, transformname, n_slcs, n_tiles)
 
     # get the image collection
     imgs = io.ImageCollection(path.join(inputdir, '*.tif'))
@@ -96,6 +106,7 @@ def main(argv):
 # function defs
 # ========================================================================== #
 
+
 def scatter_series(n, comm, size, rank):
     """Scatter a series of jobnrs over processes."""
 
@@ -136,6 +147,21 @@ def tfs_to_H(tfs, n_slcs, n_tiles):
                                       [math.sin(theta),  math.cos(theta), ty],
                                       [0, 0, 1]])
 
+    return H
+
+
+def recalculate_transforms(H00, fixedtile, transformname, n_slcs, n_tiles):
+    """"""
+    H = np.empty([n_slcs, n_tiles, 3, 3])
+    if (fixedtile[0] == 0) & (fixedtile[1] == 0):
+        H = H00
+    else:
+        Hf = H00[fixedtile[0], fixedtile[1]]
+        Hf = eval("tf.%s(Hf)" % transformname)
+        Hfi = Hf._inv_matrix
+        for i in range(0, n_slcs):
+            for j in range(0, n_tiles):
+                H[i, j, :, :] = H00[i, j, :, :].dot(Hfi)
     return H
 
 

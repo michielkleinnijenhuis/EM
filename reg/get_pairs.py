@@ -27,8 +27,10 @@ def main(argv):
     # parse arguments
     parser = ArgumentParser(description="""
         Generate matching point-pairs for stack registration.""")
-    parser.add_argument('imgdir', help='a directory with images')
-    parser.add_argument('outputdir', help='directory to write results')
+    parser.add_argument('imgdir',
+                        help='a directory with images')
+    parser.add_argument('outputdir',
+                        help='directory to write results')
     parser.add_argument('-u', '--pairs',
                         help='pickle with pairs to process')
     parser.add_argument('-c', '--connectivityfile',
@@ -36,7 +38,8 @@ def main(argv):
     parser.add_argument('-t', '--n_tiles', type=int, default=4,
                         help='the number of tiles in the montage')
     parser.add_argument('-f', '--overlap_fraction', type=float, nargs=2,
-                        default=[0.1, 0.1], help='section overlap in [y,x]')
+                        default=[0.1, 0.1],
+                        help='section overlap in [y,x]')
     parser.add_argument('-o', '--offsets', type=int, default=1,
                         help='the number of sections in z to consider')
     parser.add_argument('-d', '--downsample_factor', type=int, default=1,
@@ -45,8 +48,8 @@ def main(argv):
                         help='scikit-image transform class name')
     parser.add_argument('-k', '--n_keypoints', type=int, default=10000,
                         help='the number of initial keypoints to generate')
-    parser.add_argument('-r', '--residual_threshold', type=float,
-                        default=2, help='inlier threshold for ransac')
+    parser.add_argument('-r', '--residual_threshold', type=float, default=2,
+                        help='inlier threshold for ransac')
     parser.add_argument('-n', '--num_inliers', type=int, default=None,
                         help='the number of ransac inliers to look for')
     parser.add_argument('-p', '--plotpairs', action='store_true',

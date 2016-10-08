@@ -24,15 +24,16 @@ def main(argv):
     # parse arguments
     parser = ArgumentParser(description="""
         Optimize transformation matrices for all pointpairs.""")
-    parser.add_argument('inputdir', help='a directory with pickles')
-    parser.add_argument('outputfile', help='file to write results to')
+    parser.add_argument('inputdir',
+                        help='a directory with pickles')
+    parser.add_argument('outputfile',
+                        help='file to write results to')
     parser.add_argument('-r', '--regex', default='*.pickle',
                         help='regular expression to select files with')
-    parser.add_argument('-f', '--fixedtile', type=int, nargs=2,
-                        default=[0, 0],
-                        help='fixed tile')
+#     parser.add_argument('-f', '--fixedtile', type=int, nargs=2, default=[0, 0],
+#                         help='fixed tile')
     parser.add_argument('-w', '--transformname', default="EuclideanTransform",
-                        help='scikit-image transform class name')  # TODO: get from previous step!
+                        help='scikit-image transform class name')
     parser.add_argument('-n', '--npairs', type=int, default=100,
                         help='number of pairs to use in optimization')
     parser.add_argument('-a', '--method', default='L-BGFS-B',
@@ -52,7 +53,8 @@ def main(argv):
     if not path.exists(p):
         makedirs(p)
     regex = args.regex
-    fixedtile = args.fixedtile
+#     fixedtile = args.fixedtile
+    fixedtile = [0, 0]
     transformname = args.transformname
     npairs = args.npairs
     method = args.method
@@ -166,18 +168,6 @@ def generate_init_tfs(pairs, n_slcs, n_tiles, fixedtile,
             # if [slcX,tile0] to [slcX-1,tile0]
         if (p[0][1] == p[1][1] == 0) & (p[1][0] - p[0][0] == 1):
             tf0 = tf0.__add__(model)
-
-#     # recalculate wrt to fixed tile
-#     if (fixedtile[0] == 0) & (fixedtile[1] == 0):
-#         pass
-#     else:
-#         Hs = tfs_to_H(init_tfs, n_slcs, n_tiles, transformname)
-#         H_fixed = Hs[fixedtile[0], fixedtile[1]]
-#         Hfi = H_fixed._inv_matrix
-#         H_fixed_inv = eval("tf.%s(Hfi)" % transformname)
-#         for i in range(0, n_slcs):
-#             for j in range(0, n_tiles):
-#                 H[i, j, :, :] = H[i, j, :, :].dot(H_fixed_inv)
 
     return init_tfs
 
