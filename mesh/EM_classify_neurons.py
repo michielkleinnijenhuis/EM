@@ -19,13 +19,15 @@ def main(argv):
 
     # parse arguments
     parser = ArgumentParser(description=""".""")
-    parser.add_argument('datadir', help='...')
-    parser.add_argument('dset_name', help='...')
-    parser.add_argument('-p', '--input_probs', nargs=2, 
-                        default=['_myelin', '_membrane'], help='...')
-    parser.add_argument('-f', '--fieldnamesin', nargs=2, 
-                        default=['stack', 'stack'], help='...')
-    parser.add_argument('-w', '--input_watershed', default='_ws', help='...')
+    parser.add_argument('datadir',
+                        help='...')
+    parser.add_argument('dset_name',
+                        help='...')
+    parser.add_argument('--maskMM', default=['_maskMM', '/stack'], nargs=2,
+                        help='...')
+    parser.add_argument('--maskMB', default=['_maskMB', '/stack'], nargs=2,
+                        help='...')
+    parser.add_argument('--supervoxels', default=['_supervoxels', '/stack'], nargs=2, help='...')
     parser.add_argument('-o', '--output_postfix', default='_per', help='...')
     parser.add_argument('-m', '--usempi', action='store_true', 
                         help='use mpi4py')
@@ -33,19 +35,20 @@ def main(argv):
 
     datadir = args.datadir
     dset_name = args.dset_name
-    input_probs = args.input_probs
-    fieldnamesin = args.fieldnamesin
-    input_watershed = args.input_watershed
+    maskMM = args.maskMM
+    maskMB = args.maskMB
+    supervoxels = args.supervoxels
     output_postfix = args.output_postfix
     usempi = args.usempi & ('mpi4py' in sys.modules)
 
 
-    probmask1, elsize = loadh5(datadir, dset_name + input_probs[0], 
-                               fieldname=fieldnamesin[0])
-    probmask2, elsize = loadh5(datadir, dset_name + input_probs[1], 
-                               fieldname=fieldnamesin[1])
-    ws = loadh5(datadir, dset_name + input_watershed)[0]
-    labels = np.unique(ws)[1:]  # assumes there is a 0 background label!
+    maskMM, elsize = loadh5(datadir, dset_name + maskMM[0],
+                            fieldname=maskMM[1])
+    maskMB = loadh5(datadir, dset_name + maskMB[0],
+                    fieldname=maskMB[1])[0]
+    svox = loadh5(datadir, dset_name + supervoxels[0],
+                  fieldname=supervoxels[1])[0]
+    labels = np.unique(svox)[1:]  # assumes there is a 0 background label!
 
     if usempi:
         # start the mpi communicator
@@ -66,11 +69,11 @@ def main(argv):
 
     perc = []
     for i in local_nrs:
-        mask = ws==labels[i]
+        mask = svox==labels[i]
         maskbound = binary_dilation(mask) - mask
         nvox = maskbound.sum()
-        nvox_myel = np.logical_and(maskbound, probmask1).sum()
-        nvox_unmyel = np.logical_and(maskbound, probmask2).sum()
+        nvox_myel = np.logical_and(maskbound, maskMM).sum()
+        nvox_unmyel = np.logical_and(maskbound, maskMB).sum()
         p1 = float(nvox_myel)/nvox
         p2 = float(nvox_unmyel)/nvox
         perc.append([p1, p2, p1-p2])
@@ -84,9 +87,9 @@ def main(argv):
         percGathered = perc
 
     if ((not usempi) or rank == 0):
-        per = np.zeros_like(ws, dtype='float')
+        per = np.zeros_like(svox, dtype='float')
         for i, l in enumerate(labels):
-            per[ws==l] = percGathered[i,2]
+            per[svox==l] = percGathered[i,2]
         writeh5(per, datadir, dset_name + output_postfix, 
                 dtype='float', element_size_um=elsize)
         fname = os.path.join(datadir, dset_name + output_postfix + '.txt')
