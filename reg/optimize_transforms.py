@@ -21,6 +21,11 @@ except:
 def main(argv):
     """Optimize transformation matrices for all pointpairs."""
 
+    try:
+        from mpi4py import MPI
+    except:
+        print("mpi4py could not be loaded")
+
     # parse arguments
     parser = ArgumentParser(description="""
         Optimize transformation matrices for all pointpairs.""")
@@ -78,15 +83,16 @@ def main(argv):
         # generate initilization point and send to all processes
         init_tfs = np.zeros([n_slcs, n_tiles, 3])
         if rank == 0:
-            init_tfs = generate_init_tfs(pairs, n_slcs, n_tiles)
+            init_tfs = generate_init_tfs(pairs, n_slcs, n_tiles,
+                                         fixedtile, transformname)
         comm.Bcast(init_tfs, root=0)
     else:
         MPI = None
         SUM = None
         comm = None
         local_nrs = np.array(range(0, len(pairs)), dtype=int)
-        init_tfs = generate_init_tfs(pairs, n_slcs, n_tiles, fixedtile,
-                                     transformname)
+        init_tfs = generate_init_tfs(pairs, n_slcs, n_tiles,
+                                     fixedtile, transformname)
 
     # run minimization
     if method == 'init':
@@ -97,7 +103,7 @@ def main(argv):
                        args=(pairs, pc_factors, n_slcs, n_tiles, fixedtile,
                              local_nrs, usempi, comm, SUM),
                        method=method,  # L-BGFS-B  # Nelder-Mead  # Powell
-                       options={'maxfun': 100000,
+                       options={'maxfun': 100000000,
                                 'maxiter': maxiter,
                                 'disp': True})
         betas = decondition_betas(res.x, pc_factors)
@@ -118,7 +124,7 @@ def scatter_series(n, comm, size, rank, SLL):
     """Scatter a series of jobnrs over processes."""
 
     nrs = np.array(range(0, n), dtype=int)
-    local_n = np.ones(size, dtype=int) * n / size
+    local_n = np.ones(size, dtype=int) * int(math.floor(n / size))
     local_n[0:n % size] += 1
     local_nrs = np.zeros(local_n[rank], dtype=int)
     displacements = tuple(sum(local_n[0:r]) for r in range(0, size))
@@ -137,7 +143,9 @@ def load_pairs(inputdir, regex, npairs=100):
     slcnr = 0
     tilenr = 0
     for pairfile in pairfiles:
-        p, src, dst, model, w = pickle.load(open(pairfile, 'rb'))
+        p, src, dst, model, w = pickle.load(open(pairfile, 'rb'))  # , encoding='latin1'
+        if np.isnan(model.params).any():
+            w = 0
         population = range(0, src.shape[0])
         try:
             pairnrs = sample(population, npairs)
@@ -236,13 +244,16 @@ def obj_fun_global(pars, pairs, pc_factors, n_slcs, n_tiles, fixedtile,
     wses = np.empty([0, 2])
     for i in local_nrs:
         p, s, d, _, w = pairs[i]
-        # homogenize pointsets
-        d = np.c_[d, np.ones(d.shape[0])]
-        s = np.c_[s, np.ones(s.shape[0])]
-        # transform d/s points to image000 space
-        d = d.dot(H[p[0][0], p[0][1], :, :].T)[:, :2]
-        s = s.dot(H[p[1][0], p[1][1], :, :].T)[:, :2]
-        wse = w * (d - s)**2
+        if w > 0:
+            # homogenize pointsets
+            d = np.c_[d, np.ones(d.shape[0])]
+            s = np.c_[s, np.ones(s.shape[0])]
+            # transform d/s points to image000 space
+            d = d.dot(H[p[0][0], p[0][1], :, :].T)[:, :2]
+            s = s.dot(H[p[1][0], p[1][1], :, :].T)[:, :2]
+            wse = w * (d - s)**2
+        else:
+            wse = 0
         # concatenate the weighted squared errors of all the pairs
         wses = np.r_[wses, wse]
     # and sum

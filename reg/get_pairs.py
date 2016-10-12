@@ -5,6 +5,7 @@ from os import path, makedirs
 from argparse import ArgumentParser
 import pickle
 import math
+from random import sample
 
 import numpy as np
 from time import time
@@ -76,7 +77,7 @@ def main(argv):
 
     # get the image collection (reshaped to n_slcs x n_tiles)
     imgs = io.ImageCollection(path.join(imgdir, '*.tif'))
-    n_slcs = len(imgs) / n_tiles
+    n_slcs = int(len(imgs) / n_tiles)
     imgs = [imgs[(slc + 1) * n_tiles - n_tiles:slc * n_tiles + n_tiles]
             for slc in range(0, n_slcs)]
 
@@ -93,6 +94,8 @@ def main(argv):
                 pairs = pickle.load(f)
         except:
             pairs = find_missing_pairs(outputdir, unique_pairs, offsets, ds)
+#             pairs = find_small_pairs(outputdir, unique_pairs, offsets, ds, npairs=10)
+#             pairs = find_failed_pairs(outputdir, unique_pairs, offsets, ds)
     else:
         pairs = unique_pairs
 
@@ -206,12 +209,50 @@ def find_missing_pairs(directory, unique_pairs, offsets, ds):
     missing_pairs = []
     for p in unique_pairs:
         pairstring = generate_pairstring(offsets, ds, p)
+        pairfile = path.join(directory, pairstring + ".pickle")
         try:
-            open(path.join(directory, pairstring + ".pickle"), 'rb')
+            open(pairfile, 'rb')
         except:
             missing_pairs.append(p)
 
     return missing_pairs
+
+
+def find_small_pairs(directory, unique_pairs, offsets, ds, npairs=100):
+    """Get a list of failed pairs.
+
+    list is of the form [[slcIm1, tileIm1], [slcIm2, tileIm2], 'type']
+    """
+
+    failed_pairs = []
+    for p in unique_pairs:
+        pairstring = generate_pairstring(offsets, ds, p)
+        pairfile = path.join(directory, pairstring + ".pickle")
+        p, src, _, model, _ = pickle.load(open(pairfile, 'rb'))
+        population = range(0, src.shape[0])
+        try:
+            sample(population, npairs)
+        except ValueError:
+            failed_pairs.append(p)
+
+    return failed_pairs
+
+
+def find_failed_pairs(directory, unique_pairs, offsets, ds):
+    """Get a list of failed pairs.
+
+    list is of the form [[slcIm1, tileIm1], [slcIm2, tileIm2], 'type']
+    """
+
+    failed_pairs = []
+    for p in unique_pairs:
+        pairstring = generate_pairstring(offsets, ds, p)
+        pairfile = path.join(directory, pairstring + ".pickle")
+        p, _, _, model, _ = pickle.load(open(pairfile, 'rb'))
+        if np.isnan(model.params).any():
+            failed_pairs.append(p)
+
+    return failed_pairs
 
 
 def downsample_images(p, imgs, ds):

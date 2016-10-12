@@ -151,7 +151,8 @@ def tfs_to_H(tfs, n_slcs, n_tiles):
 
 
 def recalculate_transforms(H00, fixedtile, transformname, n_slcs, n_tiles):
-    """"""
+    """Recompute transformation matrices wrt a different reference tile."""
+
     H = np.empty([n_slcs, n_tiles, 3, 3])
     if (fixedtile[0] == 0) & (fixedtile[1] == 0):
         H = H00
@@ -162,6 +163,7 @@ def recalculate_transforms(H00, fixedtile, transformname, n_slcs, n_tiles):
         for i in range(0, n_slcs):
             for j in range(0, n_tiles):
                 H[i, j, :, :] = H00[i, j, :, :].dot(Hfi)
+
     return H
 
 
@@ -191,28 +193,38 @@ def blend_tiles(outputdir, n_tiles, local_slcs, canvasshape, coordinates,
 
     for i, tiles in local_slcs:
         # warp
-        imgslc = np.zeros([canvasshape[0], canvasshape[1], n_tiles])  # [y, x]
+        # imgslc in [y, x] order
+        imgslc = np.zeros([canvasshape[0], canvasshape[1], n_tiles])
         disslc = np.zeros([canvasshape[0], canvasshape[1], n_tiles])
         for j, tile in enumerate(tiles):
 
-            tf_coord = coordinates.dot(np.linalg.inv(H[i, j, :, :]).T)[:, :2]  # [x, y]
-            tf_coord = np.reshape(tf_coord.T, (2, canvasshape[0], canvasshape[1]))
-            tf_coord[[0, 1], :, :] = tf_coord[[1, 0], :, :]  # [y,x]
+            # tf_coord in [x, y] order
+            tf_coord = coordinates.dot(np.linalg.inv(H[i, j, :, :]).T)[:, :2]
+            newshape = (2, canvasshape[0], canvasshape[1])
+            tf_coord = np.reshape(tf_coord.T, newshape)
+            # tf_coord in [y, x] order
+            tf_coord[[0, 1], :, :] = tf_coord[[1, 0], :, :]
 
             if ds > 1:
                 im = rescale(tile, 1./ds)
             else:
-                im = tile  # [y,x]
-            imgslc[:, :, j] = map_coordinates(im, tf_coord, order=order)  # tfcoord should be [y,x] if im is [y,x]
-            disslc[:, :, j] = map_coordinates(distance_image, tf_coord, order=order)
+                im = tile  # tile in [y, x] order
+            # tfcoord should be [y, x] if im is [y, x]!
+            imgslc[:, :, j] = map_coordinates(im, tf_coord, order=order)
+            disslc[:, :, j] = map_coordinates(distance_image, tf_coord,
+                                              order=order)
 
         # blend
-        imgcanvas = np.zeros([canvasshape[0], canvasshape[1]])  # [y,x]
-        nzcount = np.sum(disslc != 0, axis=2)  # map with number of contributing tiles
+        # imgcanvas in [y, x] order
+        imgcanvas = np.zeros([canvasshape[0], canvasshape[1]])
+        # nzcount is a map with number of contributing tiles
+        nzcount = np.sum(disslc != 0, axis=2)
         distmp = disslc[nzcount > 0]
         s = np.tile(np.expand_dims(np.sum(distmp, axis=1), 1), (1, n_tiles))
-        w = np.divide(distmp, s)  # map of weights
-        imgcanvas[nzcount > 0] = np.sum(np.multiply(imgslc[nzcount > 0], w), axis=1)
+        # w is a map of weights
+        w = np.divide(distmp, s)
+        imgcanvas[nzcount > 0] = np.sum(np.multiply(imgslc[nzcount > 0], w),
+                                        axis=1)
 
         # save
         imsave(path.join(outputdir, str(i).zfill(4) + '.tif'), imgcanvas)
