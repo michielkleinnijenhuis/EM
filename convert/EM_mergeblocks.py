@@ -10,20 +10,28 @@ from argparse import ArgumentParser
 import h5py
 import numpy as np
 
+
 def main(argv):
-    
-    parser = ArgumentParser(description='...')
-    
-    parser.add_argument('-i', '--inputfiles', nargs='*', help='...')
-    parser.add_argument('-f', '--field', default='stack', help='...')
-    parser.add_argument('-o', '--outputfile', help='...')
-    parser.add_argument('-l', '--outlayout', help='...')
-    parser.add_argument('-b', '--blockoffset', nargs='*', type=int, help='...')
-    parser.add_argument('-c', '--chunksize', nargs='*', type=int, help='...')
-    parser.add_argument('-e', '--element_size_um', nargs='*', type=float, help='...')
-    
+    """Merge blocks of data into a single .h5 file."""
+
+    parser = ArgumentParser(description="""
+        Merge blocks of data into a single .h5 file.""")
+    parser.add_argument('-i', '--inputfiles', nargs='*',
+                        help='...')
+    parser.add_argument('-f', '--field', default='stack',
+                        help='...')
+    parser.add_argument('-o', '--outputfile',
+                        help='...')
+    parser.add_argument('-l', '--outlayout',
+                        help='...')
+    parser.add_argument('-b', '--blockoffset', nargs='*', type=int,
+                        help='...')
+    parser.add_argument('-c', '--chunksize', nargs='*', type=int,
+                        help='...')
+    parser.add_argument('-e', '--element_size_um', nargs='*', type=float,
+                        help='...')
     args = parser.parse_args()
-    
+
     inputfiles = args.inputfiles
     outputfile = args.outputfile
     field = args.field
@@ -31,9 +39,9 @@ def main(argv):
     blockoffset = args.blockoffset
     element_size_um = args.element_size_um
     outlayout = args.outlayout
-    
+
     for i, filename in enumerate(inputfiles):
-        
+
         f = h5py.File(filename, 'r')
         head, tail = os.path.split(filename)
         fname, ext = os.path.splitext(tail)
@@ -44,29 +52,29 @@ def main(argv):
         Y = int(parts[2].split("-")[1]) - blockoffset[1]
         z = int(parts[3].split("-")[0]) - blockoffset[2]
         Z = int(parts[3].split("-")[1]) - blockoffset[2]
-        
+
         if i == 0:
-            
+
             if not outputfile:
                 outputfile = os.path.join(head, parts[0] + '_' + "_".join(parts[4:]) + ext)
-            
+
             if not chunksize:
                 try:
                     chunksize = f[field].chunks
                 except:
                     pass
-            
+
             ndims = len(f[field].shape)
             maxshape = [None] * ndims
-            
+
             otype = 'a' if os.path.isfile(outputfile) else 'w'
             g = h5py.File(outputfile, otype)
-            outds = g.create_dataset(field, f[field].shape, 
-                                     chunks=chunksize, 
-                                     dtype=f[field].dtype, 
+            outds = g.create_dataset(field, f[field].shape,
+                                     chunks=chunksize,
+                                     dtype=f[field].dtype,
                                      maxshape=maxshape,
                                      compression="gzip")
-            
+
             if element_size_um:
                 outds.attrs['element_size_um'] = element_size_um
             else:
@@ -74,28 +82,28 @@ def main(argv):
                     outds.attrs['element_size_um'] = f[field].attrs['element_size_um']
                 except:
                     pass
-            
+
             if outlayout:
-                for i,l in enumerate(outlayout):
+                for i, l in enumerate(outlayout):
                     outds.dims[i].label = l
             else:
                 try:
-                    for i,d in enumerate(f[field].dims):
+                    for i, d in enumerate(f[field].dims):
                         outds.dims[i].label = d.label
                 except:
                     pass
-        
-        for i, newmax in enumerate([Z,Y,X]):
+
+        for i, newmax in enumerate([Z, Y, X]):
             if newmax > g[field].shape[i]:
                 g[field].resize(newmax, i)
-        
+
         if ndims == 3:
-            g[field][z:Z,y:Y,x:X] = f[field][:,:,:]
+            g[field][z:Z, y:Y, x:X] = f[field][:, :, :]
         elif ndims == 4:
-            g[field][z:Z,y:Y,x:X,:] = f[field][:,:,:,:]
-        
+            g[field][z:Z, y:Y, x:X, :] = f[field][:, :, :, :]
+
         f.close()
-    
+
     g.close()
 
 
