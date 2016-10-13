@@ -22,7 +22,9 @@ def main(argv):
     parser.add_argument('-s', '--supervoxels', default=['_svox', '/stack'],
                         nargs=2,
                         help='...')
-    parser.add_argument('-o', '--outpf', default='_labelMA',
+    parser.add_argument('-o', '--outpf_supervoxels', default='_labelMA',
+                        help='...')
+    parser.add_argument('-m', '--outpf_mask', default=None,
                         help='...')
 
     args = parser.parse_args()
@@ -31,20 +33,37 @@ def main(argv):
     dset_name = args.dset_name
     labelvolume = args.labelvolume
     supervoxels = args.supervoxels
-    outpf = args.outpf
+    outpf_supervoxels = args.outpf_supervoxels
+    outpf_mask = args.outpf_mask
 
     labels = loadh5(datadir, dset_name + labelvolume[0],
                     fieldname=labelvolume[1])[0]
     ws, elsize = loadh5(datadir, dset_name + supervoxels[0],
                         fieldname=supervoxels[1])
 
+    maskMA = np.zeros_like(ws, dtype='bool')
+    wsmaskforlabel = np.zeros_like(ws, dtype='bool')
     ulabels = np.trim_zeros(np.unique(labels))
     for l in ulabels:
-        svoxs = np.trim_zeros(np.unique(ws[labels == l]))
-        for sv in svoxs:
-            ws[ws == sv] = svoxs[0]
+        labelmask = labels == l
+        svoxs_in_label = np.trim_zeros(np.unique(ws[labelmask]))
 
-    writeh5(ws, datadir, dset_name + outpf, element_size_um=elsize)
+        if 0:
+            wsmaskforlabel.fill(False)
+            for sv in svoxs_in_label:
+                wsmaskforlabel[ws == sv] = True
+        else:  # via forward_map: ws has to be relabel_sequential'ed!
+            forward_map = [True if i in svoxs_in_label else False
+                           for i in range(0, np.max(ws) + 1)]
+            wsmaskforlabel = np.array(forward_map)[ws]
+
+        ws[wsmaskforlabel] = svoxs_in_label[0]
+        maskMA[wsmaskforlabel] = True
+
+    writeh5(ws, datadir, dset_name + supervoxels[0] + outpf_supervoxels,
+            element_size_um=elsize)
+    writeh5(maskMA, datadir, dset_name + outpf_mask,
+            element_size_um=elsize, dtype='uint8')
 
 
 # ========================================================================== #
