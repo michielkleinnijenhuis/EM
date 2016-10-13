@@ -84,7 +84,8 @@ def main(argv):
     outpf = outpf + '_ws'
     MM = watershed(distance, grey_dilation(MA, size=(3,3,3)), 
                    mask=np.logical_and(maskMM, maskDS))
-    writeh5(MM, datadir, dset_name + outpf, element_size_um=elsize)
+    writeh5(MM, datadir, dset_name + outpf,
+            element_size_um=elsize, dtype='int32')
 
     # watershed on sigmoid-modulated distance transform
     if sigmoidweighting_MM:
@@ -94,7 +95,8 @@ def main(argv):
                 element_size_um=elsize, dtype='float')
         MM = watershed(distsum, grey_dilation(MA, size=(3,3,3)), 
                        mask=np.logical_and(maskMM, maskDS))
-        writeh5(MM, datadir, dset_name + outpf, element_size_um=elsize)
+        writeh5(MM, datadir, dset_name + outpf,
+                element_size_um=elsize, dtype='int32')
     else:  # TODO simple distance th
         lmask = np.zeros((MM.shape[0], MM.shape[1], MM.shape[2], 
                   len(np.unique(MA)[1:])), dtype='bool')
@@ -103,7 +105,8 @@ def main(argv):
         outpf = outpf + '_df'
         for i,l in enumerate(np.unique(MA)[1:]):
             MM[np.logical_and(lmask[:,:,:,i], MM==l)] = 0
-        writeh5(MM, datadir, dset_name + outpf, element_size_um=elsize)
+        writeh5(MM, datadir, dset_name + outpf,
+                element_size_um=elsize, dtype='int32')
 
 
 # ========================================================================== #

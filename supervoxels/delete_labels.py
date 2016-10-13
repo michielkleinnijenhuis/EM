@@ -38,7 +38,7 @@ def main(argv):
         labels[labels==dl] = 0
 
     writeh5(labels, datadir, dset_name + labelvolume[0] + outpf,
-            element_size_um=elsize)
+            element_size_um=elsize, dtype='int32')
 
 
 # ========================================================================== #

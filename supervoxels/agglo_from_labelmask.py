@@ -43,25 +43,25 @@ def main(argv):
 
     maskMA = np.zeros_like(ws, dtype='bool')
     wsmaskforlabel = np.zeros_like(ws, dtype='bool')
+
     ulabels = np.trim_zeros(np.unique(labels))
     for l in ulabels:
         labelmask = labels == l
         svoxs_in_label = np.trim_zeros(np.unique(ws[labelmask]))
 
-        if 0:
-            wsmaskforlabel.fill(False)
-            for sv in svoxs_in_label:
-                wsmaskforlabel[ws == sv] = True
-        else:  # via forward_map: ws has to be relabel_sequential'ed!
+        if svoxs_in_label.any():
+#             wsmaskforlabel.fill(False)
+#             for sv in svoxs_in_label:
+#                 wsmaskforlabel[ws == sv] = True
             forward_map = [True if i in svoxs_in_label else False
                            for i in range(0, np.max(ws) + 1)]
             wsmaskforlabel = np.array(forward_map)[ws]
 
-        ws[wsmaskforlabel] = svoxs_in_label[0]
-        maskMA[wsmaskforlabel] = True
+            ws[wsmaskforlabel] = svoxs_in_label[0]
+            maskMA[wsmaskforlabel] = True
 
     writeh5(ws, datadir, dset_name + supervoxels[0] + outpf_supervoxels,
-            element_size_um=elsize)
+            element_size_um=elsize, dtype='int32')
     writeh5(maskMA, datadir, dset_name + outpf_mask,
             element_size_um=elsize, dtype='uint8')
 

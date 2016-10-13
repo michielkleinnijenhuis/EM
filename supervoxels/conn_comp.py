@@ -56,7 +56,8 @@ def main(argv):
 
     labels = relabel_sequential(labels)[0]
 
-    writeh5(labels, datadir, dset_name + outpf, element_size_um=elsize)
+    writeh5(labels, datadir, dset_name + outpf,
+            element_size_um=elsize, dtype='int32')
 
 
 # ========================================================================== #
