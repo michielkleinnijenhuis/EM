@@ -19,11 +19,6 @@ except:
 def main(argv):
     """Merge blocks of data into a single .h5 file."""
 
-    try:
-        from mpi4py import MPI
-    except:
-        print("mpi4py could not be loaded")
-
     parser = ArgumentParser(description="""
         Merge blocks of data into a single .h5 file.""")
     parser.add_argument('outputfile',
@@ -32,13 +27,7 @@ def main(argv):
                         help='...')
     parser.add_argument('-f', '--field', default='stack',
                         help='...')
-    parser.add_argument('-l', '--outlayout',
-                        help='...')
     parser.add_argument('-b', '--blockoffset', nargs='*', type=int,
-                        help='...')
-    parser.add_argument('-c', '--chunksize', nargs='*', type=int,
-                        help='...')
-    parser.add_argument('-e', '--element_size_um', nargs='*', type=float,
                         help='...')
     parser.add_argument('-m', '--usempi', action='store_true',
                         help='use mpi4py')
@@ -47,12 +36,8 @@ def main(argv):
     outputfile = args.outputfile
     inputfiles = args.inputfiles
     field = args.field
-    chunksize = args.chunksize
     blockoffset = args.blockoffset
-    element_size_um = args.element_size_um
-    outlayout = args.outlayout
     usempi = args.usempi & ('mpi4py' in sys.modules)
-    print(usempi)
 
     ranges = np.empty([len(inputfiles), 6], dtype='int')
     for i, filename in enumerate(inputfiles):
@@ -78,41 +63,34 @@ def main(argv):
     f = h5py.File(inputfiles[0], 'r')
     ndims = len(f[field].shape)
 
+    if ndims == 3:
+        dshape = (maxZ, maxY, maxX)
+    elif ndims == 4:
+        dshape = (maxZ, maxY, maxX, f[field].shape[3])
+
     if rank == 0:
 
         datatype = f[field].dtype
 
         g = h5py.File(outputfile, 'w')
 
-        if not chunksize:
-            try:
-                chunksize = f[field].chunks
-            except:
-                outds = g.create_dataset(field, (maxZ, maxY, maxX),
-                                         dtype=datatype, compression='gzip')
-            else:
-                outds = g.create_dataset(field, (maxZ, maxY, maxX),
-                                         chunks=tuple(chunksize),
-                                         dtype=datatype, compression='gzip')
-
-        if element_size_um:
-            outds.attrs['element_size_um'] = element_size_um
-        else:
-            try:
-                outds.attrs['element_size_um'] = \
-                    f[field].attrs['element_size_um']
-            except:
-                pass
-
-        if outlayout:
-            for i, l in enumerate(outlayout):
-                outds.dims[i].label = l
-        else:
-            try:
-                for i, d in enumerate(f[field].dims):
-                    outds.dims[i].label = d.label
-            except:
-                pass
+        try:
+            outds = g.create_dataset(field, dshape,
+                                     chunks=tuple(f[field].chunks),
+                                     dtype=datatype, compression='gzip')
+        except:
+            outds = g.create_dataset(field, dshape,
+                                     dtype=datatype, compression='gzip')
+        try:
+            outds.attrs['element_size_um'] = \
+                f[field].attrs['element_size_um']
+        except:
+            pass
+        try:
+            for i, d in enumerate(f[field].dims):
+                outds.dims[i].label = d.label
+        except:
+            pass
 
         g.close()
 
