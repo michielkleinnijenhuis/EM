@@ -1,26 +1,22 @@
 #!/usr/bin/env python
 
-"""
-python EM_mergeblocks.py ...
-"""
-
 import os
 import sys
 from argparse import ArgumentParser
 import h5py
 import numpy as np
+from skimage.segmentation import relabel_sequential
 
 
 def main(argv):
-    """Merge blocks of data into a single .h5 file."""
 
     parser = ArgumentParser(description="""
         Merge blocks of data into a single .h5 file.""")
+    parser.add_argument('outputfile',
+                        help='...')
     parser.add_argument('-i', '--inputfiles', nargs='*',
                         help='...')
     parser.add_argument('-f', '--field', default='stack',
-                        help='...')
-    parser.add_argument('-o', '--outputfile',
                         help='...')
     parser.add_argument('-l', '--outlayout',
                         help='...')
@@ -30,81 +26,189 @@ def main(argv):
                         help='...')
     parser.add_argument('-e', '--element_size_um', nargs='*', type=float,
                         help='...')
+    parser.add_argument('-r', '--relabel', action='store_true',
+                        help='...')
+    parser.add_argument('-n', '--neighbourmerge', action='store_true',
+                        help='...')
     args = parser.parse_args()
 
-    inputfiles = args.inputfiles
     outputfile = args.outputfile
+    inputfiles = args.inputfiles
     field = args.field
     chunksize = args.chunksize
     blockoffset = args.blockoffset
     element_size_um = args.element_size_um
     outlayout = args.outlayout
+    relabel = args.relabel
+    neighbourmerge = args.neighbourmerge
 
-    for i, filename in enumerate(inputfiles):
+    f = h5py.File(inputfiles[0], 'r')
+    ndims = len(f[field].shape)
+    g = create_dset(outputfile, f, field, ndims,
+                    chunksize, element_size_um, outlayout)
+    f.close()
+
+    maxlabel = 0
+    for filename in inputfiles:
 
         f = h5py.File(filename, 'r')
-        head, tail = os.path.split(filename)
-        fname, ext = os.path.splitext(tail)
-        parts = fname.split("_")
-        x = int(parts[1].split("-")[0]) - blockoffset[0]
-        X = int(parts[1].split("-")[1]) - blockoffset[0]
-        y = int(parts[2].split("-")[0]) - blockoffset[1]
-        Y = int(parts[2].split("-")[1]) - blockoffset[1]
-        z = int(parts[3].split("-")[0]) - blockoffset[2]
-        Z = int(parts[3].split("-")[1]) - blockoffset[2]
-
-        if i == 0:
-
-            if not outputfile:
-                outputfile = os.path.join(head, parts[0] + '_' + "_".join(parts[4:]) + ext)
-
-            if not chunksize:
-                try:
-                    chunksize = f[field].chunks
-                except:
-                    pass
-
-            ndims = len(f[field].shape)
-            maxshape = [None] * ndims
-
-            otype = 'a' if os.path.isfile(outputfile) else 'w'
-            g = h5py.File(outputfile, otype)
-            outds = g.create_dataset(field, f[field].shape,
-                                     chunks=chunksize,
-                                     dtype=f[field].dtype,
-                                     maxshape=maxshape,
-                                     compression="gzip")
-
-            if element_size_um:
-                outds.attrs['element_size_um'] = element_size_um
-            else:
-                try:
-                    outds.attrs['element_size_um'] = f[field].attrs['element_size_um']
-                except:
-                    pass
-
-            if outlayout:
-                for i, l in enumerate(outlayout):
-                    outds.dims[i].label = l
-            else:
-                try:
-                    for i, d in enumerate(f[field].dims):
-                        outds.dims[i].label = d.label
-                except:
-                    pass
+        x, X, y, Y, z, Z = split_filename(filename, blockoffset)
 
         for i, newmax in enumerate([Z, Y, X]):
             if newmax > g[field].shape[i]:
                 g[field].resize(newmax, i)
 
         if ndims == 3:
-            g[field][z:Z, y:Y, x:X] = f[field][:, :, :]
+
+            if relabel:
+                print('relabeling %s' % filename)
+
+                fw = relabel_sequential(f[field][:, :, :], maxlabel + 1)[1]
+                maxlabel = np.amax(fw)
+
+                if neighbourmerge:
+                    print('merging neighbours')
+                    fw = merge_neighbours(fw, f[field], g[field],
+                                          (x, X, y, Y, z, Z))
+
+                g[field][z:Z, y:Y, x:X] = fw[f[field][:, :, :]]
+
+            else:
+
+                g[field][z:Z, y:Y, x:X] = f[field][:, :, :]
+
         elif ndims == 4:
+
             g[field][z:Z, y:Y, x:X, :] = f[field][:, :, :, :]
 
         f.close()
 
     g.close()
+
+
+# ========================================================================== #
+# function defs
+# ========================================================================== #
+
+
+def split_filename(filename, blockoffset):
+    """Extract the data indices from the filename."""
+
+    tail = os.path.split(filename)[1]
+    fname = os.path.splitext(tail)[0]
+    parts = fname.split("_")
+    x = int(parts[1].split("-")[0]) - blockoffset[0]
+    X = int(parts[1].split("-")[1]) - blockoffset[0]
+    y = int(parts[2].split("-")[0]) - blockoffset[1]
+    Y = int(parts[2].split("-")[1]) - blockoffset[1]
+    z = int(parts[3].split("-")[0]) - blockoffset[2]
+    Z = int(parts[3].split("-")[1]) - blockoffset[2]
+
+    return x, X, y, Y, z, Z
+
+
+def create_dset(outputfile, f, field, ndims,
+                chunksize, element_size_um, outlayout):
+    """Prepare the dataset to hold the merged volume."""
+
+    if not chunksize:
+        try:
+            chunksize = f[field].chunks
+        except:
+            pass
+
+    maxshape = [None] * ndims
+
+    otype = 'a' if os.path.isfile(outputfile) else 'w'
+    g = h5py.File(outputfile, otype)
+    outds = g.create_dataset(field, f[field].shape,
+                             chunks=chunksize,
+                             dtype=f[field].dtype,
+                             maxshape=maxshape,
+                             compression="gzip")
+
+    if element_size_um:
+        outds.attrs['element_size_um'] = element_size_um
+    else:
+        try:
+            outds.attrs['element_size_um'] = f[field].attrs['element_size_um']
+        except:
+            pass
+
+    if outlayout:
+        for i, l in enumerate(outlayout):
+            outds.dims[i].label = l
+    else:
+        try:
+            for i, d in enumerate(f[field].dims):
+                outds.dims[i].label = d.label
+        except:
+            pass
+
+    return g
+
+
+def get_sections(side, fstack, gstack, granges):
+    """Return boundary slice of block and its neighbour."""
+
+    x, X, y, Y, z, Z = granges
+    nb_section = None
+
+    if side == 'xmin':
+        data_section = fstack[:, :, 0]
+        if x > 0:
+            nb_section = gstack[z:Z, y:Y, x-1]
+    elif side == 'xmax':
+        data_section = fstack[:, :, -1]
+        if X < gstack.shape[2]:
+            nb_section = gstack[z:Z, y:Y, X]
+    elif side == 'ymin':
+        data_section = fstack[:, 0, :]
+        if y > 0:
+            nb_section = gstack[z:Z, y-1, x:X]
+    elif side == 'ymax':
+        data_section = fstack[:, -1, :]
+        if Y < gstack.shape[1]:
+            nb_section = gstack[z:Z, Y, x:X]
+    elif side == 'zmin':
+        data_section = fstack[0, :, :]
+        if z > 0:
+            nb_section = gstack[z-1, y:Y, x:X]
+    elif side == 'zmax':
+        data_section = fstack[-1, :, :]
+        if Z < gstack.shape[0]:
+            nb_section = gstack[Z, y:Y, x:X]
+
+    return data_section, nb_section
+
+
+def merge_neighbours(fw, fstack, gstack, granges):
+    """Adapt the forward map to merge neighbouring labels."""
+
+    for side in ['xmin', 'xmax', 'ymin', 'ymax', 'zmin', 'zmax']:
+
+        data_section, nb_section = get_sections(side, fstack, gstack, granges)
+        if nb_section is None:
+            continue
+
+        data_labels = np.trim_zeros(np.unique(data_section))
+        for data_label in data_labels:
+
+            mask_data = data_section == data_label
+            bins = np.bincount(nb_section[mask_data])
+            if len(bins) <= 1:
+                continue
+
+            nb_label = np.argmax(bins[1:]) + 1
+            n_data = np.sum(mask_data)
+            n_nb = bins[nb_label]
+            if float(n_nb) / float(n_data) < 0.1:
+                continue
+
+            fw[data_label] = nb_label
+            print('%s: mapped label %d to %d' % (side, data_label, nb_label))
+
+    return fw
 
 
 if __name__ == "__main__":

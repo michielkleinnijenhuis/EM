@@ -74,13 +74,15 @@ def main(argv):
 
         g = h5py.File(outputfile, 'w')
 
-        try:
+        if f[field].chunks is not None:
+            # NOTE: cannot combine chunks with zip filters
             outds = g.create_dataset(field, dshape,
                                      chunks=tuple(f[field].chunks),
-                                     dtype=datatype, compression='gzip')
-        except:
+                                     dtype=datatype)
+        else:
             outds = g.create_dataset(field, dshape,
-                                     dtype=datatype, compression='gzip')
+                                     dtype=datatype,
+                                     compression='gzip')
         try:
             outds.attrs['element_size_um'] = \
                 f[field].attrs['element_size_um']
@@ -109,9 +111,8 @@ def main(argv):
 
         x, X, y, Y, z, Z = tuple(ranges[i, :])
 
-        data = f[field][:, :, :]
         if ndims == 3:
-            g[field][z:Z, y:Y, x:X] = data
+            g[field][z:Z, y:Y, x:X] = f[field][:, :, :]
         elif ndims == 4:
             g[field][z:Z, y:Y, x:X, :] = f[field][:, :, :, :]
 
