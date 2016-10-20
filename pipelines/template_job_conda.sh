@@ -18,7 +18,7 @@ for n in `seq 0 $((nodes-1))`; do
 
     for t in `seq 0 $((tasks-1))`; do
         datastem=${datastems[n*tasks+t]}
-        echo "${cmd/datastem/$datastem} &" >> $qsubfile
+        echo "${cmd//datastem/$datastem} &" >> $qsubfile
     done
 
     echo "wait" >> $qsubfile
