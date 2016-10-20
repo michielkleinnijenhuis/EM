@@ -20,44 +20,66 @@ def main(argv):
                         help='...')
     parser.add_argument('dset_name',
                         help='...')
+    parser.add_argument('-w', '--method', default="1",
+                        help='...')
     parser.add_argument('-l', '--labelvolume', default=['_labelMA', '/stack'],
                         nargs=2,
                         help='...')
+    parser.add_argument('-m', '--labelmask', default=None, nargs=2,
+                        help='...')
+    parser.add_argument('--maskMM', default=None, nargs=2,
+                        help='...')
+    parser.add_argument('--maskMA', default=None, nargs=2,
+                        help='...')
     parser.add_argument('-o', '--outpf_labelvolume', default='_filled',
                         help='...')
-    parser.add_argument('-w', '--method', default="1",
-                        help='...')
-    parser.add_argument('-m', '--outpf_holes', default=None,
+    parser.add_argument('-p', '--outpf_holes', default=None,
                         help='...')
 
     args = parser.parse_args()
 
     datadir = args.datadir
     dset_name = args.dset_name
+    method = args.method
     labelvolume = args.labelvolume
+    labelmask = args.labelmask
+    maskMM = args.maskMM
+    maskMA = args.maskMA
     outpf_labelvolume = args.outpf_labelvolume
     outpf_holes = args.outpf_holes
-    method = args.method
 
     labels, elsize = loadh5(datadir, dset_name + labelvolume[0],
                             fieldname=labelvolume[1])
+    if labelmask is not None:
+        labelmask = loadh5(datadir, dset_name + labelmask[0],
+                           fieldname=labelmask[1], dtype='bool')[0]
+        labels[~labelmask] = 0
+        del(labelmask)
 
-    if method == "1":
-        labels_filled = fill_holes_method1(labels)
-    elif method == "2":
-        labels_filled = fill_holes_method2(labels)
-    elif method == "3":
-        labels_filled = fill_holes_method3(labels)
+    labels_filled = fill_holes(labels, method)
 
     writeh5(labels_filled, datadir, dset_name + labelvolume[0] + outpf_labelvolume,
             element_size_um=elsize, dtype='int32')
 
-    holes = labels_filled
-    holes[labels>0] = 0
-    writeh5(holes, datadir, dset_name + labelvolume[0] + outpf_holes,
-            element_size_um=elsize, dtype='int32')
+    if outpf_holes is not None:
+        holes = labels_filled
+        holes[labels>0] = 0
+        writeh5(holes, datadir, dset_name + labelvolume[0] + outpf_holes,
+                element_size_um=elsize, dtype='int32')
 
-    # TODO: updated myelin mask
+    if maskMM is not None:
+        mask, elsize = loadh5(datadir, dset_name + maskMM[0],
+                              fieldname=maskMM[1])
+        mask[holes>0] = 0
+        writeh5(mask, datadir, dset_name + maskMM[0] + outpf_labelvolume,
+                element_size_um=elsize, dtype='int32')
+
+    if maskMA is not None:
+        mask, elsize = loadh5(datadir, dset_name + maskMA[0],
+                              fieldname=maskMA[1])
+        mask[labels>0] = 0
+        writeh5(mask, datadir, dset_name + maskMA[0] + outpf_labelvolume,
+                element_size_um=elsize, dtype='int32')
 
 
 # ========================================================================== #
@@ -65,66 +87,44 @@ def main(argv):
 # ========================================================================== #
 
 
-def fill_holes_method1(MA):
+def fill_holes(MA, method):
     """Fill holes in labels."""
 
-    binim = MA != 0
-    # does this bridge seperate MA's? YES, and eats from boundary
-    # binim = binary_closing(binim, iterations=10)
-    holes = label(~binim, connectivity=1)
+    if method == '1':
+        binim = MA != 0
+        # does this bridge seperate MA's? YES, and eats from boundary
+        # binim = binary_closing(binim, iterations=10)
+        holes = label(~binim, connectivity=1)
 
-    labelCount = np.bincount(holes.ravel())
-    background = np.argmax(labelCount)
-    holes[holes == background] = 0
+        labelCount = np.bincount(holes.ravel())
+        background = np.argmax(labelCount)
+        holes[holes == background] = 0
 
-    labels_dil = grey_dilation(MA, size=(3,3,3))
+        labels_dil = grey_dilation(MA, size=(3,3,3))
 
-    rp = regionprops(holes, labels_dil)
-    mi = {prop.label: prop.max_intensity for prop in rp}
-    fw = [mi[key] if key in mi.keys() else 0
-          for key in range(0, np.amax(holes) + 1)]
-    fw = np.array(fw)
+        rp = regionprops(holes, labels_dil)
+        mi = {prop.label: prop.max_intensity for prop in rp}
+        fw = [mi[key] if key in mi.keys() else 0
+              for key in range(0, np.amax(holes) + 1)]
+        fw = np.array(fw)
 
-    holes_remapped = fw[holes]
+        holes_remapped = fw[holes]
 
-    MA = np.add(MA, holes_remapped)
+        MA = np.add(MA, holes_remapped)
+
+    elif method == "2":
+
+        for l in np.unique(MA)[1:]:
+            MA[binary_fill_holes(MA == l)] = l
+            MA[binary_closing(MA == l, iterations=10)] = l
+            MA[binary_fill_holes(MA == l)] = l
+
+    elif method == "3":
+
+        for l in np.unique(MA)[1:]:
+            MA[binary_fill_holes(MA == l)] = l
 
     return MA
-
-
-def fill_holes_method2(MA):
-    """Fill holes in labels."""
-
-    ulabels = np.unique(MA)[1:]
-    for l in ulabels:
-        # fill holes
-        labels = label(MA!=l)[0]
-        labelCount = np.bincount(labels.ravel())
-        background = np.argmax(labelCount)
-        MA[labels != background] = l
-        # closing
-        binim = MA==l
-        binim = binary_closing(binim, iterations=10)
-        MA[binim] = l
-        # fill holes
-        labels = label(MA!=l)[0]
-        labelCount = np.bincount(labels.ravel())
-        background = np.argmax(labelCount)
-        MA[labels != background] = l
-
-    return MA
-
-
-def fill_holes_method3(MA):
-    """Fill holes in labels."""
-
-    ulabels = np.unique(MA)[1:]
-    labels_filled = np.copy(MA)
-    for l in ulabels:
-        filled = binary_fill_holes(MA == l)
-        labels_filled[filled] = l
-
-    return labels_filled
 
 
 def loadh5(datadir, dname, fieldname='stack', dtype=None):
