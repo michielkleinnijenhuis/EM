@@ -58,27 +58,29 @@ def main(argv):
 
     labels_filled = fill_holes(labels, method)
 
-    writeh5(labels_filled, datadir, dset_name + labelvolume[0] + outpf_labelvolume,
+    writeh5(labels_filled, datadir,
+            dset_name + labelvolume[0] + outpf_labelvolume,
             element_size_um=elsize, dtype='int32')
 
-    if outpf_holes is not None:
-        holes = labels_filled
-        holes[labels>0] = 0
-        writeh5(holes, datadir, dset_name + labelvolume[0] + outpf_holes,
-                element_size_um=elsize, dtype='int32')
+    if maskMA is not None:
+#         mask = np.zeros_like(labels_filled, dtype='uint8')
+#         mask[labels_filled>0] = 1
+        writeh5(labels_filled.astype('bool'), datadir,
+                dset_name + maskMA[0] + outpf_labelvolume,
+                element_size_um=elsize, dtype='uint8')
+
+    holes = labels_filled
+    holes[labels>0] = 0
 
     if maskMM is not None:
         mask, elsize = loadh5(datadir, dset_name + maskMM[0],
                               fieldname=maskMM[1])
         mask[holes>0] = 0
         writeh5(mask, datadir, dset_name + maskMM[0] + outpf_labelvolume,
-                element_size_um=elsize, dtype='int32')
+                element_size_um=elsize, dtype='uint8')
 
-    if maskMA is not None:
-        mask, elsize = loadh5(datadir, dset_name + maskMA[0],
-                              fieldname=maskMA[1])
-        mask[labels>0] = 0
-        writeh5(mask, datadir, dset_name + maskMA[0] + outpf_labelvolume,
+    if outpf_holes is not None:
+        writeh5(holes, datadir, dset_name + labelvolume[0] + outpf_holes,
                 element_size_um=elsize, dtype='int32')
 
 
