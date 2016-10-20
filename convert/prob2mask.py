@@ -7,6 +7,8 @@ from argparse import ArgumentParser
 import h5py
 import numpy as np
 
+from skimage.morphology import remove_small_objects, binary_dilation, ball
+
 
 def main(argv):
 
@@ -25,6 +27,10 @@ def main(argv):
                         help='...')
     parser.add_argument('-u', '--upper_threshold', type=float, default=1,
                         help='...')
+    parser.add_argument('-s', '--size', type=int, default=0,
+                        help='...')
+    parser.add_argument('-d', '--dilation', type=int, default=0,
+                        help='...')
     parser.add_argument('-o', '--outpf', default='_mask',
                         help='...')
 
@@ -36,6 +42,8 @@ def main(argv):
     channel = args.channel
     lower_threshold = args.lower_threshold
     upper_threshold = args.upper_threshold
+    size = args.size
+    dilation = args.dilation
     outpf = args.outpf
 
     prob, elsize = loadh5(datadir, dset_name + probs[0], fieldname=probs[1])
@@ -44,6 +52,10 @@ def main(argv):
         prob = prob[:, :, :, channel]
 
     mask = np.logical_and(prob > lower_threshold, prob <= upper_threshold)
+    if size:
+        remove_small_objects(mask, min_size=size, in_place=True)
+    if dilation:
+        mask = binary_dilation(mask, selem=ball(dilation))
 
     writeh5(mask, datadir, dset_name + outpf,
             element_size_um=elsize, dtype='uint8')
