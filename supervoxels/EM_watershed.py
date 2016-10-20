@@ -61,9 +61,6 @@ def main(argv):
     prob, elsize = loadh5(datadir, dset_name + probs[0],
                           fieldname=probs[1], channel=channel)
 
-    if channel is not None:
-        prob = prob[:, :, :, channel]
-
     seeds = label(np.logical_and(prob > lower_threshold,
                                  prob <= upper_threshold))[0]
     remove_small_objects(seeds, min_size=seed_size, in_place=True)
