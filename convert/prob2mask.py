@@ -46,10 +46,7 @@ def main(argv):
     dilation = args.dilation
     outpf = args.outpf
 
-    prob, elsize = loadh5(datadir, dset_name + probs[0], fieldname=probs[1])
-
-    if channel is not None:
-        prob = prob[:, :, :, channel]
+    prob, elsize = loadh5(datadir, dset_name + probs[0], fieldname=probs[1], channel=channel)
 
     mask = np.logical_and(prob > lower_threshold, prob <= upper_threshold)
     if size:
@@ -66,7 +63,7 @@ def main(argv):
 # ========================================================================== #
 
 
-def loadh5(datadir, dname, fieldname='stack', dtype=None):
+def loadh5(datadir, dname, fieldname='stack', dtype=None, channel=None):
     """"""
 
     f = h5py.File(os.path.join(datadir, dname + '.h5'), 'r')
@@ -75,7 +72,10 @@ def loadh5(datadir, dname, fieldname='stack', dtype=None):
     if len(f[fieldname].shape) == 3:
         stack = f[fieldname][:, :, :]
     if len(f[fieldname].shape) == 4:
-        stack = f[fieldname][:, :, :, :]
+        if channel is not None:
+            stack = f[fieldname][:, :, :, channel]
+        else:
+            stack = f[fieldname][:, :, :, :]
     if 'element_size_um' in f[fieldname].attrs.keys():
         element_size_um = f[fieldname].attrs['element_size_um']
     else:
