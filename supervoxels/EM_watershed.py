@@ -58,7 +58,8 @@ def main(argv):
                     fieldname=maskDS[1], dtype='bool')[0]
     maskMM = loadh5(datadir, dset_name + maskMM[0],
                     fieldname=maskMM[1], dtype='bool')[0]
-    prob, elsize = loadh5(datadir, dset_name + probs[0], fieldname=probs[1])
+    prob, elsize = loadh5(datadir, dset_name + probs[0],
+                          fieldname=probs[1], channel=channel)
 
     if channel is not None:
         prob = prob[:, :, :, channel]
@@ -79,7 +80,7 @@ def main(argv):
 # ========================================================================== #
 
 
-def loadh5(datadir, dname, fieldname='stack', dtype=None):
+def loadh5(datadir, dname, fieldname='stack', dtype=None, channel=None):
     """"""
 
     f = h5py.File(os.path.join(datadir, dname + '.h5'), 'r')
@@ -88,7 +89,10 @@ def loadh5(datadir, dname, fieldname='stack', dtype=None):
     if len(f[fieldname].shape) == 3:
         stack = f[fieldname][:, :, :]
     if len(f[fieldname].shape) == 4:
-        stack = f[fieldname][:, :, :, :]
+        if channel is not None:
+            stack = f[fieldname][:, :, :, channel]
+        else:
+            stack = f[fieldname][:, :, :, :]
     if 'element_size_um' in f[fieldname].attrs.keys():
         element_size_um = f[fieldname].attrs['element_size_um']
     else:

@@ -46,7 +46,8 @@ def main(argv):
     dilation = args.dilation
     outpf = args.outpf
 
-    prob, elsize = loadh5(datadir, dset_name + probs[0], fieldname=probs[1], channel=channel)
+    prob, elsize = loadh5(datadir, dset_name + probs[0],
+                          fieldname=probs[1], channel=channel)
 
     mask = np.logical_and(prob > lower_threshold, prob <= upper_threshold)
     if size:
