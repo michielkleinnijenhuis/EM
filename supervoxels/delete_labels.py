@@ -16,9 +16,11 @@ def main(argv):
                         help='...')
     parser.add_argument('dset_name',
                         help='...')
-    parser.add_argument('-l', '--labelvolume', default=['_labelMA', '/stack'], nargs=2,
+    parser.add_argument('-l', '--labelvolume', default=['_labelMA', 'stack'], nargs=2,
                         help='...')
     parser.add_argument('-d', '--delete_labels', nargs='*', type=int,
+                        help='...')
+    parser.add_argument('-m', '--merge_labels', nargs='*', type=int,
                         help='...')
     parser.add_argument('-o', '--outpf', default='_manedit',
                         help='...')
@@ -29,6 +31,7 @@ def main(argv):
     dset_name = args.dset_name
     labelvolume = args.labelvolume
     delete_labels = args.delete_labels
+    merge_labels = args.merge_labels
     outpf = args.outpf
 
     labels, elsize = loadh5(datadir, dset_name + labelvolume[0],
@@ -36,6 +39,9 @@ def main(argv):
 
     for dl in delete_labels:
         labels[labels==dl] = 0
+    merge_labels = np.reshape(np.array(merge_labels), (-1, 2))
+    for ml in merge_labels:
+        labels[labels==ml[1]] = ml[0]
 
     writeh5(labels, datadir, dset_name + labelvolume[0] + outpf,
             element_size_um=elsize, dtype='int32')

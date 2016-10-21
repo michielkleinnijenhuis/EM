@@ -26,17 +26,24 @@ for n in `seq 0 $((njobs-1))`; do
     fi
 
     for t in `seq 0 $((tasks-1))`; do
+
         datastem=${datastems[n*tasks+t]}
 
-        if [[ $additions == *"dellabels"* ]]
+        cmdt=$cmd
+
+        if [[ $additions == *"deletelabels"* ]]
         then
-            dellabels=`grep $datastem $editsfile | awk '{$1 = ""; print $0;}'`
-            echo $dellabels
-            tmpcmd=${cmd//datastem/$datastem}
-            echo "${tmpcmd//dellabels/$dellabels} &" >> $qsubfile
-        else
-            echo "${cmd//datastem/$datastem} &" >> $qsubfile
+            deletelabels=`grep $datastem $deletefile | awk '{$1 = ""; print $0;}'`
+            cmdt=${cmdt//deletelabels/$deletelabels}
         fi
+
+        if [[ $additions == *"mergelabels"* ]]
+        then
+            mergelabels=`grep $datastem $mergefile | awk '{$1 = ""; print $0;}'`
+            cmdt=${cmdt//mergelabels/$mergelabels}
+        fi
+
+        echo "${cmdt//datastem/$datastem} &" >> $qsubfile
 
     done
 
