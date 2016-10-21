@@ -20,7 +20,7 @@ def main(argv):
                         help='...')
     parser.add_argument('-d', '--delete_labels', nargs='*', type=int,
                         help='...')
-    parser.add_argument('-o', '--outpf', default='manedit',
+    parser.add_argument('-o', '--outpf', default='_manedit',
                         help='...')
 
     args = parser.parse_args()

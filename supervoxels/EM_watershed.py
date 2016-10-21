@@ -51,8 +51,6 @@ def main(argv):
     upper_threshold = args.upper_threshold
     seed_size = args.seed_size
     outpf = args.outpf
-    outpf = '%s_l%.2f_u%.2f_s%03d' % (outpf, lower_threshold, upper_threshold,
-                                      seed_size)
 
     maskDS = loadh5(datadir, dset_name + maskDS[0],
                     fieldname=maskDS[1], dtype='bool')[0]

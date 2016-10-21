@@ -24,7 +24,7 @@ def main(argv):
                         help='...')
     parser.add_argument('--maskMM', default=['_maskMM', '/stack'], nargs=2,
                         help='...')
-    parser.add_argument('-o', '--outpf', default='_labelMA',
+    parser.add_argument('-o', '--outpf', default='_labelMA_core',
                         help='...')
 
     args = parser.parse_args()

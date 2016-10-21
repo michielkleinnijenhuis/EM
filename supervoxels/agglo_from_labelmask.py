@@ -50,9 +50,6 @@ def main(argv):
         svoxs_in_label = np.trim_zeros(np.unique(ws[labelmask]))
 
         if svoxs_in_label.any():
-#             wsmaskforlabel.fill(False)
-#             for sv in svoxs_in_label:
-#                 wsmaskforlabel[ws == sv] = True
             forward_map = [True if i in svoxs_in_label else False
                            for i in range(0, np.max(ws) + 1)]
             wsmaskforlabel = np.array(forward_map)[ws]
@@ -62,7 +59,10 @@ def main(argv):
 
     writeh5(ws, datadir, dset_name + supervoxels[0] + outpf_supervoxels,
             element_size_um=elsize, dtype='int32')
-    writeh5(maskMA, datadir, dset_name + outpf_mask,
+    ws[~maskMA] = 0
+    writeh5(ws, datadir, dset_name + outpf_supervoxels + supervoxels[0],
+            element_size_um=elsize, dtype='int32')
+    writeh5(maskMA, datadir, dset_name + outpf_mask + supervoxels[0],
             element_size_um=elsize, dtype='uint8')
 
 
