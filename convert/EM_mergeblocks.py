@@ -18,9 +18,15 @@ def main(argv):
                         help='...')
     parser.add_argument('-f', '--field', default='stack',
                         help='...')
+    parser.add_argument('-m', '--mask', nargs=2,
+                        help='...')
     parser.add_argument('-l', '--outlayout',
                         help='...')
-    parser.add_argument('-b', '--blockoffset', nargs='*', type=int,
+    parser.add_argument('-b', '--blockoffset', nargs=3, type=int, default=[0, 0, 0],
+                        help='...')
+    parser.add_argument('-q', '--margin', nargs=3, type=int, default=[0, 0, 0],
+                        help='...')
+    parser.add_argument('-s', '--fullsize', nargs=3, type=int, default=None,
                         help='...')
     parser.add_argument('-c', '--chunksize', nargs='*', type=int,
                         help='...')
@@ -35,8 +41,11 @@ def main(argv):
     outputfile = args.outputfile
     inputfiles = args.inputfiles
     field = args.field
+    mask = args.mask
     chunksize = args.chunksize
     blockoffset = args.blockoffset
+    margin = args.margin
+    fullsize = args.fullsize
     element_size_um = args.element_size_um
     outlayout = args.outlayout
     relabel = args.relabel
@@ -52,34 +61,51 @@ def main(argv):
     for filename in inputfiles:
 
         f = h5py.File(filename, 'r')
-        x, X, y, Y, z, Z = split_filename(filename, blockoffset)
+        _, x, X, y, Y, z, Z = split_filename(filename, blockoffset)
+#         if mask is not None:
+#             dset_info['postfix'] = mask[0]
+#             maskfilename = dataset_name(dset_info)
+#             m = h5py.File(os.path.join(dset_info['datadir'],
+#                                        maskfilename + '.h5'), 'r')
+#             ma = np.array(m[mask[0]][:,:,:], dtype='bool')
+
+        x, ox = margins_lower(x, margin[0], fullsize[0])
+        X, oX = margins_upper(X, margin[0], fullsize[0])
+        y, oy = margins_lower(y, margin[1], fullsize[1])
+        Y, oY = margins_upper(Y, margin[1], fullsize[1])
+        z, oz = margins_lower(z, margin[2], fullsize[2])
+        Z, oZ = margins_upper(Z, margin[2], fullsize[2])
 
         for i, newmax in enumerate([Z, Y, X]):
             if newmax > g[field].shape[i]:
                 g[field].resize(newmax, i)
 
-        if ndims == 3:
+        if ndims == 4:
+            g[field][z:Z, y:Y, x:X, :] = f[field][oz:oZ, oy:oY, ox:oX, :]
+            continue
 
-            if relabel:
-                print('relabeling %s' % filename)
+        if (not relabel) and (not neighbourmerge):
+            g[field][z:Z, y:Y, x:X] = f[field][oz:oZ, oy:oY, ox:oX]
+            continue
 
-                fw = relabel_sequential(f[field][:, :, :], maxlabel + 1)[1]
-                maxlabel = np.amax(fw)
-
-                if neighbourmerge:
-                    print('merging neighbours')
-                    fw = merge_neighbours(fw, f[field], g[field],
-                                          (x, X, y, Y, z, Z))
-
-                g[field][z:Z, y:Y, x:X] = fw[f[field][:, :, :]]
-
+        if relabel:
+            print('relabeling %s' % filename)
+            fw = relabel_sequential(f[field][:, :, :], maxlabel + 1)[1]
+            maxlabel = np.amax(fw)
+        else:
+            labels = np.unique(f[field][:, :, :])
+            fw = np.zeros(np.amax(labels))
+            for l in labels:
+                fw[l] = l
+        if neighbourmerge:
+            print('merging neighbours')
+            if fullsize is None:
+                fw = merge_neighbours(fw, f[field], g[field],
+                                      (x, X, y, Y, z, Z))
             else:
+                pass
 
-                g[field][z:Z, y:Y, x:X] = f[field][:, :, :]
-
-        elif ndims == 4:
-
-            g[field][z:Z, y:Y, x:X, :] = f[field][:, :, :, :]
+        g[field][z:Z, y:Y, x:X] = fw[f[field][oz:oZ, oy:oY, ox:oX]]
 
         f.close()
 
@@ -91,10 +117,26 @@ def main(argv):
 # ========================================================================== #
 
 
-def split_filename(filename, blockoffset):
+def dataset_name(dset_info):
+    """Return the basename of the dataset."""
+
+    nf = dset_info['nzfills']
+    dname = dset_info['base'] + \
+                '_' + str(dset_info['x']).zfill(nf) + \
+                '-' + str(dset_info['X']).zfill(nf) + \
+                '_' + str(dset_info['y']).zfill(nf) + \
+                '-' + str(dset_info['Y']).zfill(nf) + \
+                '_' + str(dset_info['z']).zfill(nf) + \
+                '-' + str(dset_info['Z']).zfill(nf) + \
+                dset_info['postfix']
+
+    return dname
+
+
+def split_filename(filename, blockoffset=[0, 0, 0]):
     """Extract the data indices from the filename."""
 
-    tail = os.path.split(filename)[1]
+    datadir, tail = os.path.split(filename)
     fname = os.path.splitext(tail)[0]
     parts = fname.split("_")
     x = int(parts[1].split("-")[0]) - blockoffset[0]
@@ -104,7 +146,36 @@ def split_filename(filename, blockoffset):
     z = int(parts[3].split("-")[0]) - blockoffset[2]
     Z = int(parts[3].split("-")[1]) - blockoffset[2]
 
-    return x, X, y, Y, z, Z
+    dset_info = {'datadir': datadir, 'base': parts[0],
+                 'nzfills': len(parts[1].split("-")[0]),
+                 'postfix': '_'.join(parts[4:]),
+                 'x': x, 'X': X, 'y': y, 'Y': Y, 'z': z, 'Z': Z}
+
+    return dset_info, x, X, y, Y, z, Z
+
+
+def margins_lower(fc, margin, fullsize):
+    """Return lower coordinate (fullstack and block) corrected for margin."""
+
+    if fc > 0:
+        bc = 0 + margin
+        fc += margin
+    else:
+        bc = 0
+
+    return fc, bc
+
+
+def margins_upper(fC, margin, fullsize):
+    """Return upper coordinate (fullstack and block) corrected for margin."""
+
+    if fC < fullsize:
+        bC = fC - margin
+        fC -= margin
+    else:
+        bC = fC - 0
+
+    return fC, bC
 
 
 def create_dset(outputfile, f, field, ndims,
