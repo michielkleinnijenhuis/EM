@@ -1,14 +1,16 @@
 #!/usr/bin/env python
 
+import os
 import sys
 import argparse
-from os import path
+
+import h5py
+
 from nibabel import Nifti1Image
+
 from skimage.io import imsave
 from skimage import img_as_ubyte
 from skimage.transform import downscale_local_mean
-from os import path, makedirs
-import h5py
 
 
 def main(argv):
@@ -30,8 +32,10 @@ def main(argv):
                         help='hdf5 chunk sizes (in order of outlayout)')
     parser.add_argument('-e', '--element_size_um', type=float, nargs='*',
                         help='dataset element sizes (in order of outlayout)')
-    parser.add_argument('-n', '--nzfills', type=int, default=4,
+    parser.add_argument('-n', '--nzfills', type=int, default=5,
                         help='number of characters at the end that define z')
+    parser.add_argument('-p', '--dset_name', default=None,
+                        help='the identifier of the datablock')
     parser.add_argument('-m', '--enable_multi_output', nargs='*', default=[],
                         help='output the stack in jpg,png,tif,nii,h5')
     parser.add_argument('-r', '--downscale', type=int, nargs='*', default=[],
@@ -52,6 +56,7 @@ def main(argv):
 
     inputfile = args.inputfile
     outputfile = args.outputfile
+    dset_name = args,dset_name
 
     uint8conv = args.uint8conv
 
@@ -107,27 +112,30 @@ def main(argv):
 
     datatype = args.datatype if args.datatype else inds.dtype
 
-    x = args.x
-    if args.X:
-        X = args.X
-    elif 'x' in inlayout:
-        X = inshape[inlayout.index('x')]
+    if dset_name is not None:
+        _, x, X, y, Y, z, Z = split_filename(outputfile)
     else:
-        X = None
-    y = args.y
-    if args.Y:
-        Y = args.Y
-    elif 'y' in inlayout:
-        Y = inshape[inlayout.index('y')]
-    else:
-        Y = None
-    z = args.z
-    if args.Z:
-        Z = args.Z
-    elif 'z' in inlayout:
-        Z = inshape[inlayout.index('z')]
-    else:
-        Z = None
+        x = args.x
+        if args.X:
+            X = args.X
+        elif 'x' in inlayout:
+            X = inshape[inlayout.index('x')]
+        else:
+            X = None
+        y = args.y
+        if args.Y:
+            Y = args.Y
+        elif 'y' in inlayout:
+            Y = inshape[inlayout.index('y')]
+        else:
+            Y = None
+        z = args.z
+        if args.Z:
+            Z = args.Z
+        elif 'z' in inlayout:
+            Z = inshape[inlayout.index('z')]
+        else:
+            Z = None
     c = args.c
     if args.C:
         C = args.C
@@ -142,13 +150,14 @@ def main(argv):
         T = inshape[inlayout.index('t')]
     else:
         T = None
+
     stdsel = [[x, X], [y, Y], [z, Z], [c, C], [t, T]]
     insel = [stdsel[i] for i in std2in]
 
     downscale = tuple(args.downscale)
 
-    b, e1 = path.splitext(outputfile)
-    b, e2 = path.splitext(b)  # catch double extension (e.g., .nii.gz)
+    b, e1 = os.path.splitext(outputfile)
+    b, e2 = os.path.splitext(b)  # catch double extension (e.g., .nii.gz)
     outexts = args.enable_multi_output
     outexts.append(e1 + e2)
     outexts = list(set(outexts))
@@ -203,7 +212,7 @@ def main(argv):
 
         if '.h5' in ext:
             # FIXME: somehow 'a' doesn't work if file doesnt exist
-            otype = 'a' if path.isfile(outputfile) else 'w'
+            otype = 'w'  #'a' if path.isfile(outputfile) else 'w'
             g = h5py.File(b + '.h5', otype)
 #             datalayout = tuple(stdsel[i][1]-stdsel[i][0] for i in std2out)
             if 'chunksize' in locals():
@@ -223,8 +232,8 @@ def main(argv):
         if (('.tif' in ext) |
             ('.png' in ext) |
             ('.jpg' in ext)) & (indim == 3):  # only 3D for now
-            if not path.exists(b):
-                makedirs(b)
+            if not os.path.exists(b):
+                os.makedirs(b)
             for slc in range(0, img.shape[outlayout.index('z')]):
                 slcno = slc  # + slcoffset
                 if outlayout.index('z') == 0:
@@ -233,7 +242,49 @@ def main(argv):
                     slcdata = img[:, slc, :]
                 elif outlayout.index('z') == 2:
                     slcdata = img[:, :, slc]
-                imsave(path.join(b, str(slcno).zfill(nzfills) + ext), slcdata)
+                imsave(os.path.join(b, str(slcno).zfill(nzfills) + ext), slcdata)
+
+
+# ========================================================================== #
+# function defs
+# ========================================================================== #
+
+
+def dataset_name(dset_info):
+    """Return the basename of the dataset."""
+
+    nf = dset_info['nzfills']
+    dname = dset_info['base'] + \
+                '_' + str(dset_info['x']).zfill(nf) + \
+                '-' + str(dset_info['X']).zfill(nf) + \
+                '_' + str(dset_info['y']).zfill(nf) + \
+                '-' + str(dset_info['Y']).zfill(nf) + \
+                '_' + str(dset_info['z']).zfill(nf) + \
+                '-' + str(dset_info['Z']).zfill(nf) + \
+                dset_info['postfix']
+
+    return dname
+
+
+def split_filename(filename, blockoffset=[0, 0, 0]):
+    """Extract the data indices from the filename."""
+
+    datadir, tail = os.path.split(filename)
+    fname = os.path.splitext(tail)[0]
+    parts = fname.split("_")
+    x = int(parts[1].split("-")[0]) - blockoffset[0]
+    X = int(parts[1].split("-")[1]) - blockoffset[0]
+    y = int(parts[2].split("-")[0]) - blockoffset[1]
+    Y = int(parts[2].split("-")[1]) - blockoffset[1]
+    z = int(parts[3].split("-")[0]) - blockoffset[2]
+    Z = int(parts[3].split("-")[1]) - blockoffset[2]
+
+    dset_info = {'datadir': datadir, 'base': parts[0],
+                 'nzfills': len(parts[1].split("-")[0]),
+                 'postfix': '_'.join(parts[4:]),
+                 'x': x, 'X': X, 'y': y, 'Y': Y, 'z': z, 'Z': Z}
+
+    return dset_info, x, X, y, Y, z, Z
 
 
 if __name__ == "__main__":
