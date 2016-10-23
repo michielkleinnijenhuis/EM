@@ -56,7 +56,7 @@ def main(argv):
 
     inputfile = args.inputfile
     outputfile = args.outputfile
-    dset_name = args,dset_name
+    dset_name = args.dset_name
 
     uint8conv = args.uint8conv
 
