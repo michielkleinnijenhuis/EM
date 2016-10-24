@@ -12,9 +12,13 @@ def main(argv):
 
     parser = ArgumentParser(description="""
         Merge blocks of data into a single .h5 file.""")
+    parser.add_argument('datadir',
+                        help='...')
     parser.add_argument('outputfile',
                         help='...')
     parser.add_argument('-i', '--inputfiles', nargs='*',
+                        help='...')
+    parser.add_argument('-t', '--postfix', default='',
                         help='...')
     parser.add_argument('-f', '--field', default='stack',
                         help='...')
@@ -23,6 +27,8 @@ def main(argv):
     parser.add_argument('-l', '--outlayout',
                         help='...')
     parser.add_argument('-b', '--blockoffset', nargs=3, type=int, default=[0, 0, 0],
+                        help='...')
+    parser.add_argument('-p', '--blocksize', nargs=3, type=int, default=[0, 0, 0],
                         help='...')
     parser.add_argument('-q', '--margin', nargs=3, type=int, default=[0, 0, 0],
                         help='...')
@@ -38,30 +44,35 @@ def main(argv):
                         help='...')
     args = parser.parse_args()
 
+    datadir = args.datadir
     outputfile = args.outputfile
     inputfiles = args.inputfiles
+    postfix = args.postfix
     field = args.field
     mask = args.mask
     chunksize = args.chunksize
     blockoffset = args.blockoffset
     margin = args.margin
+    blocksize = args.blocksize
     fullsize = args.fullsize
     element_size_um = args.element_size_um
     outlayout = args.outlayout
     relabel = args.relabel
     neighbourmerge = args.neighbourmerge
 
-    f = h5py.File(inputfiles[0], 'r')
+    firstfile = os.path.join(datadir, inputfiles[0] + postfix + '.h5')
+    f = h5py.File(firstfile, 'r')
     ndims = len(f[field].shape)
     g = create_dset(outputfile, f, field, ndims,
                     chunksize, element_size_um, outlayout)
     f.close()
 
     maxlabel = 0
-    for filename in inputfiles:
+    for inputfile in inputfiles:
 
-        f = h5py.File(filename, 'r')
-        _, x, X, y, Y, z, Z = split_filename(filename, blockoffset)
+        filepath = os.path.join(datadir, inputfile + postfix + '.h5')
+        f = h5py.File(filepath, 'r')
+        _, x, X, y, Y, z, Z = split_filename(filepath, blockoffset)
 #         if mask is not None:
 #             dset_info['postfix'] = mask[0]
 #             maskfilename = dataset_name(dset_info)
@@ -69,16 +80,17 @@ def main(argv):
 #                                        maskfilename + '.h5'), 'r')
 #             ma = np.array(m[mask[0]][:,:,:], dtype='bool')
 
-        x, ox = margins_lower(x, margin[0], fullsize[0])
-        X, oX = margins_upper(X, margin[0], fullsize[0])
-        y, oy = margins_lower(y, margin[1], fullsize[1])
-        Y, oY = margins_upper(Y, margin[1], fullsize[1])
-        z, oz = margins_lower(z, margin[2], fullsize[2])
-        Z, oZ = margins_upper(Z, margin[2], fullsize[2])
+        (x, X), (ox, oX) = margins(x, X, blocksize[0], margin[0], fullsize[0])
+        (y, Y), (oy, oY) = margins(y, Y, blocksize[1], margin[1], fullsize[1])
+        (z, Z), (oz, oZ) = margins(z, Z, blocksize[2], margin[2], fullsize[2])
+        print(x, X, y, Y, z, Z)
+        print(ox, oX, oy, oY, oz, oZ)
 
         for i, newmax in enumerate([Z, Y, X]):
             if newmax > g[field].shape[i]:
                 g[field].resize(newmax, i)
+        print(f[field].shape)
+        print(g[field].shape)
 
         if ndims == 4:
             g[field][z:Z, y:Y, x:X, :] = f[field][oz:oZ, oy:oY, ox:oX, :]
@@ -154,28 +166,22 @@ def split_filename(filename, blockoffset=[0, 0, 0]):
     return dset_info, x, X, y, Y, z, Z
 
 
-def margins_lower(fc, margin, fullsize):
+def margins(fc, fC, blocksize, margin, fullsize):
     """Return lower coordinate (fullstack and block) corrected for margin."""
 
-    if fc > 0:
+    if fc == 0:
+        bc = 0
+    else:
         bc = 0 + margin
         fc += margin
+
+    if fC == fullsize:
+        bC = bc + blocksize  # FIXME
     else:
-        bc = 0
-
-    return fc, bc
-
-
-def margins_upper(fC, margin, fullsize):
-    """Return upper coordinate (fullstack and block) corrected for margin."""
-
-    if fC < fullsize:
-        bC = fC - margin
+        bC = bc + blocksize
         fC -= margin
-    else:
-        bC = fC - 0
 
-    return fC, bC
+    return (fc, fC), (bc, bC)
 
 
 def create_dset(outputfile, f, field, ndims,
@@ -190,9 +196,8 @@ def create_dset(outputfile, f, field, ndims,
 
     maxshape = [None] * ndims
 
-    otype = 'a' if os.path.isfile(outputfile) else 'w'
-    g = h5py.File(outputfile, otype)
-    outds = g.create_dataset(field, f[field].shape,
+    g = h5py.File(outputfile, 'w')
+    outds = g.create_dataset(field, np.zeros(len(f[field].shape)),
                              chunks=chunksize,
                              dtype=f[field].dtype,
                              maxshape=maxshape,
