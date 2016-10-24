@@ -11,6 +11,11 @@ from skimage.segmentation import relabel_sequential
 from skimage.morphology import remove_small_objects, binary_dilation
 from skimage.measure import regionprops
 
+try:
+    from mpi4py import MPI
+except:
+    print("mpi4py could not be loaded")
+
 
 def main(argv):
 
@@ -24,8 +29,16 @@ def main(argv):
                         help='...')
     parser.add_argument('--maskMM', default=['_maskMM', '/stack'], nargs=2,
                         help='...')
+    parser.add_argument('-d', '--mode2D', action='store_true',
+                        help='...')
+    parser.add_argument('-i', '--slicedim', type=int, default=0,
+                        help='...')
+    parser.add_argument('-l', '--dolabel', action='store_true',
+                        help='...')
     parser.add_argument('-o', '--outpf', default='_labelMA_core',
                         help='...')
+    parser.add_argument('-m', '--usempi', action='store_true', 
+                        help='use mpi4py')
 
     args = parser.parse_args()
 
@@ -33,31 +46,101 @@ def main(argv):
     dset_name = args.dset_name
     maskDS = args.maskDS
     maskMM = args.maskMM
+    mode2D = args.mode2D
+    slicedim = args.slicedim
     outpf = args.outpf
+    dolabel = args.dolabel
+    usempi = args.usempi & ('mpi4py' in sys.modules)
 
     elsize = loadh5(datadir, dset_name)[1]
-    maskDS = loadh5(datadir, dset_name + maskDS[0],
-                    fieldname=maskDS[1], dtype='bool')[0]
-    maskMM = loadh5(datadir, dset_name + maskMM[0],
-                    fieldname=maskMM[1], dtype='bool')[0]
 
-    mask = np.logical_or(binary_dilation(maskMM), ~maskDS)
-    remove_small_objects(mask, min_size=100000, in_place=True)
+    if mode2D:
 
-    labels = label(~mask, return_num=False, connectivity=None)
-    remove_small_objects(labels, min_size=10000, connectivity=1, in_place=True)
+        filename = os.path.join(datadir, dset_name + maskMM[0] + '.h5')
+        fmm = h5py.File(filename, 'r')
+        filename = os.path.join(datadir, dset_name + maskDS[0] + '.h5')
+        fds = h5py.File(filename, 'r')
 
-    # remove the unmyelinated axons (largest label)
-    rp = regionprops(labels)
-    areas = [prop.area for prop in rp]
-    labs = [prop.label for prop in rp]
-    llab = labs[np.argmax(areas)]
-    labels[labels == llab] = 0
+        filename = os.path.join(datadir, dset_name + outpf + '.h5')
+        g1 = h5py.File(filename, 'w')
+        outds1 = g1.create_dataset('stack', fmm[maskMM[1]].shape,
+                                   dtype='int32',
+                                   compression="gzip")
+        filename = os.path.join(datadir, dset_name + outpf + '_labeled.h5')
+        if dolabel:
+            g2 = h5py.File(filename, 'w')
+            outds2 = g2.create_dataset('stack', fmm[maskMM[1]].shape,
+                                       dtype='int32',
+                                       compression="gzip")
 
-    labels = relabel_sequential(labels)[0]
+        maxlabel = 0
+        for i in range(0, fmm[maskMM[1]][:,:,:].shape[0]):
 
-    writeh5(labels, datadir, dset_name + outpf,
-            element_size_um=elsize, dtype='int32')
+            if slicedim == 0:
+                MMslc = fmm[maskMM[1]][i,:,:].astype('bool')
+                DSslc = fds[maskDS[1]][i,:,:].astype('bool')
+            elif slicedim == 1:
+                MMslc = fmm[maskMM[1]][:,i,:].astype('bool')
+                DSslc = fds[maskDS[1]][:,i,:].astype('bool')
+            elif slicedim == 2:
+                MMslc = fmm[maskMM[1]][:,:,i].astype('bool')
+                DSslc = fds[maskDS[1]][:,:,i].astype('bool')
+
+            seeds, num = label(np.logical_and(~MMslc, DSslc), return_num=True)
+            seeds += maxlabel
+            seeds[MMslc] = 0
+
+            if slicedim == 0:
+                outds1[i,:,:] = seeds
+            elif slicedim == 1:
+                outds1[:,i,:] = seeds
+            elif slicedim == 2:
+                outds1[:,:,i] = seeds
+
+            maxlabel += num
+
+        rp = regionprops(outds1[:,:,:], cache=True)
+        mi = {prop.label: prop.area for prop in rp}
+
+        fw = np.zeros(maxlabel + 1, dtype='int32')
+        for k, v in mi.iteritems():
+            if ((mi[k] > 200) & (mi[k] < 20000)):
+                fw[k] = k
+        filename = os.path.join(datadir, dset_name + outpf + '_fw.npy')
+        np.save(filename, fw)
+
+        if dolabel:
+            # this is more mem intensive, consider moving to seperate function
+            outds2[:,:,:] = label(fw[outds1[:,:,:]] != 0)
+            g2.close()
+
+        fmm.close()
+        fds.close()
+        g1.close()
+
+    else:
+        maskDS = loadh5(datadir, dset_name + maskDS[0],
+                        fieldname=maskDS[1], dtype='bool')[0]
+        maskMM = loadh5(datadir, dset_name + maskMM[0],
+                        fieldname=maskMM[1], dtype='bool')[0]
+
+        mask = np.logical_or(binary_dilation(maskMM), ~maskDS)
+        remove_small_objects(mask, min_size=100000, in_place=True)
+
+        labels = label(~mask, return_num=False, connectivity=None)
+        remove_small_objects(labels, min_size=10000, connectivity=1, in_place=True)
+
+        # remove the unmyelinated axons (largest label)
+        rp = regionprops(labels)
+        areas = [prop.area for prop in rp]
+        labs = [prop.label for prop in rp]
+        llab = labs[np.argmax(areas)]
+        labels[labels == llab] = 0
+
+        labels = relabel_sequential(labels)[0]
+
+        writeh5(labels, datadir, dset_name + outpf,
+                element_size_um=elsize, dtype='int32')
 
 
 # ========================================================================== #
