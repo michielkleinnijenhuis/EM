@@ -69,12 +69,12 @@ def main(argv):
 #                                        maskfilename + '.h5'), 'r')
 #             ma = np.array(m[mask[0]][:,:,:], dtype='bool')
 
-        x, ox = margins_lower(x, margin[2], fullsize[2])
-        X, oX = margins_upper(X, margin[2], fullsize[2])
+        x, ox = margins_lower(x, margin[0], fullsize[0])
+        X, oX = margins_upper(X, margin[0], fullsize[0])
         y, oy = margins_lower(y, margin[1], fullsize[1])
         Y, oY = margins_upper(Y, margin[1], fullsize[1])
-        z, oz = margins_lower(z, margin[0], fullsize[0])
-        Z, oZ = margins_upper(Z, margin[0], fullsize[0])
+        z, oz = margins_lower(z, margin[2], fullsize[2])
+        Z, oZ = margins_upper(Z, margin[2], fullsize[2])
 
         for i, newmax in enumerate([Z, Y, X]):
             if newmax > g[field].shape[i]:
@@ -192,7 +192,7 @@ def create_dset(outputfile, f, field, ndims,
 
     otype = 'a' if os.path.isfile(outputfile) else 'w'
     g = h5py.File(outputfile, otype)
-    outds = g.create_dataset(field, np.zeros(len(f[field].shape)),
+    outds = g.create_dataset(field, f[field].shape,
                              chunks=chunksize,
                              dtype=f[field].dtype,
                              maxshape=maxshape,
