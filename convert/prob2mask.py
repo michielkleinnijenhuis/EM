@@ -46,8 +46,8 @@ def main(argv):
     dilation = args.dilation
     outpf = args.outpf
 
-    prob, elsize = loadh5(datadir, dset_name + probs[0],
-                          fieldname=probs[1], channel=channel)
+    prob, elsize, al = loadh5(datadir, dset_name + probs[0],
+                              fieldname=probs[1], channel=channel)
 
     mask = np.logical_and(prob > lower_threshold, prob <= upper_threshold)
     if size:
@@ -55,8 +55,8 @@ def main(argv):
     if dilation:
         mask = binary_dilation(mask, selem=ball(dilation))
 
-    writeh5(mask, datadir, dset_name + outpf,
-            element_size_um=elsize, dtype='uint8')
+    writeh5(mask, datadir, dset_name + outpf, dtype='uint8',
+            element_size_um=elsize[:3], al[:3])
 
 
 # ========================================================================== #
@@ -68,6 +68,7 @@ def loadh5(datadir, dname, fieldname='stack', dtype=None, channel=None):
     """"""
 
     f = h5py.File(os.path.join(datadir, dname + '.h5'), 'r')
+
     if len(f[fieldname].shape) == 2:
         stack = f[fieldname][:, :]
     if len(f[fieldname].shape) == 3:
@@ -77,31 +78,41 @@ def loadh5(datadir, dname, fieldname='stack', dtype=None, channel=None):
             stack = f[fieldname][:, :, :, channel]
         else:
             stack = f[fieldname][:, :, :, :]
+
     if 'element_size_um' in f[fieldname].attrs.keys():
         element_size_um = f[fieldname].attrs['element_size_um']
     else:
         element_size_um = None
+    if f[fieldname].dims[0].label:
+        axislabels = [d.label for d in f[fieldname].dims]
+
     f.close()
 
     if dtype is not None:
         stack = np.array(stack, dtype=dtype)
 
-    return stack, element_size_um
+    return stack, element_size_um, axislabels
 
 
 def writeh5(stack, datadir, fp_out, fieldname='stack',
-            dtype='uint16', element_size_um=None):
+            dtype='uint16', element_size_um=None, axislabels=None):
     """"""
     g = h5py.File(os.path.join(datadir, fp_out + '.h5'), 'w')
     g.create_dataset(fieldname, stack.shape, dtype=dtype, compression="gzip")
+
     if len(stack.shape) == 2:
         g[fieldname][:, :] = stack
     elif len(stack.shape) == 3:
         g[fieldname][:, :, :] = stack
     elif len(stack.shape) == 4:
         g[fieldname][:, :, :, :] = stack
+
     if element_size_um is not None:
         g[fieldname].attrs['element_size_um'] = element_size_um
+    if axislabels is not None:
+        for i, l in enumerate(axislabels):
+            g[fieldname].dims[i].label = l
+
     g.close()
 
 
