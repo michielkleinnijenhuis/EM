@@ -36,6 +36,8 @@ def main(argv):
                         help='number of characters at the end that define z')
     parser.add_argument('-p', '--dset_name', default=None,
                         help='the identifier of the datablock')
+    parser.add_argument('-b', '--blockoffset', nargs=3, type=int, default=[0, 0, 0],
+                        help='...')
     parser.add_argument('-m', '--enable_multi_output', nargs='*', default=[],
                         help='output the stack in jpg,png,tif,nii,h5')
     parser.add_argument('-r', '--downscale', type=int, nargs='*', default=[],
@@ -57,6 +59,7 @@ def main(argv):
     inputfile = args.inputfile
     outputfile = args.outputfile
     dset_name = args.dset_name
+    blockoffset = args.blockoffset
 
     uint8conv = args.uint8conv
 
@@ -113,7 +116,7 @@ def main(argv):
     datatype = args.datatype if args.datatype else inds.dtype
 
     if dset_name is not None:
-        _, x, X, y, Y, z, Z = split_filename(outputfile)
+        _, x, X, y, Y, z, Z = split_filename(outputfile, blockoffset)
     else:
         x = args.x
         if args.X:
