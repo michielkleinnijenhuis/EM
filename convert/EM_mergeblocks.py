@@ -72,7 +72,7 @@ def main(argv):
 
         filepath = os.path.join(datadir, inputfile + postfix + '.h5')
         f = h5py.File(filepath, 'r')
-        _, x, X, y, Y, z, Z = split_filename(filepath, blockoffset)
+        dset_info, x, X, y, Y, z, Z = split_filename(filepath, blockoffset)
 #         if mask is not None:
 #             dset_info['postfix'] = mask[0]
 #             maskfilename = dataset_name(dset_info)
@@ -83,14 +83,14 @@ def main(argv):
         (x, X), (ox, oX) = margins(x, X, blocksize[0], margin[0], fullsize[0])
         (y, Y), (oy, oY) = margins(y, Y, blocksize[1], margin[1], fullsize[1])
         (z, Z), (oz, oZ) = margins(z, Z, blocksize[2], margin[2], fullsize[2])
-        print(x, X, y, Y, z, Z)
-        print(ox, oX, oy, oY, oz, oZ)
+#         print(x, X, y, Y, z, Z)
+#         print(ox, oX, oy, oY, oz, oZ)
 
         for i, newmax in enumerate([Z, Y, X]):
             if newmax > g[field].shape[i]:
                 g[field].resize(newmax, i)
-        print(f[field].shape)
-        print(g[field].shape)
+#         print(f[field].shape)
+#         print(g[field].shape)
 
         if ndims == 4:
             g[field][z:Z, y:Y, x:X, :] = f[field][oz:oZ, oy:oY, ox:oX, :]
@@ -101,7 +101,7 @@ def main(argv):
             continue
 
         if relabel:
-            print('relabeling %s' % filename)
+            print('relabeling')
             fw = relabel_sequential(f[field][:, :, :], maxlabel + 1)[1]
             maxlabel = np.amax(fw)
         else:
@@ -112,8 +112,10 @@ def main(argv):
         if neighbourmerge:
             print('merging neighbours')
             if fullsize is None:
-                fw = merge_neighbours(fw, f[field], g[field],
-                                      (x, X, y, Y, z, Z))
+#                 fw = merge_neighbours(fw, f[field], g[field],
+#                                       (x, X, y, Y, z, Z))
+                fw = merge_overlap(dset_info, fw, f[field], g[field],
+                                   (x, X, y, Y, z, Z))
             else:
                 pass
 
@@ -222,6 +224,70 @@ def create_dset(outputfile, f, field, ndims,
             pass
 
     return g
+
+
+def get_overlap(side, fstack, gstack, granges,
+                margin=[0, 0, 0], fullsize=[0, 0, 0]):
+    """Return boundary slice of block and its neighbour."""
+
+    x, X, y, Y, z, Z = granges
+    nb_section = None
+
+    if side == 'xmin':
+        data_section = fstack[:, :, 0:margin[0]]
+        if x > 0:
+            nb_section = gstack[z:Z, y:Y, x-margin[0]:]
+    elif side == 'xmax':
+        data_section = fstack[:, :, :-margin[0]]
+        if X < fullsize[0]:
+            nb_section = gstack[z:Z, y:Y, X:X+margin[0]]
+    elif side == 'ymin':
+        data_section = fstack[:, 0:margin[1], :]
+        if y > 0:
+            nb_section = gstack[z:Z, y-margin[1]:, x:X]
+    elif side == 'ymax':
+        data_section = fstack[:, :-margin[1], :]
+        if Y < fullsize[1]:
+            nb_section = gstack[z:Z, Y:Y+margin[1], x:X]
+    elif side == 'zmin':
+        data_section = fstack[0:margin[2], :, :]
+        if z > 0:
+            nb_section = gstack[z-margin[2]:, y:Y, x:X]
+    elif side == 'zmax':
+        data_section = fstack[:-margin[2], :, :]
+        if Z < fullsize[2]:
+            nb_section = gstack[Z:Z+margin[2], y:Y, x:X]
+
+    return data_section, nb_section
+
+
+def merge_overlap(fw, fstack, gstack, granges):
+    """Adapt the forward map to merge neighbouring labels."""
+
+    for side in ['xmin', 'xmax', 'ymin', 'ymax', 'zmin', 'zmax']:
+
+        data_section, nb_section = get_overlap(side, fstack, gstack, granges)
+        if nb_section is None:
+            continue
+
+        data_labels = np.trim_zeros(np.unique(data_section))
+        for data_label in data_labels:
+
+            mask_data = data_section == data_label
+            bins = np.bincount(nb_section[mask_data])
+            if len(bins) <= 1:
+                continue
+
+            nb_label = np.argmax(bins[1:]) + 1
+            n_data = np.sum(mask_data)
+            n_nb = bins[nb_label]
+            if float(n_nb) / float(n_data) < 0.1:
+                continue
+
+            fw[data_label] = nb_label
+            print('%s: mapped label %d to %d' % (side, data_label, nb_label))
+
+    return fw
 
 
 def get_sections(side, fstack, gstack, granges):
