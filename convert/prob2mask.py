@@ -56,7 +56,7 @@ def main(argv):
         mask = binary_dilation(mask, selem=ball(dilation))
 
     writeh5(mask, datadir, dset_name + outpf, dtype='uint8',
-            element_size_um=elsize[:3], al[:3])
+            element_size_um=elsize[:3], axislabels=al[:3])
 
 
 # ========================================================================== #
@@ -83,10 +83,12 @@ def loadh5(datadir, dname, fieldname='stack', dtype=None, channel=None):
         element_size_um = f[fieldname].attrs['element_size_um']
     else:
         element_size_um = None
-    if f[fieldname].dims[0].label:
+    if 'DIMENSION_LABELS' in f[fieldname].attrs.keys():
         axislabels = [d.label for d in f[fieldname].dims]
+    else:
+        axislabels = None
 
-    f.close()
+     f.close()
 
     if dtype is not None:
         stack = np.array(stack, dtype=dtype)
