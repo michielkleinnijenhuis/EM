@@ -31,6 +31,8 @@ def main(argv):
                         help='...')
     parser.add_argument('-s', '--min_labelsize', default=10000, type=int,
                         help='...')
+    parser.add_argument('-i', '--iterations', default=2, type=int,
+                        help='...')
 
     args = parser.parse_args()
 
@@ -42,32 +44,37 @@ def main(argv):
     maxrange = args.maxrange
     threshold_overlap = args.threshold_overlap
     min_labelsize = args.min_labelsize
+    iterations = args.iterations
 
     labels, elsize, al = loadh5(datadir, dset_name + labelvolume[0],
                                 fieldname=labelvolume[1])
-    maskMM = loadh5(datadir, dset_name + maskMM[0],
-                    fieldname=maskMM[1], dtype='bool')[0]
 
-    MAlist = []
-    for i in range(0, labels.shape[0] - maxrange):
-        for j in range(1, maxrange):
-            data_section = labels[i,:,:]
-            nb_section = labels[i+j,:,:]
-            MAlist = merge_neighbours(MAlist, data_section, nb_section,
-                                      threshold_overlap)
+    for _ in range(0, iterations):
+        MAlist = []
+        for i in range(0, labels.shape[0] - maxrange):
+            for j in range(1, maxrange):
+                data_section = labels[i,:,:]
+                nb_section = labels[i+j,:,:]
+                MAlist = merge_neighbours(MAlist, data_section, nb_section,
+                                          threshold_overlap)
 
-    ulabels = np.unique(labels)
-    fw = [l if l in ulabels else 0 for l in range(0, np.amax(labels) + 1)]
-    fwmapped = forward_map_axons(np.array(fw), labels, MAlist)
+        ulabels = np.unique(labels)
+        fw = [l if l in ulabels else 0
+              for l in range(0, np.amax(labels) + 1)]
+        labels = forward_map(np.array(fw), labels, MAlist)
 
-    remove_small_objects(fwmapped, min_size=min_labelsize, in_place=True)
+        remove_small_objects(labels, min_size=min_labelsize, in_place=True)
 
-    fwmapped = closing(fwmapped, ball(maxrange))
-    writeh5(fwmapped, datadir, dset_name + outpf + 'before_maskMM',
-            dtype='int32', element_size_um=elsize, axislabels=al)
-    fwmapped[maskMM] = 0
+        labels = closing(labels, ball(maxrange))
 
-    writeh5(fwmapped, datadir, dset_name + outpf,
+    if maskMM is not None:
+        maskMM = loadh5(datadir, dset_name + maskMM[0],
+                        fieldname=maskMM[1], dtype='bool')[0]
+        labels[maskMM] = 0
+
+    remove_small_objects(labels, min_size=min_labelsize, in_place=True)
+
+    writeh5(labels, datadir, dset_name + outpf,
             dtype='int32', element_size_um=elsize, axislabels=al)
 
 
@@ -104,10 +111,10 @@ def classify_label(MAlist, labelset):
     """Add set of labels to an axonset or create new axonset."""
 
     found = False
-    for i, axon in enumerate(MAlist):
+    for i, MA in enumerate(MAlist):
         for l in labelset:
-            if l in axon:
-                MAlist[i] = axon | labelset
+            if l in MA:
+                MAlist[i] = MA | labelset
                 found = True
                 break
     if not found:
@@ -116,13 +123,13 @@ def classify_label(MAlist, labelset):
     return MAlist
 
 
-def forward_map_axons(fw, labels, MAlist):
+def forward_map(fw, labels, MAlist):
     """Map all labelsets in MAlist to axons."""
 
-    for axon in MAlist:
-        axon = sorted(list(axon))
-        for l in axon:
-            fw[l] = axon[0]
+    for MA in MAlist:
+        MA = sorted(list(MA))
+        for l in MA:
+            fw[l] = MA[0]
 
     fwmapped = fw[labels]
 
