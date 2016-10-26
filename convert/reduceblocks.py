@@ -22,6 +22,8 @@ def main(argv):
                         help='...')
     parser.add_argument('-d', '--blockreduce', nargs=3, type=int, default=[1,7,7],
                         help='...')
+    parser.add_argument('-f', '--func', default='np.amax',
+                        help='...')
     parser.add_argument('-o', '--outpf', default='_br',
                         help='...')
 
@@ -31,12 +33,13 @@ def main(argv):
     dset_name = args.dset_name
     inputstack = args.inputstack
     blockreduce = args.blockreduce
+    func = args.func
     outpf = args.outpf
 
     stack, elsize, al = loadh5(datadir, dset_name + inputstack[0],
                                fieldname=inputstack[1])
 
-    stack = block_reduce(stack, block_size=tuple(blockreduce), func=np.amax)
+    stack = block_reduce(stack, block_size=tuple(blockreduce), func=eval(func))
     elsize = [e*b for e, b in zip(elsize, blockreduce)]
 
     writeh5(stack, datadir, dset_name + outpf + inputstack[0],
