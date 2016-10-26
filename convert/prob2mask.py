@@ -8,7 +8,7 @@ import h5py
 import numpy as np
 
 from skimage.morphology import remove_small_objects, binary_dilation, ball
-
+from skimage.measure import block_reduce
 
 def main(argv):
 
@@ -22,6 +22,8 @@ def main(argv):
                         default=['_probs', 'volume/predictions'], nargs=2,
                         help='...')
     parser.add_argument('-c', '--channel', type=int, default=None,
+                        help='...')
+    parser.add_argument('-d', '--blockreduce', nargs=3, type=int, default=None,
                         help='...')
     parser.add_argument('-l', '--lower_threshold', type=float, default=0,
                         help='...')
@@ -40,6 +42,7 @@ def main(argv):
     dset_name = args.dset_name
     probs = args.probs
     channel = args.channel
+    blockreduce = args.blockreduce
     lower_threshold = args.lower_threshold
     upper_threshold = args.upper_threshold
     size = args.size
@@ -54,6 +57,10 @@ def main(argv):
         remove_small_objects(mask, min_size=size, in_place=True)
     if dilation:
         mask = binary_dilation(mask, selem=ball(dilation))
+
+    if blockreduce:
+        mask = block_reduce(mask, block_size=tuple(blockreduce), func=np.amax)
+        elsize = [e*b for e, b in zip(elsize, blockreduce)]
 
     writeh5(mask, datadir, dset_name + outpf, dtype='uint8',
             element_size_um=elsize[:3], axislabels=al[:3])
@@ -88,7 +95,7 @@ def loadh5(datadir, dname, fieldname='stack', dtype=None, channel=None):
     else:
         axislabels = None
 
-     f.close()
+    f.close()
 
     if dtype is not None:
         stack = np.array(stack, dtype=dtype)
@@ -99,6 +106,7 @@ def loadh5(datadir, dname, fieldname='stack', dtype=None, channel=None):
 def writeh5(stack, datadir, fp_out, fieldname='stack',
             dtype='uint16', element_size_um=None, axislabels=None):
     """"""
+
     g = h5py.File(os.path.join(datadir, fp_out + '.h5'), 'w')
     g.create_dataset(fieldname, stack.shape, dtype=dtype, compression="gzip")
 
