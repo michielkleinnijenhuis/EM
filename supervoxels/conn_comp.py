@@ -26,11 +26,19 @@ def main(argv):
                         help='...')
     parser.add_argument('dset_name',
                         help='...')
-    parser.add_argument('--maskDS', default=['_maskDS', '/stack'], nargs=2,
+    parser.add_argument('--maskDS', default=['_maskDS', 'stack'], nargs=2,
                         help='...')
-    parser.add_argument('--maskMM', default=['_maskMM', '/stack'], nargs=2,
+    parser.add_argument('--maskMM', default=['_maskMM', 'stack'], nargs=2,
+                        help='...')
+    parser.add_argument('--maskMB', default=['_maskMB', 'stack'], nargs=2,
                         help='...')
     parser.add_argument('-d', '--mode',
+                        help='...')
+    parser.add_argument('-s', '--min_size', type=int, default=200,
+                        help='...')
+    parser.add_argument('-S', '--max_size', type=int, default=20000,
+                        help='...')
+    parser.add_argument('-M', '--mb_intensity', type=float, default=0.25,
                         help='...')
     parser.add_argument('-i', '--slicedim', type=int, default=0,
                         help='...')
@@ -47,7 +55,11 @@ def main(argv):
     dset_name = args.dset_name
     maskDS = args.maskDS
     maskMM = args.maskMM
+    maskMB = args.maskMB
     mode = args.mode
+    min_size = args.min_size
+    max_size = args.max_size
+    mb_intensity = args.mb_intensity
     slicedim = args.slicedim
     outpf = args.outpf
     dolabel = args.dolabel
@@ -57,39 +69,72 @@ def main(argv):
 
     if mode == '2D':
 
-        filename = os.path.join(datadir, dset_name + maskMM[0] + '.h5')
-        fmm = h5py.File(filename, 'r')
-        filename = os.path.join(datadir, dset_name + maskDS[0] + '.h5')
-        fds = h5py.File(filename, 'r')
+        fmmname = os.path.join(datadir, dset_name + maskMM[0] + '.h5')
+        fdsname = os.path.join(datadir, dset_name + maskDS[0] + '.h5')
+        fmbname = os.path.join(datadir, dset_name + maskMB[0] + '.h5')
+        fg1name = os.path.join(datadir, dset_name + outpf + '.h5')
 
-        filename = os.path.join(datadir, dset_name + outpf + '.h5')
-        g1 = h5py.File(filename, 'w')
-        outds1 = g1.create_dataset('stack', fmm[maskMM[1]].shape,
-                                   dtype='uint32',
-                                   compression="gzip")
-        filename = os.path.join(datadir, dset_name + outpf + '_labeled.h5')
-        if dolabel:
-            g2 = h5py.File(filename, 'w')
-            outds2 = g2.create_dataset('stack', fmm[maskMM[1]].shape,
-                                       dtype='uint32',
-                                       compression="gzip")
+        if usempi:
+            # start the mpi communicator
+            comm = MPI.COMM_WORLD
+            rank = comm.Get_rank()
+            size = comm.Get_size()
+            fg1 = h5py.File(fg1name, 'w', driver='mpio', comm=MPI.COMM_WORLD)
+            fmm = h5py.File(fmmname, 'r', driver='mpio', comm=MPI.COMM_WORLD)
+            fds = h5py.File(fdsname, 'r', driver='mpio', comm=MPI.COMM_WORLD)
+            fmb = h5py.File(fmbname, 'r')
+        else:
+            fg1 = h5py.File(fg1name, 'w')
+            fmm = h5py.File(fmmname, 'r')
+            fds = h5py.File(fdsname, 'r')
+            fmb = h5py.File(fmbname, 'r')
+
+        n_slices = fmm[maskMM[1]][:,:,:].shape[slicedim]
+
+        if usempi:
+            # scatter the slices
+            local_nrs = scatter_series(n_slices, comm, size, rank,
+                                       MPI.SIGNED_LONG_LONG)[0]
+        else:
+            local_nrs = np.array(range(0, n_slices), dtype=int)
+
+        outds1 = fg1.create_dataset('stack', fmm[maskMM[1]].shape,
+                                    dtype='uint32',
+                                    compression="gzip")
 
         maxlabel = 0
-        for i in range(0, fmm[maskMM[1]][:,:,:].shape[0]):
+        for i in local_nrs:
 
+            MBslc = None
             if slicedim == 0:
-                MMslc = fmm[maskMM[1]][i,:,:].astype('bool')
                 DSslc = fds[maskDS[1]][i,:,:].astype('bool')
+                MMslc = fmm[maskMM[1]][i,:,:].astype('bool')
+                MBslc = fmb[maskMB[1]][i,:,:].astype('bool')
             elif slicedim == 1:
-                MMslc = fmm[maskMM[1]][:,i,:].astype('bool')
                 DSslc = fds[maskDS[1]][:,i,:].astype('bool')
+                MMslc = fmm[maskMM[1]][:,i,:].astype('bool')
+                MBslc = fmb[maskMB[1]][:,i,:].astype('bool')
             elif slicedim == 2:
-                MMslc = fmm[maskMM[1]][:,:,i].astype('bool')
                 DSslc = fds[maskDS[1]][:,:,i].astype('bool')
+                MMslc = fmm[maskMM[1]][:,:,i].astype('bool')
+                MBslc = fmb[maskMB[1]][:,:,i].astype('bool')
 
             seeds, num = label(np.logical_and(~MMslc, DSslc), return_num=True)
-            seeds += maxlabel
+            if usempi:
+                seeds += 1000*i  # FIXME: assumed max number of labels in slice is 1000
+            else:
+                seeds += maxlabel
             seeds[MMslc] = 0
+
+            rp = regionprops(seeds, intensity_image=MBslc, cache=True)
+            mi = {prop.label: (prop.area, prop.mean_intensity)
+                  for prop in rp}
+            for k, v in mi.items():
+                # TODO: other selection criteria?
+                if ((v[0] < min_size) or
+                    (v[0] > max_size) or
+                    v[1] > mb_intensity):
+                        seeds[seeds == k] = 0
 
             if slicedim == 0:
                 outds1[i,:,:] = seeds
@@ -100,24 +145,9 @@ def main(argv):
 
             maxlabel += num
 
-        rp = regionprops(outds1[:,:,:], cache=True)
-        mi = {prop.label: prop.area for prop in rp}
-
-        fw = np.zeros(maxlabel + 1, dtype='int32')
-        for k, v in mi.items():
-            if ((mi[k] > 200) & (mi[k] < 20000)):
-                fw[k] = k
-        filename = os.path.join(datadir, dset_name + outpf + '_fw.npy')
-        np.save(filename, fw)
-
-        if dolabel:
-            # this is more mem intensive, consider moving to seperate function
-            outds2[:,:,:] = label(fw[outds1[:,:,:]] != 0)
-            g2.close()
-
         fmm.close()
         fds.close()
-        g1.close()
+        fg1.close()
 
     elif mode == '3D':
         maskDS, elsize, al = loadh5(datadir, dset_name + maskDS[0],
@@ -154,7 +184,7 @@ def main(argv):
         maxlabel = np.amax(np.array(labellist))
         fw = np.zeros(maxlabel + 1, dtype='int32')
         for k, v in mi.items():
-            if ((mi[k] > 200) & (mi[k] < 20000)):
+            if ((mi[k] > min_size) & (mi[k] < max_size)):
                 fw[k] = k 
         filename = os.path.join(datadir, dset_name + outpf + '_fw.npy')
         np.save(filename, fw)
@@ -174,6 +204,20 @@ def main(argv):
 # ========================================================================== #
 # function defs
 # ========================================================================== #
+
+
+def scatter_series(n, comm, size, rank, SLL):
+    """Scatter a series of jobnrs over processes."""
+
+    nrs = np.array(range(0, n), dtype=int)
+    local_n = np.ones(size, dtype=int) * n / size
+    local_n[0:n % size] += 1
+    local_nrs = np.zeros(local_n[rank], dtype=int)
+    displacements = tuple(sum(local_n[0:r]) for r in range(0, size))
+    comm.Scatterv([nrs, tuple(local_n), displacements,
+                   SLL], local_nrs, root=0)
+
+    return local_nrs, tuple(local_n), displacements
 
 
 def loadh5(datadir, dname, fieldname='stack', dtype=None):
