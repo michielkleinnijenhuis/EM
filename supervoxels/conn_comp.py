@@ -109,6 +109,7 @@ def main(argv):
                                     compression="gzip")
 
         maxlabel = 0
+        fw = np.array([0], dtype='uint32')
         for i in local_nrs:
 
             MBslc = None
@@ -140,6 +141,9 @@ def main(argv):
 
             seeds[MMslc] = 0
 
+            maxlabel += num
+            fw.resize(maxlabel + 1)
+
             rp = regionprops(seeds, intensity_image=MBslc, cache=True)
             mi = {prop.label: (prop.area, prop.mean_intensity)
                   for prop in rp}
@@ -149,6 +153,9 @@ def main(argv):
                     (v[0] > max_size) or
                     v[1] > mb_intensity):
                         seeds[seeds == k] = 0
+                        fw[k] = 0
+                else:
+                        fw[k] = k
 
             if slicedim == 0:
                 outds2[i,:,:] = seeds
@@ -157,7 +164,8 @@ def main(argv):
             elif slicedim == 2:
                 outds2[:,:,i] = seeds
 
-            maxlabel += num
+        filename = os.path.join(datadir, dset_name + outpf + '_fw.npy')
+        np.save(filename, fw)
 
         fmm.close()
         fds.close()
@@ -199,7 +207,7 @@ def main(argv):
         fw = np.zeros(maxlabel + 1, dtype='int32')
         for k, v in mi.items():
             if ((mi[k] > min_size) & (mi[k] < max_size)):
-                fw[k] = k 
+                fw[k] = k
         filename = os.path.join(datadir, dset_name + outpf + '_fw.npy')
         np.save(filename, fw)
 #        fw = np.load(filename)
