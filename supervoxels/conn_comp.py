@@ -72,7 +72,8 @@ def main(argv):
         fmmname = os.path.join(datadir, dset_name + maskMM[0] + '.h5')
         fdsname = os.path.join(datadir, dset_name + maskDS[0] + '.h5')
         fmbname = os.path.join(datadir, dset_name + maskMB[0] + '.h5')
-        fg1name = os.path.join(datadir, dset_name + outpf + '.h5')
+        fg1name = os.path.join(datadir, dset_name + outpf + '_orig.h5')
+        fg2name = os.path.join(datadir, dset_name + outpf + '.h5')
 
         if usempi:
             # start the mpi communicator
@@ -80,11 +81,13 @@ def main(argv):
             rank = comm.Get_rank()
             size = comm.Get_size()
             fg1 = h5py.File(fg1name, 'w', driver='mpio', comm=MPI.COMM_WORLD)
+            fg2 = h5py.File(fg2name, 'w', driver='mpio', comm=MPI.COMM_WORLD)
             fmm = h5py.File(fmmname, 'r', driver='mpio', comm=MPI.COMM_WORLD)
             fds = h5py.File(fdsname, 'r', driver='mpio', comm=MPI.COMM_WORLD)
             fmb = h5py.File(fmbname, 'r')
         else:
             fg1 = h5py.File(fg1name, 'w')
+            fg2 = h5py.File(fg2name, 'w')
             fmm = h5py.File(fmmname, 'r')
             fds = h5py.File(fdsname, 'r')
             fmb = h5py.File(fmbname, 'r')
@@ -99,6 +102,9 @@ def main(argv):
             local_nrs = np.array(range(0, n_slices), dtype=int)
 
         outds1 = fg1.create_dataset('stack', fmm[maskMM[1]].shape,
+                                    dtype='uint32',
+                                    compression="gzip")
+        outds2 = fg2.create_dataset('stack', fmm[maskMM[1]].shape,
                                     dtype='uint32',
                                     compression="gzip")
 
@@ -124,6 +130,14 @@ def main(argv):
                 seeds += 1000*i  # FIXME: assumed max number of labels in slice is 1000
             else:
                 seeds += maxlabel
+
+            if slicedim == 0:
+                outds1[i,:,:] = seeds
+            elif slicedim == 1:
+                outds1[:,i,:] = seeds
+            elif slicedim == 2:
+                outds1[:,:,i] = seeds
+
             seeds[MMslc] = 0
 
             rp = regionprops(seeds, intensity_image=MBslc, cache=True)
@@ -137,11 +151,11 @@ def main(argv):
                         seeds[seeds == k] = 0
 
             if slicedim == 0:
-                outds1[i,:,:] = seeds
+                outds2[i,:,:] = seeds
             elif slicedim == 1:
-                outds1[:,i,:] = seeds
+                outds2[:,i,:] = seeds
             elif slicedim == 2:
-                outds1[:,:,i] = seeds
+                outds2[:,:,i] = seeds
 
             maxlabel += num
 
