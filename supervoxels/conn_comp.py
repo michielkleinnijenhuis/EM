@@ -116,34 +116,28 @@ def main(argv):
         fmmname = os.path.join(datadir, dset_name + maskMM[0] + '.h5')
 
         if usempi:
-            # start the mpi communicator
             comm = MPI.COMM_WORLD
             rank = comm.Get_rank()
             size = comm.Get_size()
             fg1 = h5py.File(fg1name, 'w', driver='mpio', comm=MPI.COMM_WORLD)
             fds = h5py.File(fdsname, 'r', driver='mpio', comm=MPI.COMM_WORLD)
             fmm = h5py.File(fmmname, 'r', driver='mpio', comm=MPI.COMM_WORLD)
+            n_slices = fmm[maskMM[1]].shape[slicedim]
+            local_nrs = scatter_series(n_slices, comm, size, rank,
+                                       MPI.SIGNED_LONG_LONG)[0]
         else:
             fg1 = h5py.File(fg1name, 'w')
             fds = h5py.File(fdsname, 'r')
             fmm = h5py.File(fmmname, 'r')
-
-        n_slices = fmm[maskMM[1]].shape[slicedim]
-
-        if usempi:
-            # scatter the slices
-            local_nrs = scatter_series(n_slices, comm, size, rank,
-                                       MPI.SIGNED_LONG_LONG)[0]
-        else:
+            n_slices = fmm[maskMM[1]].shape[slicedim]
             local_nrs = np.array(range(0, n_slices), dtype=int)
 
         outds1 = fg1.create_dataset('stack', fmm[maskMM[1]].shape,
                                     dtype='uint32',
-                                    compression="gzip")
+                                    compression=None if usempi else 'gzip')
 
         maxlabel = 0
         for i in local_nrs:
-            print("processing slice %d" % i)
 
             MBslc = None
             if slicedim == 0:
@@ -160,8 +154,11 @@ def main(argv):
             if usempi:
                 # FIXME: assumed max number of labels in slice is 1000
                 labels[~MMslc] += 1000 * i
+                if i == n_slices - 1:
+                    maxlabel = np.amax(labels)
             else:
                 labels[~MMslc] += maxlabel
+                maxlabel += num
 
             if slicedim == 0:
                 outds1[i,:,:] = labels
@@ -170,10 +167,9 @@ def main(argv):
             elif slicedim == 2:
                 outds1[:,:,i] = labels
 
-            maxlabel += num
-
-        filename = os.path.join(datadir, dset_name + outpf + '.npy')
-        np.save(filename, np.array([maxlabel]))
+        if usempi & (rank == size - 1):
+            filename = os.path.join(datadir, dset_name + outpf + '.npy')
+            np.save(filename, np.array([maxlabel]))
 
         fg1.close()
         fmm.close()
@@ -184,32 +180,47 @@ def main(argv):
         out = dset_name + outpf + '_'
 
         filename = os.path.join(datadir, dset_name + inpf + '.h5')
-        f = h5py.File(filename, 'r')
         fmbname = os.path.join(datadir, dset_name + maskMB[0] + '.h5')
-        fmb = h5py.File(fmbname, 'r')
 
-        try:
-            filename = os.path.join(datadir, dset_name + inpf + '.npy')
-            maxlabel = np.load(filename)
-            maxlabel = maxlabel[0]
-            print("read maxlabel from file")
-        except IOError:
-            maxlabel = np.amax(f['stack'][:,:,:])
-            print("retrieved maxlabel from stack")
+        if usempi:
+            comm = MPI.COMM_WORLD
+            rank = comm.Get_rank()
+            size = comm.Get_size()
 
-        fws = {}
-        for propname in map_propnames:
-            fws[propname] = np.zeros(maxlabel + 1)
+            f = h5py.File(filename, 'r', driver='mpio', comm=MPI.COMM_WORLD)
+            fmb = h5py.File(fmbname, 'r', driver='mpio', comm=MPI.COMM_WORLD)
+
+            n_slices = f['stack'].shape[slicedim]
+            local_nrs = scatter_series(n_slices, comm, size, rank,
+                                       MPI.SIGNED_LONG_LONG)[0]
+
+            maxlabel = get_maxlabel(datadir, dset_name + inpf, f['stack'])
+
+            if rank == 0:
+                fws_reduced = np.zeros((maxlabel, len(map_propnames)), dtype='float')
+            else:
+                fws_reduced = None
+
+        else:
+            rank = 0
+
+            f = h5py.File(filename, 'r')
+            fmb = h5py.File(fmbname, 'r')
+
+            n_slices = f['stack'].shape[slicedim]
+            local_nrs = np.array(range(0, n_slices), dtype=int)
+
+            maxlabel = get_maxlabel(datadir, dset_name + inpf, f['stack'])
+
+        fws = np.zeros((maxlabel + 1, len(map_propnames)), dtype='float')
 
         go2D = ((max_eccentricity is not None) or
                 (min_solidity is not None) or 
                 (min_euler_number is not None))
         if go2D:
 
-            for i in range(0, f['stack'].shape[slicedim]):
-                print("processing slice %d" % i)
+            for i in local_nrs:
 
-                # TODO: mpi4py
                 if slicedim == 0:
                     labels = f['stack'][i,:,:]
                     MBslc = fmb[maskMB[1]][i,:,:].astype('bool')
@@ -228,19 +239,32 @@ def main(argv):
                                         min_euler_number,
                                         min_extent)
 
+            # gather fws (allreduce max?)
+            if usempi:
+                comm.Barrier()
+                comm.Reduce(fws, fws_reduced, op=MPI.MAX, root=0)
+            else:
+                fws_reduced = fws
+
         else:
+            if rank == 0:
+                fws = check_constraints(f['stack'], fws, map_propnames,
+                                        min_area, max_area,
+                                        fmb[maskMB[1]], max_intensity_mb,
+                                        max_eccentricity,
+                                        min_solidity,
+                                        min_euler_number,
+                                        min_extent)
+                fws_reduced = fws
 
-            fws = check_constraints(f['stack'], fws, map_propnames,
-                                    min_area, max_area,
-                                    fmb[maskMB[1]], max_intensity_mb,
-                                    max_eccentricity,
-                                    min_solidity,
-                                    min_euler_number,
-                                    min_extent)
-
-        for propname in map_propnames:
-            filename = os.path.join(datadir, out + propname + '.npy')
-            np.save(filename, fws[propname])
+        if rank == 0:
+            datatypes = get_prop_datatypes(f['stack'][:10, :10, 0],
+                                           fmb[maskMB[1]][:10, :10, 0],
+                                           map_propnames)
+            for i, propname in enumerate(map_propnames):
+                filename = os.path.join(datadir, out + propname + '.npy')
+                outarray = np.array(fws_reduced[:,i], dtype=datatypes[i])
+                np.save(filename, outarray)
 
         f.close()
         fmb.close()
@@ -250,17 +274,28 @@ def main(argv):
         out = dset_name + outpf + '_'
 
         filename = os.path.join(datadir, dset_name + inpf + '.h5')
-        f = h5py.File(filename, 'r')
+        if usempi:
+            comm = MPI.COMM_WORLD
+            rank = comm.Get_rank()
+            size = comm.Get_size()
+            f = h5py.File(filename, 'r', driver='mpio', comm=MPI.COMM_WORLD)
+            local_nrs = scatter_series(len(map_propnames), comm, size, rank,
+                                       MPI.SIGNED_LONG_LONG)[0]
+        else:
+            f = h5py.File(filename, 'r')
+            local_nrs = np.array(range(0, len(map_propnames)), dtype=int)
+
 
         fws = {}
-        for propname in map_propnames:
+        for i in local_nrs:
+            propname = map_propnames[i]
             print("processing prop %s" % propname)
 
             filename = os.path.join(datadir, out + propname + '.npy')
             fws[propname] = np.load(filename)
 
             filename = os.path.join(datadir, out + propname + '.h5')
-            g = h5py.File(filename, 'w')
+            g = h5py.File(filename, 'w', driver='mpio', comm=MPI.COMM_WORLD)
             outds = g.create_dataset('stack', f['stack'].shape,
                                      dtype=fws[propname].dtype,
                                      compression="gzip")
@@ -338,28 +373,48 @@ def check_constraints(labels, fws, propnames,
 
         fws = set_fws(fws, prop, propnames, is_valid=True)
 
-    for propname in propnames:
-        if np.array(prop[propname]).dtype == 'int64':
-            datatype = 'int32'
-        else:
-            datatype='float'
-
-        fws[propname] = np.array(fws[propname], dtype=datatype)
-
     return fws
+
+
+def get_prop_datatypes(labels, MB, propnames):
+    """"""
+
+    rp = regionprops(labels, intensity_image=MB, cache=True)
+    datatypes = []
+    for propname in propnames:
+        if np.array(rp[0][propname]).dtype == 'int64':
+            datatypes.append('int32')
+        else:
+            datatypes.append('float')
+
+    return datatypes
 
 
 def set_fws(fws, prop, propnames, is_valid=False):
     """Set the forward maps entries for single labels."""
 
-    for propname in propnames:
+    for i, propname in enumerate(propnames):
         if is_valid:
-            fws[propname][prop.label] = prop[propname]
+            fws[prop.label, i] = prop[propname]
         else:
-            fws[propname][prop.label] = 0
+            fws[prop.label, i] = 0
             # FIXME: for many prop '0' is a valid value (nan?)
 
     return fws
+
+def get_maxlabel(datadir, fstem, fstack):
+    """"""
+
+    try:
+        filename = os.path.join(datadir, fstem + '.npy')
+        maxlabel = np.load(filename)
+        maxlabel = maxlabel[0]
+        print("read maxlabel from file")
+    except IOError:
+        maxlabel = np.amax(fstack[:,:,:])
+        print("retrieved maxlabel from stack")
+
+    return maxlabel
 
 
 def scatter_series(n, comm, size, rank, SLL):
