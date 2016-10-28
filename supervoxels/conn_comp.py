@@ -68,7 +68,10 @@ def main(argv):
 
     datadir = args.datadir
     dset_name = args.dset_name
-    basename = args.basename
+    if args.basename:
+        basename = args.basename
+    else:
+        basename = dset_name
     inpf = args.inpf
     outpf = args.outpf
     maskDS = args.maskDS
