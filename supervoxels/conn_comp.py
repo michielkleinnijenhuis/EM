@@ -172,6 +172,9 @@ def main(argv):
 
             maxlabel += num
 
+        filename = os.path.join(datadir, dset_name + outpf + '.npy')
+        np.save(filename, np.array([maxlabel]))
+
         fg1.close()
         fmm.close()
         fds.close()
@@ -185,7 +188,14 @@ def main(argv):
         fmbname = os.path.join(datadir, dset_name + maskMB[0] + '.h5')
         fmb = h5py.File(fmbname, 'r')
 
-        maxlabel = np.amax(f['stack'][:,:,:])
+        try:
+            filename = os.path.join(datadir, dset_name + inpf + '.npy')
+            maxlabel = np.load(filename)
+            maxlabel = maxlabel[0]
+            print("read maxlabel from file")
+        except IOError:
+            maxlabel = np.amax(f['stack'][:,:,:])
+            print("retrieved maxlabel from stack")
 
         fws = {}
         for propname in map_propnames:
@@ -271,9 +281,9 @@ def main(argv):
         outds = g.create_dataset('stack', f['stack'].shape,
                                  dtype='uint32',
                                  compression="gzip")
-        outds[:,:,:] = label(f['stack'][:,:,:] != 0)
-        # scipy has slightly less memory consumption
-#         outds[:,:,:] = scipy_label(f['stack'][:,:,:] != 0)[0]
+#         outds[:,:,:] = label(f['stack'][:,:,:] != 0)
+        # scipy appears to have much less memory consumption
+        outds[:,:,:] = scipy_label(f['stack'][:,:,:] != 0)[0]
 
         f.close()
         g.close()
