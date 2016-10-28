@@ -26,6 +26,8 @@ def main(argv):
                         help='...')
     parser.add_argument('dset_name',
                         help='...')
+    parser.add_argument('-b', '--basename', default='',
+                        help='...')
     parser.add_argument('-i', '--inpf', default='_labelMA_2Dcore',
                         help='...')
     parser.add_argument('-o', '--outpf', default='_labelMA_2Dcore_fw_',
@@ -66,6 +68,7 @@ def main(argv):
 
     datadir = args.datadir
     dset_name = args.dset_name
+    basename = args.basename
     inpf = args.inpf
     outpf = args.outpf
     maskDS = args.maskDS
@@ -291,7 +294,7 @@ def main(argv):
             propname = map_propnames[i]
             print("processing prop %s" % propname)
 
-            filename = os.path.join(datadir, out + propname + '.npy')
+            filename = os.path.join(datadir, basename + outpf + propname + '.npy')
             fws[propname] = np.load(filename)
 
             filename = os.path.join(datadir, out + propname + '.h5')
