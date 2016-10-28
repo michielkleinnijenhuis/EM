@@ -26,18 +26,24 @@ def main(argv):
                         help='...')
     parser.add_argument('dset_name',
                         help='...')
+    parser.add_argument('-i', '--inpf', default='_labelMA_2Dcore',
+                        help='...')
+    parser.add_argument('-o', '--outpf', default='_labelMA_2Dcore_fw_',
+                        help='...')
     parser.add_argument('--maskDS', default=['_maskDS', 'stack'], nargs=2,
                         help='...')
     parser.add_argument('--maskMM', default=['_maskMM', 'stack'], nargs=2,
                         help='...')
     parser.add_argument('--maskMB', default=['_maskMB', 'stack'], nargs=2,
                         help='...')
-    parser.add_argument('-d', '--mode',
+    parser.add_argument('-d', '--slicedim', type=int, default=0,
                         help='...')
-    parser.add_argument('-i', '--slicedim', type=int, default=0,
+
+    parser.add_argument('-M', '--mode',
                         help='...')
-    parser.add_argument('-p', '--map_propname',
+    parser.add_argument('-p', '--map_propnames', nargs='*',
                         help='...')
+
     parser.add_argument('-a', '--min_area', type=int, default=None,
                         help='...')
     parser.add_argument('-A', '--max_area', type=int, default=None,
@@ -52,10 +58,7 @@ def main(argv):
                         help='...')
     parser.add_argument('-x', '--min_extent', type=float, default=None,
                         help='...')
-    parser.add_argument('-r', '--refilter', action='store_true',
-                        help='...')
-    parser.add_argument('-o', '--outpf', default='_labelMA_core',
-                        help='...')
+
     parser.add_argument('-m', '--usempi', action='store_true', 
                         help='use mpi4py')
 
@@ -63,12 +66,14 @@ def main(argv):
 
     datadir = args.datadir
     dset_name = args.dset_name
+    inpf = args.inpf
+    outpf = args.outpf
     maskDS = args.maskDS
     maskMM = args.maskMM
     maskMB = args.maskMB
     mode = args.mode
     slicedim = args.slicedim
-    map_propname = args.map_propname
+    map_propnames = args.map_propnames
     min_area = args.min_area
     max_area = args.max_area
     max_intensity_mb = args.max_intensity_mb
@@ -76,8 +81,6 @@ def main(argv):
     min_euler_number = args.min_euler_number
     min_solidity = args.min_solidity
     min_extent = args.min_extent
-    refilter = args.refilter
-    outpf = args.outpf
     usempi = args.usempi & ('mpi4py' in sys.modules)
 
     if mode == '3D':
@@ -139,7 +142,6 @@ def main(argv):
                                     compression="gzip")
 
         maxlabel = 0
-#         fw = np.array([0], dtype='uint32')
         for i in local_nrs:
             print("processing slice %d" % i)
 
@@ -176,70 +178,105 @@ def main(argv):
 
     elif mode == "2Dfilter":
 
-        filename = os.path.join(datadir, dset_name + outpf + '.h5')
-        f = h5py.File(filename, 'r')
+        out = dset_name + outpf + '_'
 
+        filename = os.path.join(datadir, dset_name + inpf + '.h5')
+        f = h5py.File(filename, 'r')
         fmbname = os.path.join(datadir, dset_name + maskMB[0] + '.h5')
         fmb = h5py.File(fmbname, 'r')
 
-        filename = os.path.join(datadir, dset_name + outpf + '_filtered_' + map_propname + '.h5')
-        g1 = h5py.File(filename, 'w')
+        maxlabel = np.amax(f['stack'][:,:,:])
 
-        filename = os.path.join(datadir, dset_name + outpf + '_labeled.h5')
-        g2 = h5py.File(filename, 'w')
+        fws = {}
+        for propname in map_propnames:
+            fws[propname] = np.zeros(maxlabel + 1)
 
-        filename = os.path.join(datadir, dset_name + outpf + '_fw_' + map_propname + '.npy')
-        if refilter:
-            fw = np.zeros(np.amax(f['stack'][:,:,:]) + 1)
-            go2D = ((max_eccentricity is not None) or
-                    (min_solidity is not None) or 
-                    (min_euler_number is not None))
-            if go2D:
-                for i in range(0, f['stack'].shape[slicedim]):
-                    # TODO: mpi4py
-                    if slicedim == 0:
-                        labels = f['stack'][i,:,:]
-                        MBslc = fmb[maskMB[1]][i,:,:].astype('bool')
-                    elif slicedim == 1:
-                        labels = f['stack'][:,i,:]
-                        MBslc = fmb[maskMB[1]][:,i,:].astype('bool')
-                    elif slicedim == 2:
-                        labels = f['stack'][:,:,i]
-                        MBslc = fmb[maskMB[1]][:,:,i].astype('bool')
-                    fw = check_constraints(labels, fw, map_propname,
-                                           min_area, max_area,
-                                           MBslc, max_intensity_mb,
-                                           max_eccentricity,
-                                           min_solidity,
-                                           min_euler_number,
-                                           min_extent)
-            else:
-                fw = check_constraints(f['stack'], fw, map_propname,
-                                       min_area, max_area,
-                                       fmb[maskMB[1]], max_intensity_mb,
-                                       max_eccentricity,
-                                       min_solidity,
-                                       min_euler_number,
-                                       min_extent)
-            np.save(filename, fw)
+        go2D = ((max_eccentricity is not None) or
+                (min_solidity is not None) or 
+                (min_euler_number is not None))
+        if go2D:
+
+            for i in range(0, f['stack'].shape[slicedim]):
+                print("processing slice %d" % i)
+
+                # TODO: mpi4py
+                if slicedim == 0:
+                    labels = f['stack'][i,:,:]
+                    MBslc = fmb[maskMB[1]][i,:,:].astype('bool')
+                elif slicedim == 1:
+                    labels = f['stack'][:,i,:]
+                    MBslc = fmb[maskMB[1]][:,i,:].astype('bool')
+                elif slicedim == 2:
+                    labels = f['stack'][:,:,i]
+                    MBslc = fmb[maskMB[1]][:,:,i].astype('bool')
+
+                fws = check_constraints(labels, fws, map_propnames,
+                                        min_area, max_area,
+                                        MBslc, max_intensity_mb,
+                                        max_eccentricity,
+                                        min_solidity,
+                                        min_euler_number,
+                                        min_extent)
+
         else:
-            fw = np.load(filename)
-        fwmapped = fw[f['stack'][:,:,:]]
-        outds1 = g1.create_dataset('stack', f['stack'].shape,
-                                   dtype=fw.dtype,
-                                   compression="gzip")
-        outds1[:,:,:] = fwmapped
 
-        outds2 = g2.create_dataset('stack', f['stack'].shape,
-                                   dtype='uint32',
-                                   compression="gzip")
-        outds2[:,:,:] = scipy_label(fwmapped != 0)[0]
-        outds2[:,:,:] = label(fwmapped != 0)
+            fws = check_constraints(f['stack'], fws, map_propnames,
+                                    min_area, max_area,
+                                    fmb[maskMB[1]], max_intensity_mb,
+                                    max_eccentricity,
+                                    min_solidity,
+                                    min_euler_number,
+                                    min_extent)
+
+        for propname in map_propnames:
+            filename = os.path.join(datadir, out + propname + '.npy')
+            np.save(filename, fws[propname])
 
         f.close()
         fmb.close()
-        g1.close()
-        g2.close()
+
+    elif mode == "2Dprops":
+
+        out = dset_name + outpf + '_'
+
+        filename = os.path.join(datadir, dset_name + inpf + '.h5')
+        f = h5py.File(filename, 'r')
+
+        fws = {}
+        for propname in map_propnames:
+            print("processing prop %s" % propname)
+
+            filename = os.path.join(datadir, out + propname + '.npy')
+            fws[propname] = np.load(filename)
+
+            filename = os.path.join(datadir, out + propname + '.h5')
+            g = h5py.File(filename, 'w')
+            outds = g.create_dataset('stack', f['stack'].shape,
+                                     dtype=fws[propname].dtype,
+                                     compression="gzip")
+            outds[:,:,:] = fws[propname][f['stack'][:,:,:]]
+            g.close()
+
+        f.close()
+
+    elif mode == "2Dto3Dlabel":
+
+        out = dset_name + outpf + '_'
+
+        filename = os.path.join(datadir, out + 'label.h5')
+        f = h5py.File(filename, 'r')
+
+        filename = os.path.join(datadir, out + '3Dlabeled.h5')
+        g = h5py.File(filename, 'w')
+        outds = g.create_dataset('stack', f['stack'].shape,
+                                 dtype='uint32',
+                                 compression="gzip")
+        outds[:,:,:] = label(f['stack'][:,:,:] != 0)
+        # scipy has slightly less memory consumption
+#         outds[:,:,:] = scipy_label(f['stack'][:,:,:] != 0)[0]
+
+        f.close()
+        g.close()
 
 
 # ========================================================================== #
@@ -247,70 +284,72 @@ def main(argv):
 # ========================================================================== #
 
 
-def check_constraints(labels, fw, propname,
+def check_constraints(labels, fws, propnames,
                       min_size=None, max_size=None,
                       MB=None, max_intensity_mb=None,
                       max_eccentricity=None,
                       min_solidity=None,
                       min_euler_number=None,
                       min_extent=None):
+    """Compose forward maps according to label validity criteria."""
 
     rp = regionprops(labels, intensity_image=MB, cache=True)
 
     for prop in rp:
-#         check_constraint(fw, prop, 'area', min_size, np.less)
-#         check_constraint(fw, prop, 'area', max_size, np.greater)
-#         check_constraint(fw, prop, 'mean_intensity', max_intensity_mb, np.greater)
-#         check_constraint(fw, prop, 'eccentricity', max_eccentricity, np.greater)
+
         if min_size is not None:
             if prop.area < min_size:
-                fw[prop.label] = 0
+                fws = set_fws(fws, prop, propnames, is_valid=False)
                 continue
         if max_size is not None:
             if prop.area > max_size:
-                fw[prop.label] = 0
+                fws = set_fws(fws, prop, propnames, is_valid=False)
                 continue
         if max_intensity_mb is not None:
             if prop.mean_intensity > max_intensity_mb:
-                fw[prop.label] = 0
+                fws = set_fws(fws, prop, propnames, is_valid=False)
                 continue
         if max_eccentricity is not None:
             if prop.eccentricity > max_eccentricity:
-                fw[prop.label] = 0
+                fws = set_fws(fws, prop, propnames, is_valid=False)
                 continue
         if min_solidity is not None:
             if prop.solidity < min_solidity:
-                fw[prop.label] = 0
+                fws = set_fws(fws, prop, propnames, is_valid=False)
                 continue
         if min_euler_number is not None:
             if prop.euler_number < min_euler_number:
-                fw[prop.label] = 0
+                fws = set_fws(fws, prop, propnames, is_valid=False)
                 continue
         if min_extent is not None:
             if prop.extent < min_extent:
-                fw[prop.label] = 0
+                fws = set_fws(fws, prop, propnames, is_valid=False)
                 continue
-        fw[prop.label] = prop[propname]
 
-    if np.array(prop[propname]).dtype == 'int64':
-        datatype = 'int32'
-    else:
-        datatype='float'
+        fws = set_fws(fws, prop, propnames, is_valid=True)
 
-    fw = np.array(fw, dtype=datatype)
-
-    return fw
-
-
-def check_constraint(fw, prop, propname, constraint, operator):
-    """"""
-
-    if constraint is not None:
-        if operator(prop[propname], constraint):
-            fw[prop.label] = 0
-            return fw, True
+    for propname in propnames:
+        if np.array(prop[propname]).dtype == 'int64':
+            datatype = 'int32'
         else:
-            return fw, False
+            datatype='float'
+
+        fws[propname] = np.array(fws[propname], dtype=datatype)
+
+    return fws
+
+
+def set_fws(fws, prop, propnames, is_valid=False):
+    """Set the forward maps entries for single labels."""
+
+    for propname in propnames:
+        if is_valid:
+            fws[propname][prop.label] = prop[propname]
+        else:
+            fws[propname][prop.label] = 0
+            # FIXME: for many prop '0' is a valid value (nan?)
+
+    return fws
 
 
 def scatter_series(n, comm, size, rank, SLL):
