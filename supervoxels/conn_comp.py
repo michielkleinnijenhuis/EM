@@ -111,7 +111,6 @@ def main(argv):
         fg1name = os.path.join(datadir, dset_name + outpf + '.h5')
         fdsname = os.path.join(datadir, dset_name + maskDS[0] + '.h5')
         fmmname = os.path.join(datadir, dset_name + maskMM[0] + '.h5')
-        fmbname = os.path.join(datadir, dset_name + maskMB[0] + '.h5')
 
         if usempi:
             # start the mpi communicator
@@ -121,12 +120,10 @@ def main(argv):
             fg1 = h5py.File(fg1name, 'w', driver='mpio', comm=MPI.COMM_WORLD)
             fds = h5py.File(fdsname, 'r', driver='mpio', comm=MPI.COMM_WORLD)
             fmm = h5py.File(fmmname, 'r', driver='mpio', comm=MPI.COMM_WORLD)
-            fmb = h5py.File(fmbname, 'r', driver='mpio', comm=MPI.COMM_WORLD)
         else:
             fg1 = h5py.File(fg1name, 'w')
             fds = h5py.File(fdsname, 'r')
             fmm = h5py.File(fmmname, 'r')
-            fmb = h5py.File(fmbname, 'r')
 
         n_slices = fmm[maskMM[1]].shape[slicedim]
 
@@ -150,15 +147,12 @@ def main(argv):
             if slicedim == 0:
                 DSslc = fds[maskDS[1]][i,:,:].astype('bool')
                 MMslc = fmm[maskMM[1]][i,:,:].astype('bool')
-                MBslc = fmb[maskMB[1]][i,:,:].astype('bool')
             elif slicedim == 1:
                 DSslc = fds[maskDS[1]][:,i,:].astype('bool')
                 MMslc = fmm[maskMM[1]][:,i,:].astype('bool')
-                MBslc = fmb[maskMB[1]][:,i,:].astype('bool')
             elif slicedim == 2:
                 DSslc = fds[maskDS[1]][:,:,i].astype('bool')
                 MMslc = fmm[maskMM[1]][:,:,i].astype('bool')
-                MBslc = fmb[maskMB[1]][:,:,i].astype('bool')
 
             labels, num = label(np.logical_and(~MMslc, DSslc), return_num=True)
             if usempi:
@@ -176,22 +170,9 @@ def main(argv):
 
             maxlabel += num
 
-#             fw.resize(maxlabel + 1)
-#             fw = check_constraints(labels, fw, map_propname,
-#                                    min_area, max_area,
-#                                    MBslc, max_intensity_mb,
-#                                    max_eccentricity,
-#                                    min_solidity,
-#                                    min_euler_number,
-#                                    min_extent)
-# 
-#         filename = os.path.join(datadir, dset_name + outpf + '_fw.npy')
-#         np.save(filename, fw)
-
         fg1.close()
         fmm.close()
         fds.close()
-        fmb.close()
 
     elif mode == "2Dfilter":
 
