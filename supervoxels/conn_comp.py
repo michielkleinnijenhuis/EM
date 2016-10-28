@@ -278,6 +278,7 @@ def main(argv):
     elif mode == "2Dprops":
 
         out = dset_name + outpf + '_'
+        npy_in = basename + outpf + '_'
 
         filename = os.path.join(datadir, dset_name + inpf + '.h5')
         if usempi:
@@ -297,11 +298,11 @@ def main(argv):
             propname = map_propnames[i]
             print("processing prop %s" % propname)
 
-            filename = os.path.join(datadir, basename + outpf + propname + '.npy')
+            filename = os.path.join(datadir, npy_in + propname + '.npy')
             fws[propname] = np.load(filename)
 
             filename = os.path.join(datadir, out + propname + '.h5')
-            g = h5py.File(filename, 'w', driver='mpio', comm=MPI.COMM_WORLD)
+            g = h5py.File(filename, 'w')
             outds = g.create_dataset('stack', f['stack'].shape,
                                      dtype=fws[propname].dtype,
                                      compression="gzip")
