@@ -63,7 +63,7 @@ def main(argv):
 
     if inputmask is not None:
         inmask = loadh5(datadir, dset_name + inputmask[0],
-                        fieldname=inputmask[1])[0]
+                        fieldname=inputmask[1], dtype='bool')[0]
         mask[~inmask] = False
 
     if blockreduce:
