@@ -7,7 +7,6 @@ from argparse import ArgumentParser
 import h5py
 import numpy as np
 
-from skimage.morphology import remove_small_objects, binary_dilation, ball
 from skimage.measure import block_reduce
 
 def main(argv):
@@ -57,6 +56,7 @@ def main(argv):
     outds[:,:,:] = block_reduce(f[inputstack[1]], block_size=tuple(blockreduce), func=eval(func))
     elsize = [e*b for e, b in zip(elsize, blockreduce)]
 
+<<<<<<< HEAD
     if elsize is not None:
         g[inputstack[1]].attrs['element_size_um'] = elsize
 
@@ -68,6 +68,10 @@ def main(argv):
     g.close()
 #    writeh5(stack, datadir, dset_name + outpf + inputstack[0],
 #            element_size_um=elsize[:3], axislabels=al[:3])
+=======
+    writeh5(stack, datadir, dset_name + outpf + inputstack[0],
+            element_size_um=elsize, axislabels=al)
+>>>>>>> e4f344b8b56c29e61dd0fec17b36fa36625128a2
 
 
 # ========================================================================== #
@@ -122,8 +126,10 @@ def writeh5(stack, datadir, fp_out, fieldname='stack',
         g[fieldname][:, :, :, :] = stack
 
     if element_size_um is not None:
+        element_size_um = element_size_um[:len(stack.shape)]
         g[fieldname].attrs['element_size_um'] = element_size_um
     if axislabels is not None:
+        axislabels = axislabels[:len(stack.shape)]
         for i, l in enumerate(axislabels):
             g[fieldname].dims[i].label = l
 
