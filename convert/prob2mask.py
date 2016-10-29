@@ -54,8 +54,9 @@ def main(argv):
 
     prob, elsize, al = loadh5(datadir, dset_name + probs[0],
                               fieldname=probs[1], channel=channel)
-    inmask = loadh5(datadir, dset_name + inputmask[0],
-                    fieldname=inputmask[1])[0]
+    if inputmask is not None:
+        inmask = loadh5(datadir, dset_name + inputmask[0],
+                        fieldname=inputmask[1])[0]
 
     mask = np.logical_and(prob > lower_threshold, prob <= upper_threshold)
     if size:
