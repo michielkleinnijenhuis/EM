@@ -18,6 +18,8 @@ def main(argv):
                         help='...')
     parser.add_argument('dset_name',
                         help='...')
+    parser.add_argument('-m', '--inputmask', default=None, nargs=2,
+                        help='...')
     parser.add_argument('-p', '--probs',
                         default=['_probs', 'volume/predictions'], nargs=2,
                         help='...')
@@ -40,6 +42,7 @@ def main(argv):
 
     datadir = args.datadir
     dset_name = args.dset_name
+    inputmask = args.inputmask
     probs = args.probs
     channel = args.channel
     blockreduce = args.blockreduce
@@ -51,12 +54,16 @@ def main(argv):
 
     prob, elsize, al = loadh5(datadir, dset_name + probs[0],
                               fieldname=probs[1], channel=channel)
+    inmask = loadh5(datadir, dset_name + inputmask[0],
+                    fieldname=inputmask[1])[0]
 
     mask = np.logical_and(prob > lower_threshold, prob <= upper_threshold)
     if size:
         remove_small_objects(mask, min_size=size, in_place=True)
     if dilation:
         mask = binary_dilation(mask, selem=ball(dilation))
+
+    mask[~inmask] = False
 
     if blockreduce:
         mask = block_reduce(mask, block_size=tuple(blockreduce), func=np.amax)
