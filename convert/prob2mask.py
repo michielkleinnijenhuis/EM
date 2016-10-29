@@ -23,7 +23,7 @@ def main(argv):
                         help='...')
     parser.add_argument('-c', '--channel', type=int, default=None,
                         help='...')
-    parser.add_argument('-d', '--blockreduce', nargs=3, type=int, default=None,
+    parser.add_argument('-b', '--blockreduce', nargs=3, type=int, default=None,
                         help='...')
     parser.add_argument('-l', '--lower_threshold', type=float, default=0,
                         help='...')
