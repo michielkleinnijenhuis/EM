@@ -170,29 +170,32 @@ def CC_2D(datadir, dset_name, maskDS, maskMM,
           slicedim, usempi, outpf):
     """Label connected components in all slices."""
 
-    gname = os.path.join(datadir, dset_name + outpf[0] + '.h5')
-    dsname = os.path.join(datadir, dset_name + maskDS[0] + '.h5')
-    mmname = os.path.join(datadir, dset_name + maskMM[0] + '.h5')
+    gname = dset_name + outpf[0] + '.h5'
+    gpath = os.path.join(datadir, gname)
+    dsname = dset_name + maskDS[0] + '.h5'
+    dspath = os.path.join(datadir, dsname)
+    mmname = dset_name + maskMM[0] + '.h5'
+    mmpath = os.path.join(datadir, mmname)
 
     if usempi:
         comm = MPI.COMM_WORLD
         rank = comm.Get_rank()
         size = comm.Get_size()
 
-        g = h5py.File(gname, 'w', driver='mpio', comm=MPI.COMM_WORLD)
-        ds = h5py.File(dsname, 'r', driver='mpio', comm=MPI.COMM_WORLD)
+        g = h5py.File(gpath, 'w', driver='mpio', comm=MPI.COMM_WORLD)
+        ds = h5py.File(dspath, 'r', driver='mpio', comm=MPI.COMM_WORLD)
         dstack = ds[maskDS[1]]
-        mm = h5py.File(mmname, 'r', driver='mpio', comm=MPI.COMM_WORLD)
+        mm = h5py.File(mmpath, 'r', driver='mpio', comm=MPI.COMM_WORLD)
         mstack = mm[maskMM[1]]
 
         n_slices = mstack.shape[slicedim]
         local_nrs = scatter_series(n_slices, comm, size, rank,
                                    MPI.SIGNED_LONG_LONG)[0]
     else:
-        g = h5py.File(gname, 'w')
-        ds = h5py.File(dsname, 'r')
+        g = h5py.File(gpath, 'w')
+        ds = h5py.File(dspath, 'r')
         dstack = ds[maskDS[1]]
-        mm = h5py.File(mmname, 'r')
+        mm = h5py.File(mmpath, 'r')
         mstack = mm[maskMM[1]]
 
         n_slices = mstack.shape[slicedim]
@@ -236,8 +239,9 @@ def CC_2D(datadir, dset_name, maskDS, maskMM,
             outds[:, :, i] = labels
 
     if usempi & (rank == size - 1):
-        filename = os.path.join(datadir, dset_name + outpf[0] + '.npy')
-        np.save(filename, np.array([maxlabel]))
+        fname = dset_name + outpf[0] + '.npy'
+        fpath = os.path.join(datadir, fname)
+        np.save(fpath, np.array([maxlabel]))
 
     g.close()
     mm.close()
@@ -257,17 +261,19 @@ def CC_filter2D(datadir, dset_name, inpf, maskMB,
      min_euler_number,
      min_extent) = criteria
 
-    fname = os.path.join(datadir, dset_name + inpf[0] + '.h5')
-    mbname = os.path.join(datadir, dset_name + maskMB[0] + '.h5')
+    fname = dset_name + inpf[0] + '.h5'
+    fpath = os.path.join(datadir, fname)
+    mbname = dset_name + maskMB[0] + '.h5'
+    mbpath = os.path.join(datadir, mbname)
 
     if usempi:
         comm = MPI.COMM_WORLD
         rank = comm.Get_rank()
         size = comm.Get_size()
 
-        f = h5py.File(fname, 'r', driver='mpio', comm=MPI.COMM_WORLD)
+        f = h5py.File(fpath, 'r', driver='mpio', comm=MPI.COMM_WORLD)
         fstack = f[inpf[1]]
-        mb = h5py.File(mbname, 'r', driver='mpio', comm=MPI.COMM_WORLD)
+        mb = h5py.File(mbpath, 'r', driver='mpio', comm=MPI.COMM_WORLD)
         mbstack = mb[maskMB[1]]
 
         n_slices = fstack.shape[slicedim]
@@ -285,9 +291,9 @@ def CC_filter2D(datadir, dset_name, inpf, maskMB,
     else:
         rank = 0
 
-        f = h5py.File(fname, 'r')
+        f = h5py.File(fpath, 'r')
         fstack = f[inpf[1]]
-        mb = h5py.File(mbname, 'r')
+        mb = h5py.File(mbpath, 'r')
         mbstack = mb[maskMB[1]]
 
         n_slices = fstack.shape[slicedim]
@@ -336,10 +342,10 @@ def CC_filter2D(datadir, dset_name, inpf, maskMB,
                                        mbstack[:, :, slc],
                                        map_propnames)
         for i, propname in enumerate(map_propnames):
-            filename = dset_name + outpf[0] + '_' + propname + '.npy'
-            filepath = os.path.join(datadir, filename)
+            npname = dset_name + outpf[0] + '_' + propname + '.npy'
+            nppath = os.path.join(datadir, npname)
             outarray = np.array(fws_reduced[:, i], dtype=datatypes[i])
-            np.save(filepath, outarray)
+            np.save(nppath, outarray)
 
     f.close()
     mb.close()
@@ -349,20 +355,21 @@ def CC_props2D(datadir, dset_name, inpf, basename,
                map_propnames, usempi, outpf):
     """Map the labels/properties."""
 
-    fname = os.path.join(datadir, dset_name + inpf[0] + '.h5')
+    fname = dset_name + inpf[0] + '.h5'
+    fpath = os.path.join(datadir, fname)
 
     if usempi:
         comm = MPI.COMM_WORLD
         rank = comm.Get_rank()
         size = comm.Get_size()
 
-        f = h5py.File(fname, 'r', driver='mpio', comm=MPI.COMM_WORLD)
+        f = h5py.File(fpath, 'r', driver='mpio', comm=MPI.COMM_WORLD)
         fstack = f[inpf[1]]
 
         local_nrs = scatter_series(len(map_propnames), comm, size, rank,
                                    MPI.SIGNED_LONG_LONG)[0]
     else:
-        f = h5py.File(fname, 'r')
+        f = h5py.File(fpath, 'r')
         fstack = f[inpf[1]]
 
         local_nrs = np.array(range(0, len(map_propnames)), dtype=int)
@@ -372,9 +379,9 @@ def CC_props2D(datadir, dset_name, inpf, basename,
         propname = map_propnames[i]
         print("processing prop %s" % propname)
 
-        filename = basename + outpf[0] + '_' + propname + '.npy'
-        filepath = os.path.join(datadir, filename)
-        fws[propname] = np.load(filepath)
+        npname = basename + outpf[0] + '_' + propname + '.npy'
+        nppath = os.path.join(datadir, npname)
+        fws[propname] = np.load(nppath)
 
         gname = dset_name + outpf[0] + '_' + propname + '.h5'
         gpath = os.path.join(datadir, gname)
@@ -394,12 +401,14 @@ def CC_props2D(datadir, dset_name, inpf, basename,
 def CC_label2Dto3D(datadir, dset_name, inpf, outpf):
     """Label connected components in 3D from the 2D-generated mask."""
 
-    fname = os.path.join(datadir, dset_name + inpf[0])
-    f = h5py.File(fname, 'r')
+    fname = dset_name + inpf[0] + '.h5'
+    fpath = os.path.join(datadir, fname)
+    f = h5py.File(fpath, 'r')
     fstack = f[inpf[1]]
 
-    gname = os.path.join(datadir, dset_name + outpf[0])
-    g = h5py.File(gname, 'w')
+    gname = dset_name + outpf[0] + '.h5'
+    gpath = os.path.join(datadir, gname)
+    g = h5py.File(gpath, 'w')
     outds = g.create_dataset(outpf[1], fstack.shape,
                              dtype='uint32',
                              compression="gzip")

@@ -101,21 +101,22 @@ def evaluate_overlaps(datadir, dset_name, labelvolume, slicedim,
                       usempi, outpf):
     """Check for slicewise overlaps between labels."""
 
-    fname = os.path.join(datadir, dset_name + labelvolume[0] + '.h5')
+    fname = dset_name + labelvolume[0] + '.h5'
+    fpath = os.path.join(datadir, fname)
 
     if usempi:
         comm = MPI.COMM_WORLD
         rank = comm.Get_rank()
         size = comm.Get_size()
 
-        f = h5py.File(fname, 'r', driver='mpio', comm=MPI.COMM_WORLD)
+        f = h5py.File(fpath, 'r', driver='mpio', comm=MPI.COMM_WORLD)
         fstack = f[labelvolume[1]]
 
         n_slices = fstack.shape[slicedim] - offsets
         local_nrs = scatter_series(n_slices, comm, size, rank,
                                    MPI.SIGNED_LONG_LONG)[0]
     else:
-        f = h5py.File(fname, 'r')
+        f = h5py.File(fpath, 'r')
         fstack = f[labelvolume[1]]
 
         n_slices = fstack.shape[slicedim] - offsets
@@ -142,9 +143,9 @@ def evaluate_overlaps(datadir, dset_name, labelvolume, slicedim,
 
     f.close()
 
-    filename = dset_name + outpf + "_rank%04d.pickle" % rank
-    filepath = os.path.join(datadir, filename)
-    with open(filepath, "wb") as file:
+    pname = dset_name + outpf + "_rank%04d.pickle" % rank
+    ppath = os.path.join(datadir, pname)
+    with open(ppath, "wb") as file:
         pickle.dump(MAlist, file)
 
     comm.Barrier()
@@ -152,15 +153,15 @@ def evaluate_overlaps(datadir, dset_name, labelvolume, slicedim,
     if rank == 0:
         match = dset_name + outpf + "_rank*.pickle"
         infiles = glob.glob(os.path.join(datadir, match))
-        for filepath in infiles:
-            with open(filepath, "r") as file:
+        for ppath in infiles:
+            with open(ppath, "r") as file:
                 newlist = pickle.load(file)
             for labelset in newlist:
                 MAlist = classify_label(MAlist, labelset)
 
-        filename = dset_name + outpf + ".pickle"
-        filepath = os.path.join(datadir, filename)
-        with open(filepath, "wb") as file:
+        pname = dset_name + outpf + ".pickle"
+        ppath = os.path.join(datadir, pname)
+        with open(ppath, "wb") as file:
             pickle.dump(MAlist, file)
 
 
@@ -168,13 +169,14 @@ def map_labels(datadir, dset_name, labelvolume, maskMM,
                min_labelsize, close, outpf):
     """Map groups of labels to a single label."""
 
-    filename = dset_name + outpf[0] + ".pickle"
-    filepath = os.path.join(datadir, filename)
-    with open(filepath, "r") as file:
+    pname = dset_name + outpf[0] + ".pickle"
+    ppath = os.path.join(datadir, pname)
+    with open(ppath, "r") as file:
         MAlist = pickle.load(file)
 
-    fname = os.path.join(datadir, dset_name + labelvolume[0] + '.h5')
-    f = h5py.File(fname, 'r')
+    fname = dset_name + labelvolume[0] + '.h5'
+    fpath = os.path.join(datadir, fname)
+    f = h5py.File(fpath, 'r')
     fstack = f[labelvolume[1]]
 
     ulabels = np.unique(fstack)
@@ -188,15 +190,17 @@ def map_labels(datadir, dset_name, labelvolume, maskMM,
         labels = closing(labels, ball(close))
 
     if maskMM is not None:
-        mname = os.path.join(datadir, dset_name + maskMM[0] + '.h5')
-        m = h5py.File(mname, 'r')
+        mname = dset_name + maskMM[0] + '.h5'
+        mpath = os.path.join(datadir, mname)
+        m = h5py.File(mpath, 'r')
         labels[np.array(m[maskMM[1]], dtype='bool')] = 0
         m.close()
 
     remove_small_objects(labels, min_size=min_labelsize, in_place=True)
 
-    gname = os.path.join(datadir, dset_name + outpf[0] + '.h5')
-    g = h5py.File(gname, 'w')
+    gname = dset_name + outpf[0] + '.h5'
+    gpath = os.path.join(datadir, gname)
+    g = h5py.File(gpath, 'w')
     outds = g.create_dataset(outpf[1], fstack.shape,
                              dtype=fstack.dtype,
                              compression='gzip')
