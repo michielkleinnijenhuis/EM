@@ -63,7 +63,7 @@ def main(argv):
         elsize = [e*b for e, b in zip(elsize, blockreduce)]
 
     writeh5(mask, datadir, dset_name + outpf, dtype='uint8',
-            element_size_um=elsize[:3], axislabels=al[:3])
+            element_size_um=elsize, axislabels=al)
 
 
 # ========================================================================== #
@@ -118,8 +118,10 @@ def writeh5(stack, datadir, fp_out, fieldname='stack',
         g[fieldname][:, :, :, :] = stack
 
     if element_size_um is not None:
+        element_size_um = element_size_um[:len(stack.shape)]
         g[fieldname].attrs['element_size_um'] = element_size_um
     if axislabels is not None:
+        axislabels = axislabels[:len(stack.shape)]
         for i, l in enumerate(axislabels):
             g[fieldname].dims[i].label = l
 
