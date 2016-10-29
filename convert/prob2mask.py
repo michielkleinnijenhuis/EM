@@ -54,9 +54,6 @@ def main(argv):
 
     prob, elsize, al = loadh5(datadir, dset_name + probs[0],
                               fieldname=probs[1], channel=channel)
-    if inputmask is not None:
-        inmask = loadh5(datadir, dset_name + inputmask[0],
-                        fieldname=inputmask[1])[0]
 
     mask = np.logical_and(prob > lower_threshold, prob <= upper_threshold)
     if size:
@@ -64,7 +61,10 @@ def main(argv):
     if dilation:
         mask = binary_dilation(mask, selem=ball(dilation))
 
-    mask[~inmask] = False
+    if inputmask is not None:
+        inmask = loadh5(datadir, dset_name + inputmask[0],
+                        fieldname=inputmask[1])[0]
+        mask[~inmask] = False
 
     if blockreduce:
         mask = block_reduce(mask, block_size=tuple(blockreduce), func=np.amax)
