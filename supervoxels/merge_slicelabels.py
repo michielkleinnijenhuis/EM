@@ -143,7 +143,7 @@ def evaluate_overlaps(datadir, dset_name, labelvolume, slicedim,
 
     f.close()
 
-    pname = dset_name + outpf + "_rank%04d.pickle" % rank
+    pname = dset_name + outpf[0] + "_rank%04d.pickle" % rank
     ppath = os.path.join(datadir, pname)
     with open(ppath, "wb") as file:
         pickle.dump(MAlist, file)
@@ -151,7 +151,7 @@ def evaluate_overlaps(datadir, dset_name, labelvolume, slicedim,
     comm.Barrier()
 
     if rank == 0:
-        match = dset_name + outpf + "_rank*.pickle"
+        match = dset_name + outpf[0] + "_rank*.pickle"
         infiles = glob.glob(os.path.join(datadir, match))
         for ppath in infiles:
             with open(ppath, "r") as file:
@@ -159,7 +159,7 @@ def evaluate_overlaps(datadir, dset_name, labelvolume, slicedim,
             for labelset in newlist:
                 MAlist = classify_label(MAlist, labelset)
 
-        pname = dset_name + outpf + ".pickle"
+        pname = dset_name + outpf[0] + ".pickle"
         ppath = os.path.join(datadir, pname)
         with open(ppath, "wb") as file:
             pickle.dump(MAlist, file)
