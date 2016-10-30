@@ -116,6 +116,8 @@ def evaluate_overlaps(datadir, dset_name, labelvolume, slicedim,
         local_nrs = scatter_series(n_slices, comm, size, rank,
                                    MPI.SIGNED_LONG_LONG)[0]
     else:
+        rank = 0
+
         f = h5py.File(fpath, 'r')
         fstack = f[labelvolume[1]]
 

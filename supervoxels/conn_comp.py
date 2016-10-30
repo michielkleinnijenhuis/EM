@@ -192,6 +192,8 @@ def CC_2D(datadir, dset_name, maskDS, maskMM,
         local_nrs = scatter_series(n_slices, comm, size, rank,
                                    MPI.SIGNED_LONG_LONG)[0]
     else:
+        rank = 0
+
         g = h5py.File(gpath, 'w')
         ds = h5py.File(dspath, 'r')
         dstack = ds[maskDS[1]]
