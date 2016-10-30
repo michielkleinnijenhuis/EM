@@ -8,6 +8,7 @@ import h5py
 import numpy as np
 import pickle
 import glob
+import socket
 
 from skimage.morphology import remove_small_objects, closing, ball
 
@@ -66,6 +67,7 @@ def main(argv):
     close = args.close
     usempi = args.usempi & ('mpi4py' in sys.modules)
 
+    print('usempi', usempi)
     if mode == "MAstitch":
 
         evaluate_overlaps(datadir, dset_name, labelvolume, slicedim,
@@ -145,7 +147,8 @@ def evaluate_overlaps(datadir, dset_name, labelvolume, slicedim,
 
     f.close()
 
-    pname = dset_name + outpf[0] + "_rank%04d.pickle" % rank
+    mname = "_host-%s_rank-%02d.pickle" % (socket.gethostname(), rank)
+    pname = dset_name + outpf[0] + mname
     ppath = os.path.join(datadir, pname)
     with open(ppath, "wb") as file:
         pickle.dump(MAlist, file)
@@ -153,7 +156,7 @@ def evaluate_overlaps(datadir, dset_name, labelvolume, slicedim,
     comm.Barrier()
 
     if rank == 0:
-        match = dset_name + outpf[0] + "_rank*.pickle"
+        match = dset_name + outpf[0] + "_host*_rank*.pickle"
         infiles = glob.glob(os.path.join(datadir, match))
         for ppath in infiles:
             with open(ppath, "r") as file:
