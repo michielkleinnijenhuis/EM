@@ -5,7 +5,14 @@ import sys
 from argparse import ArgumentParser
 import h5py
 import numpy as np
+
 from skimage.segmentation import relabel_sequential
+from skimage.measure import block_reduce
+
+try:
+    from mpi4py import MPI
+except:
+    print("mpi4py could not be loaded")
 
 
 def main(argv):
@@ -14,116 +21,193 @@ def main(argv):
         Merge blocks of data into a single .h5 file.""")
     parser.add_argument('datadir',
                         help='...')
-    parser.add_argument('outputfile',
+    parser.add_argument('dset_names', nargs='*',
                         help='...')
-    parser.add_argument('-i', '--inputfiles', nargs='*',
+    parser.add_argument('-i', '--inpf', nargs=2, default=['', 'stack'],
                         help='...')
-    parser.add_argument('-t', '--postfix', default='',
-                        help='...')
-    parser.add_argument('-f', '--field', default='stack',
-                        help='...')
-    parser.add_argument('-m', '--mask', nargs=2,
-                        help='...')
-    parser.add_argument('-l', '--outlayout',
-                        help='...')
-    parser.add_argument('-b', '--blockoffset', nargs=3, type=int, default=[0, 0, 0],
-                        help='...')
-    parser.add_argument('-p', '--blocksize', nargs=3, type=int, default=[0, 0, 0],
-                        help='...')
-    parser.add_argument('-q', '--margin', nargs=3, type=int, default=[0, 0, 0],
-                        help='...')
-    parser.add_argument('-s', '--fullsize', nargs=3, type=int, default=None,
-                        help='...')
-    parser.add_argument('-c', '--chunksize', nargs='*', type=int,
-                        help='...')
-    parser.add_argument('-e', '--element_size_um', nargs='*', type=float,
+
+    parser.add_argument('-b', '--blockoffset', nargs=3, type=int,
+                        default=[0, 0, 0],
+                        help='xyz')
+    parser.add_argument('-p', '--blocksize', nargs=3, type=int,
+                        default=[0, 0, 0],
+                        help='xyz')
+    parser.add_argument('-q', '--margin', nargs=3, type=int,
+                        default=[0, 0, 0],
+                        help='xyz')
+    parser.add_argument('-s', '--fullsize', nargs=3, type=int,
+                        default=None,
+                        help='xyz')
+
+    parser.add_argument('-l', '--is_labelimage', action='store_true',
                         help='...')
     parser.add_argument('-r', '--relabel', action='store_true',
                         help='...')
     parser.add_argument('-n', '--neighbourmerge', action='store_true',
                         help='...')
+    parser.add_argument('-F', '--save_fwmap', action='store_true',
+                        help='...')
+
+    parser.add_argument('-B', '--blockreduce', nargs=3, type=int,
+                        default=None,
+                        help='...')
+    parser.add_argument('-f', '--func', default='np.amax',
+                        help='...')
+
+    parser.add_argument('-m', '--usempi', action='store_true',
+                        help='use mpi4py')
+
     args = parser.parse_args()
 
     datadir = args.datadir
-    outputfile = args.outputfile
-    inputfiles = args.inputfiles
-    postfix = args.postfix
-    field = args.field
-    mask = args.mask
-    chunksize = args.chunksize
+    dset_names = args.dset_names
+    inpf = args.inpf
+
     blockoffset = args.blockoffset
     margin = args.margin
     blocksize = args.blocksize
     fullsize = args.fullsize
-    element_size_um = args.element_size_um
-    outlayout = args.outlayout
+
+    is_labelimage = args.is_labelimage
     relabel = args.relabel
     neighbourmerge = args.neighbourmerge
+    save_fwmap = args.save_fwmap
+    blockreduce = args.blockreduce
+    func = args.func
 
-    firstfile = os.path.join(datadir, inputfiles[0] + postfix + '.h5')
-    f = h5py.File(firstfile, 'r')
-    ndims = len(f[field].shape)
-    g = create_dset(outputfile, f, field, ndims,
-                    chunksize, element_size_um, outlayout)
+    usempi = args.usempi & ('mpi4py' in sys.modules)
+
+    fname = dset_names[0] + inpf[0] + '.h5'
+    fpath = os.path.join(datadir, fname)
+
+    dset_info = split_filename(fpath, blockoffset)[0]
+
+    gname = dset_info['base'] + inpf[0] + '.h5'
+    gpath = os.path.join(datadir, gname)
+
+    if usempi:
+        comm = MPI.COMM_WORLD
+        rank = comm.Get_rank()
+        size = comm.Get_size()
+
+        f = h5py.File(fpath, 'r', driver='mpio', comm=MPI.COMM_WORLD)
+        g = h5py.File(gpath, 'w', driver='mpio', comm=MPI.COMM_WORLD)
+
+        local_nrs = scatter_series(len(dset_names), comm, size, rank)[0]
+
+    else:
+        rank = 0
+
+        f = h5py.File(fpath, 'r')
+        g = h5py.File(gpath, 'w')
+
+        local_nrs = np.array(range(0, len(dset_names)), dtype=int)
+
+    fstack = f[inpf[1]]
+    elsize, al = get_h5_attributes(fstack)
+    ndims = len(fstack.shape)
+
+    # TODO: option to get fullsize from dset_names
+    if blockreduce is not None:
+        print('exiting: blockreduce not yet implemented')
+        return
+#         outsize = [int(np.ceil(d/b))
+#                    for d,b in zip(fstack.shape, blockreduce)]
+#         elsize = [e*b for e, b in zip(elsize, blockreduce)]
+    else:  # NOTE: 'zyx(c)' stack assumed
+        outsize = fullsize[::-1]
+        if ndims == 4:
+            outsize = outsize + [fstack.shape[3]]
+
+    g.create_dataset(inpf[1], outsize,
+                     chunks=fstack.chunks or None,
+                     dtype=fstack.dtype,
+                     compression=None if usempi else 'gzip')
+    gstack = g[inpf[1]]
+    write_h5_attributes(gstack, elsize, al)
+
     f.close()
 
     maxlabel = 0
-    for inputfile in inputfiles:
+    for i in local_nrs:
+        dset_name = dset_names[i]
 
-        filepath = os.path.join(datadir, inputfile + postfix + '.h5')
-        f = h5py.File(filepath, 'r')
-        dset_info, x, X, y, Y, z, Z = split_filename(filepath, blockoffset)
-#         if mask is not None:
-#             dset_info['postfix'] = mask[0]
-#             maskfilename = dataset_name(dset_info)
-#             m = h5py.File(os.path.join(dset_info['datadir'],
-#                                        maskfilename + '.h5'), 'r')
-#             ma = np.array(m[mask[0]][:,:,:], dtype='bool')
+        fname = dset_name + inpf[0] + '.h5'
+        fpath = os.path.join(datadir, fname)
+        f = h5py.File(fpath, 'r')
+        fstack = f[inpf[1]]
+        dset_info, x, X, y, Y, z, Z = split_filename(fpath, blockoffset)
 
-        (x, X), (ox, oX) = margins(x, X, blocksize[0], margin[0], fullsize[0])
-        (y, Y), (oy, oY) = margins(y, Y, blocksize[1], margin[1], fullsize[1])
-        (z, Z), (oz, oZ) = margins(z, Z, blocksize[2], margin[2], fullsize[2])
-#         print(x, X, y, Y, z, Z)
-#         print(ox, oX, oy, oY, oz, oZ)
+        if blockreduce is not None:  # TODO
+            pass
+#             data = block_reduce(fstack,
+#                                 block_size=tuple(blockreduce),
+#                                 func=eval(func))
+        else:
+            data = fstack
+            (x, X), (ox, oX) = margins(x, X, blocksize[0],
+                                       margin[0], fullsize[0])
+            (y, Y), (oy, oY) = margins(y, Y, blocksize[1],
+                                       margin[1], fullsize[1])
+            (z, Z), (oz, oZ) = margins(z, Z, blocksize[2],
+                                       margin[2], fullsize[2])
 
-        for i, newmax in enumerate([Z, Y, X]):
-            if newmax > g[field].shape[i]:
-                g[field].resize(newmax, i)
-#         print(f[field].shape)
-#         print(g[field].shape)
-
-        if ndims == 4:
-            g[field][z:Z, y:Y, x:X, :] = f[field][oz:oZ, oy:oY, ox:oX, :]
+        if ndims == 4:  # NOTE: no 4D labelimages assumed
+            gstack[z:Z, y:Y, x:X, :] = data[oz:oZ, oy:oY, ox:oX, :]
+            f.close()
             continue
 
-        if (not relabel) and (not neighbourmerge):
-            g[field][z:Z, y:Y, x:X] = f[field][oz:oZ, oy:oY, ox:oX]
+        if not is_labelimage:
+            gstack[z:Z, y:Y, x:X] = data[oz:oZ, oy:oY, ox:oX]
+            f.close()
             continue
 
         if relabel:
-            print('relabeling')
-            fw = relabel_sequential(f[field][:, :, :], maxlabel + 1)[1]
-            maxlabel = np.amax(fw)
-            print(maxlabel)
-        else:
-            labels = np.unique(f[field][:, :, :])
-            fw = np.zeros(np.amax(labels))  # TODO: shouldn't this be maxlabel + 1
-            for l in labels:
-                fw[l] = l
-        if neighbourmerge:
-            print('merging neighbours')
-            if fullsize is not None:
-#                 fw = merge_neighbours(fw, f[field], g[field],
-#                                       (x, X, y, Y, z, Z))
-                fw = merge_overlap(fw, f[field], g[field],
-                                   (x, X, y, Y, z, Z), (ox, oX, oy, oY, oz, oZ),
-                                   margin, fullsize)
-            else:
-                print('fullsize None; not merging')
-            filepath = os.path.join(datadir, inputfile + postfix + '_test.npy')
-            np.save(filepath, fw)
 
-        g[field][z:Z, y:Y, x:X] = fw[f[field][oz:oZ, oy:oY, ox:oX]]
+            fw = relabel_sequential(data[:, :, :])[1]
+
+            if usempi:
+                # FIXME: only terminates properly when: nblocks % size = 0
+
+                num_labels = np.amax(fw)
+                num_labels = comm.gather(num_labels, root=0)
+
+                if rank == 0:
+                    add_labels = [maxlabel + np.sum(num_labels[:i])
+                                  for i in range(1, size)]
+                    add_labels = np.array([maxlabel] + add_labels, dtype='i')
+                    maxlabel = maxlabel + np.sum(num_labels)
+                else:
+                    add_labels = np.empty(size)
+
+                add_labels = comm.bcast(add_labels, root=0)
+                fw[1:] += add_labels[rank]
+
+            else:
+
+                fw[1:] += maxlabel
+                maxlabel += np.amax(fw)
+
+        else:
+
+            ulabels = np.unique(data[:, :, :])
+            fw = [l for l in range(0, np.amax(ulabels) + 1)]
+            fw = np.array(fw)
+
+        if neighbourmerge:
+
+            fw = merge_overlap(fw, data, gstack,
+                               (x, X, y, Y, z, Z),
+                               (ox, oX, oy, oY, oz, oZ),
+                               margin, fullsize)
+
+        if save_fwmap:
+
+            fname = dset_name + inpf[0] + '.npy'
+            fpath = os.path.join(datadir, fname)
+            np.save(fpath, fw)
+
+        gstack[z:Z, y:Y, x:X] = fw[data[oz:oZ, oy:oY, ox:oX]]
 
         f.close()
 
@@ -133,6 +217,20 @@ def main(argv):
 # ========================================================================== #
 # function defs
 # ========================================================================== #
+
+
+def scatter_series(n, comm, size, rank, SLL=MPI.SIGNED_LONG_LONG):
+    """Scatter a series of jobnrs over processes."""
+
+    nrs = np.array(range(0, n), dtype=int)
+    local_n = np.ones(size, dtype=int) * n / size
+    local_n[0:n % size] += 1
+    local_nrs = np.zeros(local_n[rank], dtype=int)
+    displacements = tuple(sum(local_n[0:r]) for r in range(0, size))
+    comm.Scatterv([nrs, tuple(local_n), displacements, SLL],
+                  local_nrs, root=0)
+
+    return local_nrs, tuple(local_n), displacements
 
 
 def dataset_name(dset_info):
@@ -188,46 +286,6 @@ def margins(fc, fC, blocksize, margin, fullsize):
         fC -= margin
 
     return (fc, fC), (bc, bC)
-
-
-def create_dset(outputfile, f, field, ndims,
-                chunksize, element_size_um, outlayout):
-    """Prepare the dataset to hold the merged volume."""
-
-    if not chunksize:
-        try:
-            chunksize = f[field].chunks
-        except:
-            pass
-
-    maxshape = [None] * ndims
-
-    g = h5py.File(outputfile, 'w')
-    outds = g.create_dataset(field, np.zeros(len(f[field].shape)),
-                             chunks=chunksize,
-                             dtype=f[field].dtype,
-                             maxshape=maxshape,
-                             compression="gzip")
-
-    if element_size_um:
-        outds.attrs['element_size_um'] = element_size_um
-    else:
-        try:
-            outds.attrs['element_size_um'] = f[field].attrs['element_size_um']
-        except:
-            pass
-
-    if outlayout:
-        for i, l in enumerate(outlayout):
-            outds.dims[i].label = l
-    else:
-        try:
-            for i, d in enumerate(f[field].dims):
-                outds.dims[i].label = d.label
-        except:
-            pass
-
-    return g
 
 
 def get_overlap(side, fstack, gstack, granges, oranges,
@@ -291,7 +349,8 @@ def merge_overlap(fw, fstack, gstack, granges, oranges,
 
     for side in ['xmin', 'xmax', 'ymin', 'ymax', 'zmin', 'zmax']:
 
-        data_section, nb_section = get_overlap(side, fstack, gstack, granges, oranges,
+        data_section, nb_section = get_overlap(side, fstack, gstack,
+                                               granges, oranges,
                                                margin, fullsize)
         print(nb_section)
         if nb_section is None:
@@ -383,6 +442,31 @@ def merge_neighbours(fw, fstack, gstack, granges):
             print('%s: mapped label %d to %d' % (side, data_label, nb_label))
 
     return fw
+
+
+def get_h5_attributes(stack):
+    """Get attributes from a stack."""
+
+    element_size_um = axislabels = None
+
+    if 'element_size_um' in stack.attrs.keys():
+        element_size_um = stack.attrs['element_size_um']
+
+    if 'DIMENSION_LABELS' in stack.attrs.keys():
+        axislabels = stack.attrs['DIMENSION_LABELS']
+
+    return element_size_um, axislabels
+
+
+def write_h5_attributes(stack, element_size_um=None, axislabels=None):
+    """Write attributes to a stack."""
+
+    if element_size_um is not None:
+        stack.attrs['element_size_um'] = element_size_um
+
+    if axislabels is not None:
+        for i, l in enumerate(axislabels):
+            stack.dims[i].label = l
 
 
 if __name__ == "__main__":
