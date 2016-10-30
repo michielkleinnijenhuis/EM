@@ -41,11 +41,11 @@ def main(argv):
     parser.add_argument('-M', '--mode',
                         help='...')
 
-    parser.add_argument('-q', '--offsets', default=4, type=int,
+    parser.add_argument('-q', '--offsets', type=int, default=2,
                         help='...')
-    parser.add_argument('-t', '--threshold_overlap', default=0.01, type=float,
+    parser.add_argument('-t', '--threshold_overlap', type=float, default=None,
                         help='...')
-    parser.add_argument('-s', '--min_labelsize', default=10000, type=int,
+    parser.add_argument('-s', '--min_labelsize', type=int, default=None,
                         help='...')
     parser.add_argument('-c', '--close', nargs='*', type=int, default=None,
                         help='...')
