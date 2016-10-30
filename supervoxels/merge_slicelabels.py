@@ -11,6 +11,7 @@ import glob
 import socket
 
 from skimage.morphology import remove_small_objects, closing, ball, disk
+from skimage.segmentation import relabel_sequential
 
 try:
     from mpi4py import MPI
@@ -40,13 +41,15 @@ def main(argv):
     parser.add_argument('-M', '--mode',
                         help='...')
 
-    parser.add_argument('-r', '--offsets', default=4, type=int,
+    parser.add_argument('-q', '--offsets', default=4, type=int,
                         help='...')
     parser.add_argument('-t', '--threshold_overlap', default=0.01, type=float,
                         help='...')
     parser.add_argument('-s', '--min_labelsize', default=10000, type=int,
                         help='...')
     parser.add_argument('-c', '--close', nargs='*', type=int, default=None,
+                        help='...')
+    parser.add_argument('-r', '--relabel', action='store_true',
                         help='...')
 
     parser.add_argument('-m', '--usempi', action='store_true',
@@ -65,6 +68,7 @@ def main(argv):
     threshold_overlap = args.threshold_overlap
     min_labelsize = args.min_labelsize
     close = args.close
+    relabel = args.relabel
     usempi = args.usempi & ('mpi4py' in sys.modules)
 
     if mode == "MAstitch":
@@ -75,7 +79,7 @@ def main(argv):
     elif mode == "MAfwmap":
 
         map_labels(datadir, dset_name, labelvolume, maskMM,
-                   min_labelsize, close, outpf)
+                   min_labelsize, close, relabel, outpf)
 
 
 # ========================================================================== #
@@ -170,7 +174,7 @@ def evaluate_overlaps(datadir, dset_name, labelvolume, slicedim,
 
 
 def map_labels(datadir, dset_name, labelvolume, maskMM,
-               min_labelsize, close, outpf):
+               min_labelsize, close, relabel, outpf):
     """Map groups of labels to a single label."""
 
     pname = dset_name + outpf[0] + ".pickle"
@@ -188,7 +192,8 @@ def map_labels(datadir, dset_name, labelvolume, maskMM,
           for l in range(0, np.amax(ulabels) + 1)]
     labels = forward_map(np.array(fw), fstack, MAlist)
 
-    remove_small_objects(labels, min_size=min_labelsize, in_place=True)
+    if min_labelsize is not None:
+        remove_small_objects(labels, min_size=min_labelsize, in_place=True)
 
     if close is not None:
         if len(close) == 1:
@@ -204,7 +209,11 @@ def map_labels(datadir, dset_name, labelvolume, maskMM,
         labels[np.array(m[maskMM[1]], dtype='bool')] = 0
         m.close()
 
-    remove_small_objects(labels, min_size=min_labelsize, in_place=True)
+    if min_labelsize is not None:
+        remove_small_objects(labels, min_size=min_labelsize, in_place=True)
+
+    if relabel:
+        labels = relabel_sequential(labels)[0]
 
     gname = dset_name + outpf[0] + '.h5'
     gpath = os.path.join(datadir, gname)
