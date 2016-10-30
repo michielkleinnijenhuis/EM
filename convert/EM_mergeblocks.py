@@ -104,20 +104,24 @@ def main(argv):
             print('relabeling')
             fw = relabel_sequential(f[field][:, :, :], maxlabel + 1)[1]
             maxlabel = np.amax(fw)
+            print(maxlabel)
         else:
             labels = np.unique(f[field][:, :, :])
-            fw = np.zeros(np.amax(labels))
+            fw = np.zeros(np.amax(labels))  # TODO: shouldn't this be maxlabel + 1
             for l in labels:
                 fw[l] = l
         if neighbourmerge:
             print('merging neighbours')
-            if fullsize is None:
+            if fullsize is not None:
 #                 fw = merge_neighbours(fw, f[field], g[field],
 #                                       (x, X, y, Y, z, Z))
-                fw = merge_overlap(dset_info, fw, f[field], g[field],
-                                   (x, X, y, Y, z, Z))
+                fw = merge_overlap(fw, f[field], g[field],
+                                   (x, X, y, Y, z, Z), (ox, oX, oy, oY, oz, oZ),
+                                   margin, fullsize)
             else:
-                pass
+                print('fullsize None; not merging')
+            filepath = os.path.join(datadir, inputfile + postfix + '_test.npy')
+            np.save(filepath, fw)
 
         g[field][z:Z, y:Y, x:X] = fw[f[field][oz:oZ, oy:oY, ox:oX]]
 
@@ -226,62 +230,90 @@ def create_dset(outputfile, f, field, ndims,
     return g
 
 
-def get_overlap(side, fstack, gstack, granges,
+def get_overlap(side, fstack, gstack, granges, oranges,
                 margin=[0, 0, 0], fullsize=[0, 0, 0]):
     """Return boundary slice of block and its neighbour."""
 
     x, X, y, Y, z, Z = granges
+    ox, oX, oy, oY, oz, oZ = oranges
+    # FIXME: need to account for blockoffset
+#    ox = max(0, x - margin[0])
+#    oX = min(fullsize[0], X + margin[0])
+#    oy = max(0, y - margin[1])
+#    oY = min(fullsize[1], Y + margin[1])
+#    oz = max(0, z - margin[2])
+#    oZ = min(fullsize[2], Y + margin[2])
+
+    data_section = None
     nb_section = None
 
-    if side == 'xmin':
-        data_section = fstack[:, :, 0:margin[0]]
-        if x > 0:
-            nb_section = gstack[z:Z, y:Y, x-margin[0]:]
-    elif side == 'xmax':
-        data_section = fstack[:, :, :-margin[0]]
-        if X < fullsize[0]:
+    print(margin, x, X, y, Y, z, Z, ox, oX, oy, oY, oz, oZ)
+    if (side == 'xmin') & (x > 0):
+#        data_section = fstack[:, :, :margin[0]]
+#        if x > 0:
+            data_section = fstack[oz:oZ, oy:oY, :margin[0]]
+            nb_section = gstack[z:Z, y:Y, x-margin[0]:x]
+    elif (side == 'xmax') & (X < gstack.shape[2]):
+#        data_section = fstack[:, :, -margin[0]:]
+#        if X < gstack.shape[2]:
+            data_section = fstack[oz:oZ, oy:oY, -margin[0]:]
             nb_section = gstack[z:Z, y:Y, X:X+margin[0]]
-    elif side == 'ymin':
-        data_section = fstack[:, 0:margin[1], :]
-        if y > 0:
-            nb_section = gstack[z:Z, y-margin[1]:, x:X]
-    elif side == 'ymax':
-        data_section = fstack[:, :-margin[1], :]
-        if Y < fullsize[1]:
-            nb_section = gstack[z:Z, Y:Y+margin[1], x:X]
-    elif side == 'zmin':
-        data_section = fstack[0:margin[2], :, :]
-        if z > 0:
-            nb_section = gstack[z-margin[2]:, y:Y, x:X]
-    elif side == 'zmax':
-        data_section = fstack[:-margin[2], :, :]
-        if Z < fullsize[2]:
+    elif (side == 'ymin') & (y > 0):
+#        data_section = fstack[:, :margin[1], :]
+#        if y > 0:
+            data_section = fstack[oz:oZ, :margin[1], ox:oX]
+            nb_section = gstack[z:Z, y-margin[1]:y, x:X]
+    elif (side == 'ymax') & (Y < gstack.shape[1]):
+#        data_section = fstack[:, -margin[1]:, :]
+#        if Y < gstack.shape[1]:
+            data_section = fstack[oz:oZ, -margin[1]:, ox:oX]
+            nb_section = gstack[oz:oZ, Y:Y+margin[1], ox:oX]
+    elif (side == 'zmin') & (z > 0):
+#        data_section = fstack[:margin[2], :, :]
+#        if z > 0:
+            data_section = fstack[:margin[2], oy:oY, ox:oX]
+            nb_section = gstack[z-margin[2]:z, y:Y, x:X]
+    elif (side == 'zmax') & (Z < gstack.shape[0]):
+#        data_section = fstack[-margin[2]:, :, :]
+#        if Z < gstack.shape[0]:
+            data_section = fstack[-margin[2]:, oy:oY, ox:oX]
             nb_section = gstack[Z:Z+margin[2], y:Y, x:X]
+
+    if nb_section is not None:
+        print(side, data_section.shape, nb_section.shape)
 
     return data_section, nb_section
 
 
-def merge_overlap(fw, fstack, gstack, granges):
+def merge_overlap(fw, fstack, gstack, granges, oranges,
+                  margin=[0, 0, 0], fullsize=[0, 0, 0]):
     """Adapt the forward map to merge neighbouring labels."""
 
     for side in ['xmin', 'xmax', 'ymin', 'ymax', 'zmin', 'zmax']:
 
-        data_section, nb_section = get_overlap(side, fstack, gstack, granges)
+        data_section, nb_section = get_overlap(side, fstack, gstack, granges, oranges,
+                                               margin, fullsize)
+        print(nb_section)
         if nb_section is None:
             continue
 
+        print(nb_section, data_section)
         data_labels = np.trim_zeros(np.unique(data_section))
+        print(data_labels)
         for data_label in data_labels:
+            print(data_label)
 
             mask_data = data_section == data_label
             bins = np.bincount(nb_section[mask_data])
             if len(bins) <= 1:
+                print("lenbins")
                 continue
 
             nb_label = np.argmax(bins[1:]) + 1
             n_data = np.sum(mask_data)
             n_nb = bins[nb_label]
             if float(n_nb) / float(n_data) < 0.1:
+                print("div", n_nb, n_data, nb_label)
                 continue
 
             fw[data_label] = nb_label
