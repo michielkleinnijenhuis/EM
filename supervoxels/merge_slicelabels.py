@@ -10,7 +10,7 @@ import pickle
 import glob
 import socket
 
-from skimage.morphology import remove_small_objects, closing, ball
+from skimage.morphology import remove_small_objects, closing, ball, disk
 
 try:
     from mpi4py import MPI
@@ -46,7 +46,7 @@ def main(argv):
                         help='...')
     parser.add_argument('-s', '--min_labelsize', default=10000, type=int,
                         help='...')
-    parser.add_argument('-c', '--close', default=None, type=int,
+    parser.add_argument('-c', '--close', nargs='*', type=int, default=None,
                         help='...')
 
     parser.add_argument('-m', '--usempi', action='store_true',
@@ -67,7 +67,6 @@ def main(argv):
     close = args.close
     usempi = args.usempi & ('mpi4py' in sys.modules)
 
-    print('usempi', usempi)
     if mode == "MAstitch":
 
         evaluate_overlaps(datadir, dset_name, labelvolume, slicedim,
@@ -191,8 +190,12 @@ def map_labels(datadir, dset_name, labelvolume, maskMM,
 
     remove_small_objects(labels, min_size=min_labelsize, in_place=True)
 
-    if closing is not None:
-        labels = closing(labels, ball(close))
+    if close is not None:
+        if len(close) == 1:
+            selem = ball(close)
+        elif len(close) == 3:
+            selem = generate_anisotropic_selem(close)
+        labels = closing(labels, selem)
 
     if maskMM is not None:
         mname = dset_name + maskMM[0] + '.h5'
@@ -215,6 +218,24 @@ def map_labels(datadir, dset_name, labelvolume, maskMM,
 
     g.close()
     f.close()
+
+
+def generate_anisotropic_selem(close):
+    """Generate an anisotropic diamond structuring element."""
+
+    # FIXME: for now assumed z is first dimension
+    # and x,y are in-plane with the same width
+    selem_dim = [2*close[0]+1, 2*close[1]+1, 2*close[2]+1]
+    selem = np.zeros(selem_dim)
+    for i in range(close[0] + 1):
+        xywidth = max(0, close[1] - (close[0] - i))
+        xy = disk(xywidth)
+        padsize = (selem_dim[1] - len(xy)) / 2
+        xy = np.pad(xy, padsize, 'constant')
+        selem[i,:,:] = xy
+        selem[-(i+1),:,:] = xy
+
+    return selem
 
 
 def merge_neighbours(MAlist, data_section, nb_section, threshold_overlap=0.01):
