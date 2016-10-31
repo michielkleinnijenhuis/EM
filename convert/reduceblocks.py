@@ -8,6 +8,7 @@ import h5py
 import numpy as np
 
 from skimage.measure import block_reduce
+from scipy.stats.mstats import mode
 
 def main(argv):
 

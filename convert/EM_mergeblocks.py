@@ -8,6 +8,7 @@ import numpy as np
 
 from skimage.segmentation import relabel_sequential
 from skimage.measure import block_reduce
+from scipy.stats.mstats import mode
 
 try:
     from mpi4py import MPI
