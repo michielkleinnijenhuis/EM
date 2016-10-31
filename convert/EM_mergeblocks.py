@@ -109,12 +109,13 @@ def main(argv):
 
     # TODO: option to get fullsize from dset_names
     if blockreduce is not None:
+        datasize = np.subtract(fullsize[::-1], blockoffset[::-1])
         outsize = [int(np.ceil(d/b))
-                   for d,b in zip(fullsize[::-1], blockreduce)]
+                   for d,b in zip(datasize, blockreduce)]
         elsize = [e*b for e, b in zip(elsize, blockreduce)]
         print(outsize)
     else:  # NOTE: 'zyx(c)' stack assumed
-        outsize = fullsize[::-1]
+        outsize = np.subtract(fullsize[::-1], blockoffset[::-1])
         if ndims == 4:
             outsize = outsize + [fstack.shape[3]]
 
