@@ -50,7 +50,7 @@ def main(argv):
 
     parser.add_argument('-B', '--blockreduce', nargs=3, type=int,
                         default=None,
-                        help='...')
+                        help='zyx')
     parser.add_argument('-f', '--func', default='np.amax',
                         help='...')
 
@@ -109,11 +109,10 @@ def main(argv):
 
     # TODO: option to get fullsize from dset_names
     if blockreduce is not None:
-        print('exiting: blockreduce not yet implemented')
-        return
-#         outsize = [int(np.ceil(d/b))
-#                    for d,b in zip(fstack.shape, blockreduce)]
-#         elsize = [e*b for e, b in zip(elsize, blockreduce)]
+        outsize = [int(np.ceil(d/b))
+                   for d,b in zip(fullsize[::-1], blockreduce)]
+        elsize = [e*b for e, b in zip(elsize, blockreduce)]
+        print(outsize)
     else:  # NOTE: 'zyx(c)' stack assumed
         outsize = fullsize[::-1]
         if ndims == 4:
@@ -138,19 +137,41 @@ def main(argv):
         fstack = f[inpf[1]]
         dset_info, x, X, y, Y, z, Z = split_filename(fpath, blockoffset)
 
-        if blockreduce is not None:  # TODO
-            pass
-#             data = block_reduce(fstack,
-#                                 block_size=tuple(blockreduce),
-#                                 func=eval(func))
+        (x, X), (ox, oX) = margins(x, X, blocksize[0],
+                                   margin[0], fullsize[0])
+        (y, Y), (oy, oY) = margins(y, Y, blocksize[1],
+                                   margin[1], fullsize[1])
+        (z, Z), (oz, oZ) = margins(z, Z, blocksize[2],
+                                   margin[2], fullsize[2])
+
+        if blockreduce is not None:
+            data = block_reduce(fstack[:,:,:],
+                                block_size=tuple(blockreduce),
+                                func=eval(func))
+            idims = data.shape
+            x /= blockreduce[2]
+            X = x + idims[2]
+            y /= blockreduce[1]
+            Y = y + idims[1]
+            z /= blockreduce[0]
+            Z = z + idims[0]
+
+            odims = gstack[z:Z, y:Y, x:X].shape
+            ox /= blockreduce[2]
+            oX = ox + idims[2]
+            oy /= blockreduce[1]
+            oY = oy + idims[1]
+            oz /= blockreduce[0]
+            oZ = oz + idims[0]
+            if idims[2] > odims[2]:
+                oX -= 1
+            if idims[1] > odims[1]:
+                oY -= 1
+            if idims[0] > odims[0]:
+                oZ -= 1
+
         else:
             data = fstack
-            (x, X), (ox, oX) = margins(x, X, blocksize[0],
-                                       margin[0], fullsize[0])
-            (y, Y), (oy, oY) = margins(y, Y, blocksize[1],
-                                       margin[1], fullsize[1])
-            (z, Z), (oz, oZ) = margins(z, Z, blocksize[2],
-                                       margin[2], fullsize[2])
 
         if ndims == 4:  # NOTE: no 4D labelimages assumed
             gstack[z:Z, y:Y, x:X, :] = data[oz:oZ, oy:oY, ox:oX, :]
