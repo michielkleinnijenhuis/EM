@@ -9,7 +9,8 @@ import numpy as np
 from skimage.segmentation import relabel_sequential
 # from skimage.measure import block_reduce
 from skimage.util import view_as_blocks
-from scipy.stats import mode
+# from scipy.stats import mode
+from numpy.lib.stride_tricks import as_strided
 
 try:
     from mpi4py import MPI
@@ -131,6 +132,7 @@ def main(argv):
 
     maxlabel = 0
     for i in local_nrs:
+        print('block', i)
         dset_name = dset_names[i]
 
         fname = dset_name + inpf[0] + '.h5'
@@ -564,14 +566,27 @@ def block_reduce(image, block_size, func=np.sum, cval=0):
     out = view_as_blocks(image, block_size)
 
     if func is mode:
-        ndims = len(out.shape) // 2
-        out = np.reshape(out, list(out.shape[:ndims]) + [-1])
-        out = np.squeeze(func(out, axis=-1)[0], axis=-1)
+        outshape = tuple(image.shape) + tuple([-1])
+        out = np.reshape(out, outshape)
+        out = mode(out)
     else:
         for i in range(len(out.shape) // 2):
             out = func(out, axis=-1)
 
     return out
+
+
+def mode(array, axis=None):
+    """Calculate the blockwise mode."""
+
+    smode = np.zeros_like(array)
+    for i in range(array.shape[0]):
+        for j in range(array.shape[1]):
+            for k in range(array.shape[2]):
+                block = array[i,j,k,:].ravel()
+                smode[i,j,k] = np.argmax(np.bincount(block))
+
+    return smode
 
 
 if __name__ == "__main__":
