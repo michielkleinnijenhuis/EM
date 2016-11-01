@@ -132,8 +132,8 @@ def main(argv):
 
     maxlabel = 0
     for i in local_nrs:
-        print('block', i)
         dset_name = dset_names[i]
+        print('processing block %03d: %s' % (i, dset_name))
 
         fname = dset_name + inpf[0] + '.h5'
         fpath = os.path.join(datadir, fname)
@@ -274,12 +274,12 @@ def split_filename(filename, blockoffset=[0, 0, 0]):
     datadir, tail = os.path.split(filename)
     fname = os.path.splitext(tail)[0]
     parts = fname.split("_")
-    x = int(parts[1].split("-")[0]) - blockoffset[0]
-    X = int(parts[1].split("-")[1]) - blockoffset[0]
+    x = int(parts[1].split("-")[0]) - blockoffset[2]
+    X = int(parts[1].split("-")[1]) - blockoffset[2]
     y = int(parts[2].split("-")[0]) - blockoffset[1]
     Y = int(parts[2].split("-")[1]) - blockoffset[1]
-    z = int(parts[3].split("-")[0]) - blockoffset[2]
-    Z = int(parts[3].split("-")[1]) - blockoffset[2]
+    z = int(parts[3].split("-")[0]) - blockoffset[0]
+    Z = int(parts[3].split("-")[1]) - blockoffset[0]
 
     dset_info = {'datadir': datadir, 'base': parts[0],
                  'nzfills': len(parts[1].split("-")[0]),
