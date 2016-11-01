@@ -10,7 +10,7 @@ from skimage.segmentation import relabel_sequential
 # from skimage.measure import block_reduce
 from skimage.util import view_as_blocks
 # from scipy.stats import mode
-from numpy.lib.stride_tricks import as_strided
+# from numpy.lib.stride_tricks import as_strided
 
 try:
     from mpi4py import MPI
@@ -31,16 +31,16 @@ def main(argv):
 
     parser.add_argument('-b', '--blockoffset', nargs=3, type=int,
                         default=[0, 0, 0],
-                        help='xyz')
+                        help='zyx')
     parser.add_argument('-p', '--blocksize', nargs=3, type=int,
                         default=[0, 0, 0],
-                        help='xyz')
+                        help='zyx')
     parser.add_argument('-q', '--margin', nargs=3, type=int,
                         default=[0, 0, 0],
-                        help='xyz')
+                        help='zyx')
     parser.add_argument('-s', '--fullsize', nargs=3, type=int,
                         default=None,
-                        help='xyz')
+                        help='zyx')
 
     parser.add_argument('-l', '--is_labelimage', action='store_true',
                         help='...')
@@ -112,12 +112,12 @@ def main(argv):
 
     # TODO: option to get fullsize from dset_names
     if blockreduce is not None:
-        datasize = np.subtract(fullsize[::-1], blockoffset[::-1])
+        datasize = np.subtract(fullsize, blockoffset)
         outsize = [int(np.ceil(d/b))
                    for d,b in zip(datasize, blockreduce)]
         elsize = [e*b for e, b in zip(elsize, blockreduce)]
     else:  # NOTE: 'zyx(c)' stack assumed
-        outsize = np.subtract(fullsize[::-1], blockoffset[::-1])
+        outsize = np.subtract(fullsize, blockoffset)
         if ndims == 4:
             outsize = outsize + [fstack.shape[3]]
 
@@ -141,56 +141,27 @@ def main(argv):
         fstack = f[inpf[1]]
         dset_info, x, X, y, Y, z, Z = split_filename(fpath, blockoffset)
 
-        (x, X), (ox, oX) = margins(x, X, blocksize[0],
+        (z, Z), (oz, oZ) = margins(z, Z, blocksize[0],
                                    margin[0], fullsize[0])
         (y, Y), (oy, oY) = margins(y, Y, blocksize[1],
                                    margin[1], fullsize[1])
-        (z, Z), (oz, oZ) = margins(z, Z, blocksize[2],
+        (x, X), (ox, oX) = margins(x, X, blocksize[2],
                                    margin[2], fullsize[2])
 
-        if blockreduce is not None:
-            data = block_reduce(fstack[:,:,:],
-                                block_size=tuple(blockreduce),
-                                func=eval(func))
-            idims = data.shape
-            x /= blockreduce[2]
-            X = x + idims[2]
-            y /= blockreduce[1]
-            Y = y + idims[1]
-            z /= blockreduce[0]
-            Z = z + idims[0]
-
-            odims = gstack[z:Z, y:Y, x:X].shape
-            ox /= blockreduce[2]
-            oX = ox + idims[2]
-            oy /= blockreduce[1]
-            oY = oy + idims[1]
-            oz /= blockreduce[0]
-            oZ = oz + idims[0]
-            if idims[2] > odims[2]:
-                oX -= 1
-            if idims[1] > odims[1]:
-                oY -= 1
-            if idims[0] > odims[0]:
-                oZ -= 1
-
-        else:
-            data = fstack
-
         if ndims == 4:  # NOTE: no 4D labelimages assumed
-            gstack[z:Z, y:Y, x:X, :] = data[oz:oZ, oy:oY, ox:oX, :]
+            gstack[z:Z, y:Y, x:X, :] = fstack[oz:oZ, oy:oY, ox:oX, :]
             f.close()
             continue
 
         if ((not is_labelimage) or 
-            (not relabel and not neighbourmerge)):
-            gstack[z:Z, y:Y, x:X] = data[oz:oZ, oy:oY, ox:oX]
+            ((not relabel) and (not neighbourmerge) and (not blockreduce))):
+            gstack[z:Z, y:Y, x:X] = fstack[oz:oZ, oy:oY, ox:oX]
             f.close()
             continue
 
         if relabel:
 
-            fw = relabel_sequential(data[:, :, :])[1]
+            fw = relabel_sequential(fstack[:, :, :])[1]
 
             if usempi:
                 # FIXME: only terminates properly when: nblocks % size = 0
@@ -216,13 +187,13 @@ def main(argv):
 
         else:
 
-            ulabels = np.unique(data[:, :, :])
+            ulabels = np.unique(fstack[:, :, :])
             fw = [l for l in range(0, np.amax(ulabels) + 1)]
             fw = np.array(fw)
 
         if neighbourmerge:
 
-            fw = merge_overlap(fw, data, gstack,
+            fw = merge_overlap(fw, fstack, gstack,
                                (x, X, y, Y, z, Z),
                                (ox, oX, oy, oY, oz, oZ),
                                margin, fullsize)
@@ -233,7 +204,29 @@ def main(argv):
             fpath = os.path.join(datadir, fname)
             np.save(fpath, fw)
 
-        gstack[z:Z, y:Y, x:X] = fw[data[oz:oZ, oy:oY, ox:oX]]
+
+        if blockreduce is not None:
+
+            aZ = int(np.ceil(oZ/blockreduce[0]) * blockreduce[0])
+            aY = int(np.ceil(oY/blockreduce[1]) * blockreduce[1])
+            aX = int(np.ceil(oX/blockreduce[2]) * blockreduce[2])
+
+            data = block_reduce(fstack[oz:aZ, oy:aY, ox:aX],
+                                block_size=tuple(blockreduce),
+                                func=eval(func))
+
+            z, y, x = (c / br for c, br in zip( (z, y, x), blockreduce ) )
+            idims = data.shape
+            Z, Y, X = (c + d for c, d in zip ( (z, y, x), idims) )
+            odims = gstack[z:Z, y:Y, x:X].shape
+            oZ, oY, oX = (c - 1 if i > o else c
+                          for c, i, o in zip( (oZ, oY, oX), idims, odims ) )
+
+        else:
+
+            data = fstack[oz:oZ, oy:oY, ox:oX]
+
+        gstack[z:Z, y:Y, x:X] = fw[data]
 
         f.close()
 
@@ -333,15 +326,15 @@ def get_overlap(side, fstack, gstack, granges, oranges,
 
     print(margin, x, X, y, Y, z, Z, ox, oX, oy, oY, oz, oZ)
     if (side == 'xmin') & (x > 0):
-#        data_section = fstack[:, :, :margin[0]]
+#        data_section = fstack[:, :, :margin[2]]
 #        if x > 0:
-            data_section = fstack[oz:oZ, oy:oY, :margin[0]]
-            nb_section = gstack[z:Z, y:Y, x-margin[0]:x]
+            data_section = fstack[oz:oZ, oy:oY, :margin[2]]
+            nb_section = gstack[z:Z, y:Y, x-margin[2]:x]
     elif (side == 'xmax') & (X < gstack.shape[2]):
-#        data_section = fstack[:, :, -margin[0]:]
+#        data_section = fstack[:, :, -margin[2]:]
 #        if X < gstack.shape[2]:
-            data_section = fstack[oz:oZ, oy:oY, -margin[0]:]
-            nb_section = gstack[z:Z, y:Y, X:X+margin[0]]
+            data_section = fstack[oz:oZ, oy:oY, -margin[2]:]
+            nb_section = gstack[z:Z, y:Y, X:X+margin[2]]
     elif (side == 'ymin') & (y > 0):
 #        data_section = fstack[:, :margin[1], :]
 #        if y > 0:
@@ -353,15 +346,15 @@ def get_overlap(side, fstack, gstack, granges, oranges,
             data_section = fstack[oz:oZ, -margin[1]:, ox:oX]
             nb_section = gstack[oz:oZ, Y:Y+margin[1], ox:oX]
     elif (side == 'zmin') & (z > 0):
-#        data_section = fstack[:margin[2], :, :]
+#        data_section = fstack[:margin[0], :, :]
 #        if z > 0:
-            data_section = fstack[:margin[2], oy:oY, ox:oX]
-            nb_section = gstack[z-margin[2]:z, y:Y, x:X]
+            data_section = fstack[:margin[0], oy:oY, ox:oX]
+            nb_section = gstack[z-margin[0]:z, y:Y, x:X]
     elif (side == 'zmax') & (Z < gstack.shape[0]):
-#        data_section = fstack[-margin[2]:, :, :]
+#        data_section = fstack[-margin[0]:, :, :]
 #        if Z < gstack.shape[0]:
-            data_section = fstack[-margin[2]:, oy:oY, ox:oX]
-            nb_section = gstack[Z:Z+margin[2], y:Y, x:X]
+            data_section = fstack[-margin[0]:, oy:oY, ox:oX]
+            nb_section = gstack[Z:Z+margin[0], y:Y, x:X]
 
     if nb_section is not None:
         print(side, data_section.shape, nb_section.shape)
@@ -566,6 +559,7 @@ def block_reduce(image, block_size, func=np.sum, cval=0):
     out = view_as_blocks(image, block_size)
 
     if func is mode:
+        # TODO: implemented restriding here instead of reshape?
         outshape = tuple(image.shape) + tuple([-1])
         out = np.reshape(out, outshape)
         out = mode(out)
@@ -581,6 +575,7 @@ def mode(array, axis=None):
 
     smode = np.zeros_like(array)
     for i in range(array.shape[0]):
+        print(i)
         for j in range(array.shape[1]):
             for k in range(array.shape[2]):
                 block = array[i,j,k,:].ravel()
