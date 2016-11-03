@@ -9,7 +9,7 @@ import numpy as np
 from skimage.segmentation import relabel_sequential
 # from skimage.measure import block_reduce
 from skimage.util import view_as_blocks
-# from scipy.stats import mode
+from scipy.stats import mode as scipy_mode
 # from numpy.lib.stride_tricks import as_strided
 
 try:
@@ -166,7 +166,6 @@ def main(argv):
             continue
 
         if relabel:
-            print('relabeling')
 
             fw = relabel_sequential(fstack[:, :, :])[1]
 
@@ -193,7 +192,8 @@ def main(argv):
             else:
 
                 fw[1:] += maxlabel
-                maxlabel += np.amax(fw)
+                if len(fw) > 1:
+                    maxlabel = np.amax(fw)
 
         else:
 
@@ -210,7 +210,7 @@ def main(argv):
 
         if save_fwmap:
 
-            fname = dset_name + inpf[0] + '.npy'
+            fname = dset_name + outpf[0] + '.npy'
             fpath = os.path.join(datadir, fname)
             np.save(fpath, fw)
 
@@ -224,10 +224,12 @@ def main(argv):
             data = block_reduce(fstack[oz:aZ, oy:aY, ox:aX],
                                 block_size=tuple(blockreduce),
                                 func=eval(func))
-
-            z, y, x = (c / br for c, br in zip( (z, y, x), blockreduce ) )
+            if len(data.shape) == 4:
+                data = np.squeeze(data, axis=3)
+ 
+            z, y, x = (int(c / br) for c, br in zip( (z, y, x), blockreduce ) )
             idims = data.shape
-            Z, Y, X = (c + d for c, d in zip ( (z, y, x), idims) )
+            Z, Y, X = (int(c + d) for c, d in zip ( (z, y, x), idims) )
             odims = gstack[z:Z, y:Y, x:X].shape
             oZ, oY, oX = (c - 1 if i > o else c
                           for c, i, o in zip( (oZ, oY, oX), idims, odims ) )
@@ -570,8 +572,9 @@ def block_reduce(image, block_size, func=np.sum, cval=0):
 
     if func is mode:
         # TODO: implemented restriding here instead of reshape?
-        outshape = tuple(image.shape) + tuple([-1])
+        outshape = tuple(out.shape[:3]) + tuple([-1])
         out = np.reshape(out, outshape)
+        #out = scipy_mode(out, axis=3)
         out = mode(out)
     else:
         for i in range(len(out.shape) // 2):
@@ -583,9 +586,8 @@ def block_reduce(image, block_size, func=np.sum, cval=0):
 def mode(array, axis=None):
     """Calculate the blockwise mode."""
 
-    smode = np.zeros_like(array)
+    smode = np.zeros_like(array[:,:,:,0])
     for i in range(array.shape[0]):
-        print(i)
         for j in range(array.shape[1]):
             for k in range(array.shape[2]):
                 block = array[i,j,k,:].ravel()
