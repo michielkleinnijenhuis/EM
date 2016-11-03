@@ -28,6 +28,8 @@ def main(argv):
                         help='...')
     parser.add_argument('-i', '--inpf', nargs=2, default=['', 'stack'],
                         help='...')
+    parser.add_argument('-o', '--outpf', nargs=2, default=None,
+                        help='...')
 
     parser.add_argument('-b', '--blockoffset', nargs=3, type=int,
                         default=[0, 0, 0],
@@ -65,6 +67,7 @@ def main(argv):
     datadir = args.datadir
     dset_names = args.dset_names
     inpf = args.inpf
+    outpf = args.outpf
 
     blockoffset = args.blockoffset
     margin = args.margin
@@ -85,13 +88,16 @@ def main(argv):
 
     dset_info = split_filename(fpath, blockoffset)[0]
 
-    gname = dset_info['base'] + inpf[0] + '.h5'
+    if outpf is not None:
+        outpf = inpf
+    gname = dset_info['base'] + outpf[0] + '.h5'
     gpath = os.path.join(datadir, gname)
 
     if usempi:
         comm = MPI.COMM_WORLD
         rank = comm.Get_rank()
         size = comm.Get_size()
+        print(comm, rank, size)
 
         f = h5py.File(fpath, 'r', driver='mpio', comm=MPI.COMM_WORLD)
         g = h5py.File(gpath, 'w', driver='mpio', comm=MPI.COMM_WORLD)
@@ -121,11 +127,11 @@ def main(argv):
         if ndims == 4:
             outsize = outsize + [fstack.shape[3]]
 
-    g.create_dataset(inpf[1], outsize,
+    g.create_dataset(outpf[1], outsize,
                      chunks=fstack.chunks or None,
                      dtype=fstack.dtype,
                      compression=None if usempi else 'gzip')
-    gstack = g[inpf[1]]
+    gstack = g[outpf[1]]
     write_h5_attributes(gstack, elsize, al)
 
     f.close()
@@ -160,6 +166,7 @@ def main(argv):
             continue
 
         if relabel:
+            print('relabeling')
 
             fw = relabel_sequential(fstack[:, :, :])[1]
 
@@ -167,13 +174,16 @@ def main(argv):
                 # FIXME: only terminates properly when: nblocks % size = 0
 
                 num_labels = np.amax(fw)
+                print(num_labels)
                 num_labels = comm.gather(num_labels, root=0)
+                print(num_labels)
 
                 if rank == 0:
                     add_labels = [maxlabel + np.sum(num_labels[:i])
                                   for i in range(1, size)]
                     add_labels = np.array([maxlabel] + add_labels, dtype='i')
                     maxlabel = maxlabel + np.sum(num_labels)
+                    print(maxlabel)
                 else:
                     add_labels = np.empty(size)
 
