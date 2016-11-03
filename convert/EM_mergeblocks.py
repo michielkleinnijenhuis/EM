@@ -88,7 +88,7 @@ def main(argv):
 
     dset_info = split_filename(fpath, blockoffset)[0]
 
-    if outpf is not None:
+    if outpf is None:
         outpf = inpf
     gname = dset_info['base'] + outpf[0] + '.h5'
     gpath = os.path.join(datadir, gname)
