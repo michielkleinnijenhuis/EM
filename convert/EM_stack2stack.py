@@ -159,10 +159,12 @@ def main(argv):
 
     downscale = tuple(args.downscale)
 
-    b, e1 = os.path.splitext(outputfile)
-    b, e2 = os.path.splitext(b)  # catch double extension (e.g., .nii.gz)
+    b, e = os.path.splitext(outputfile)
+    if e == '.gz':
+        b, e2 = os.path.splitext(b)  # catch double extension .nii.gz
+        e = e2 + e
     outexts = args.enable_multi_output
-    outexts.append(e1 + e2)
+    outexts.append(e)
     outexts = list(set(outexts))
     nzfills = args.nzfills
 #     if b[-nzfills:].isdigit():
