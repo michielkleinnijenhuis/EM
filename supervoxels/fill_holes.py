@@ -20,7 +20,7 @@ def main(argv):
                         help='...')
     parser.add_argument('dset_name',
                         help='...')
-    parser.add_argument('-w', '--method', default="1",
+    parser.add_argument('-w', '--method', default="2",
                         help='...')
     parser.add_argument('-l', '--labelvolume', default=['_labelMA', '/stack'],
                         nargs=2,
@@ -51,26 +51,24 @@ def main(argv):
     labels, elsize = loadh5(datadir, dset_name + labelvolume[0],
                             fieldname=labelvolume[1])
     if labelmask is not None:
-        labelmask = loadh5(datadir, dset_name + labelmask[0],
+        mask_label = loadh5(datadir, dset_name + labelmask[0],
                            fieldname=labelmask[1], dtype='bool')[0]
-        labels[~labelmask] = 0
-        del(labelmask)
+        labels[~mask_label] = 0
+        del(mask_label)
 
     labels_filled = fill_holes(labels, method)
+    holes = np.copy(labels_filled)
+    holes[labels>0] = 0
+    print(np.unique(holes))
 
     writeh5(labels_filled, datadir,
             dset_name + labelvolume[0] + outpf_labelvolume,
             element_size_um=elsize, dtype='int32')
 
     if maskMA is not None:
-#         mask = np.zeros_like(labels_filled, dtype='uint8')
-#         mask[labels_filled>0] = 1
         writeh5(labels_filled.astype('bool'), datadir,
                 dset_name + maskMA[0] + outpf_labelvolume,
                 element_size_um=elsize, dtype='uint8')
-
-    holes = labels_filled
-    holes[labels>0] = 0
 
     if maskMM is not None:
         mask, elsize = loadh5(datadir, dset_name + maskMM[0],
@@ -94,7 +92,7 @@ def fill_holes(MA, method):
 
     if method == '1':
         binim = MA != 0
-        # does this bridge seperate MA's? YES, and eats from boundary
+        # does binary_closing bridge seperate MA's? YES, and eats from boundary
         # binim = binary_closing(binim, iterations=10)
         holes = label(~binim, connectivity=1)
 
