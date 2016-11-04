@@ -7,7 +7,7 @@ from argparse import ArgumentParser
 import h5py
 import numpy as np
 from skimage.morphology import watershed
-from scipy.ndimage.morphology import grey_dilation, binary_erosion
+from scipy.ndimage.morphology import grey_dilation, binary_dilation, binary_erosion
 from scipy.special import expit
 from scipy.ndimage import distance_transform_edt
 
@@ -32,6 +32,8 @@ def main(argv):
                         help='...')
     parser.add_argument('--maskMA', nargs=2, default=None,
                         help='...')
+    parser.add_argument('--MAdilation', type=int, default=None,
+                        help='...')
     parser.add_argument('--dist', nargs=2, default=None,
                         help='...')
     parser.add_argument('-w', '--sigmoidweighting', action='store_true',
@@ -48,6 +50,7 @@ def main(argv):
     maskDS = args.maskDS
     maskMM = args.maskMM
     maskMA = args.maskMA
+    MAdilation = args.MAdilation
     dist = args.dist
     sigmoidweighting = args.sigmoidweighting
     distancefilter = args.distancefilter
@@ -64,6 +67,18 @@ def main(argv):
     else:
         maskMA = MA != 0
 
+    # mask to perform constrain the watershed in
+    mask = np.logical_and(maskMM, maskDS)
+    if MAdilation is not None:
+        maskdist = binary_dilation(maskMA, iterations=MAdilation)
+        aname = dset_name + outpf[0] + '_MAdilation'
+        writeh5(maskdist, datadir, aname, fieldname=outpf[1],
+                dtype='uint8', element_size_um=elsize, axislabels=al)
+        np.logical_and(mask, maskdist, mask)
+        aname = dset_name + outpf[0] + '_MM_wsmask'
+        writeh5(mask, datadir, aname, fieldname=outpf[1],
+                dtype='uint8', element_size_um=elsize, axislabels=al)
+
     # watershed on simple distance transform
     if dist is not None:
         distance = loadh5(datadir, dset_name + dist[0],
@@ -75,8 +90,10 @@ def main(argv):
         writeh5(distance, datadir, sname, fieldname=outpf[1],
                 dtype='float', element_size_um=elsize, axislabels=al)
 
+    # prepare the seeds to overlap with mask
     seeds = grey_dilation(MA, size=(3,3,3))
-    mask = np.logical_and(maskMM, maskDS)
+
+    # perform the watershed
     MM = watershed(distance, seeds, mask=mask)
     sname = dset_name + outpf[0] + '_ws'
     writeh5(MM, datadir, sname, fieldname=outpf[1],
@@ -124,6 +141,7 @@ def sigmoid_weighted_distance(MM, MA, elsize):
     medwidth = {}
     for i,l in enumerate(np.unique(MA)[1:]):  # TODO: implement mpi?
         print(i,l)
+        # TODO: take only bounding box / mask?
         dist = distance_transform_edt(MA!=l, sampling=elsize)
         # get the median distance at the outer rim:
         MMfilled = MA + MM
