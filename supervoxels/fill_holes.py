@@ -7,9 +7,13 @@ from argparse import ArgumentParser
 import h5py
 import numpy as np
 
+from scipy.ndimage.morphology import (binary_closing,
+                                      binary_fill_holes,
+                                      grey_dilation)
 from skimage.measure import label
-from scipy.ndimage.morphology import binary_closing, binary_fill_holes, grey_dilation
 from skimage.measure import regionprops
+from skimage.morphology import watershed
+from _symtable import DEF_BOUND
 
 
 def main(argv):
@@ -22,18 +26,21 @@ def main(argv):
                         help='...')
     parser.add_argument('-w', '--method', default="2",
                         help='...')
-    parser.add_argument('-l', '--labelvolume', default=['_labelMA', '/stack'],
+    parser.add_argument('-L', '--labelvolume', default=['_labelMA', '/stack'],
                         nargs=2,
                         help='...')
-    parser.add_argument('-m', '--labelmask', default=None, nargs=2,
+    parser.add_argument('-m', '--labelmask', nargs=2, default=None,
                         help='...')
-    parser.add_argument('--maskMM', default=None, nargs=2,
+    parser.add_argument('--maskDS', nargs=2, default=None,
                         help='...')
-    parser.add_argument('--maskMA', default=None, nargs=2,
+    parser.add_argument('--maskMM', nargs=2, default=None,
                         help='...')
-    parser.add_argument('-o', '--outpf_labelvolume', default='_filled',
+    parser.add_argument('--maskMX', nargs=2, default=None,
                         help='...')
-    parser.add_argument('-p', '--outpf_holes', default=None,
+    parser.add_argument('--maskMA', nargs=2, default=None,
+                        help='...')
+    parser.add_argument('-o', '--outpf', nargs=2,
+                        default=['_filled', 'stack'],
                         help='...')
 
     args = parser.parse_args()
@@ -43,10 +50,11 @@ def main(argv):
     method = args.method
     labelvolume = args.labelvolume
     labelmask = args.labelmask
+    maskDS = args.maskDS
     maskMM = args.maskMM
+    maskMX = args.maskMX
     maskMA = args.maskMA
-    outpf_labelvolume = args.outpf_labelvolume
-    outpf_holes = args.outpf_holes
+    outpf = args.outpf
 
     labels, elsize = loadh5(datadir, dset_name + labelvolume[0],
                             fieldname=labelvolume[1])
@@ -56,30 +64,33 @@ def main(argv):
         labels[~mask_label] = 0
         del(mask_label)
 
-    labels_filled = fill_holes(labels, method)
+    masks = None
+    if method == "4":
+        masks = get_masks(datadir, dset_name, maskDS, maskMM, maskMX)
+
+    labels_filled = fill_holes(method, labels, masks)
     holes = np.copy(labels_filled)
     holes[labels>0] = 0
     print(np.unique(holes))
 
     writeh5(labels_filled, datadir,
-            dset_name + labelvolume[0] + outpf_labelvolume,
+            dset_name + labelvolume[0] + outpf[0],
             element_size_um=elsize, dtype='int32')
 
     if maskMA is not None:
         writeh5(labels_filled.astype('bool'), datadir,
-                dset_name + maskMA[0] + outpf_labelvolume,
+                dset_name + maskMA[0] + outpf[0],
                 element_size_um=elsize, dtype='uint8')
 
     if maskMM is not None:
         mask, elsize = loadh5(datadir, dset_name + maskMM[0],
                               fieldname=maskMM[1])
         mask[holes>0] = 0
-        writeh5(mask, datadir, dset_name + maskMM[0] + outpf_labelvolume,
+        writeh5(mask, datadir, dset_name + maskMM[0] + outpf[0],
                 element_size_um=elsize, dtype='uint8')
 
-    if outpf_holes is not None:
-        writeh5(holes, datadir, dset_name + labelvolume[0] + outpf_holes,
-                element_size_um=elsize, dtype='int32')
+    writeh5(holes, datadir, dset_name + labelvolume[0] + outpf[0] + '_holes',
+            element_size_um=elsize, dtype='int32')
 
 
 # ========================================================================== #
@@ -87,12 +98,12 @@ def main(argv):
 # ========================================================================== #
 
 
-def fill_holes(MA, method):
+def fill_holes(method, labels, masks=None):
     """Fill holes in labels."""
 
     if method == '1':
-        binim = MA != 0
-        # does binary_closing bridge seperate MA's? YES, and eats from boundary
+        binim = labels != 0
+        # does binary_closing bridge seperate labels? YES, and eats from boundary
         # binim = binary_closing(binim, iterations=10)
         holes = label(~binim, connectivity=1)
 
@@ -100,7 +111,7 @@ def fill_holes(MA, method):
         background = np.argmax(labelCount)
         holes[holes == background] = 0
 
-        labels_dil = grey_dilation(MA, size=(3,3,3))
+        labels_dil = grey_dilation(labels, size=(3,3,3))
 
         rp = regionprops(holes, labels_dil)
         mi = {prop.label: prop.max_intensity for prop in rp}
@@ -110,21 +121,53 @@ def fill_holes(MA, method):
 
         holes_remapped = fw[holes]
 
-        MA = np.add(MA, holes_remapped)
+        labels = np.add(labels, holes_remapped)
 
     elif method == "2":
 
-        for l in np.unique(MA)[1:]:
-            MA[binary_fill_holes(MA == l)] = l
-            MA[binary_closing(MA == l, iterations=10)] = l
-            MA[binary_fill_holes(MA == l)] = l
+        for l in np.unique(labels)[1:]:
+            labels[binary_fill_holes(labels == l)] = l
+            labels[binary_closing(labels == l, iterations=10)] = l
+            labels[binary_fill_holes(labels == l)] = l
 
     elif method == "3":
 
-        for l in np.unique(MA)[1:]:
-            MA[binary_fill_holes(MA == l)] = l
+        for l in np.unique(labels)[1:]:
+            labels[binary_fill_holes(labels == l)] = l
 
-    return MA
+    elif method == "4":
+
+        maskDS, maskMM, maskMX = masks
+        labels = fill_holes_watershed(labels, maskDS, maskMM)
+        labels = fill_holes_watershed(labels, maskDS, maskMX)
+
+    return labels
+
+
+def fill_holes_watershed(labels, maskDS, maskMM):
+
+    mask2 = ~maskDS | maskMM | labels.astype('bool')
+
+    labels_mask2 = label(~mask2)
+    counts = np.bincount(labels_mask2.ravel())
+    bg = np.argmax(counts[1:]) + 1
+    mask3 = ~maskDS | maskMM | labels_mask2 == bg
+    labels = watershed(mask3, labels, mask=~mask3)
+
+    return labels
+
+
+def get_masks(datadir, dset_name, maskDS, maskMM, maskMX):
+    """Load the set of masks for method4."""
+
+    maskDS = loadh5(datadir, dset_name + maskDS[0],
+                    fieldname=maskDS[1])[0]
+    maskMM = loadh5(datadir, dset_name + maskMM[0],
+                    fieldname=maskMM[1])[0]
+    maskMX = loadh5(datadir, dset_name + maskMX[0],
+                    fieldname=maskMX[1])[0]
+
+    return (maskDS, maskMM, maskMX)
 
 
 def loadh5(datadir, dname, fieldname='stack', dtype=None):
