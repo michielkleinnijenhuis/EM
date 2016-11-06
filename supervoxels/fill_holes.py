@@ -71,7 +71,6 @@ def main(argv):
     labels_filled = fill_holes(method, labels, masks)
     holes = np.copy(labels_filled)
     holes[labels>0] = 0
-    print(np.unique(holes))
 
     writeh5(labels_filled, datadir,
             dset_name + labelvolume[0] + outpf[0],
@@ -138,21 +137,24 @@ def fill_holes(method, labels, masks=None):
     elif method == "4":
 
         maskDS, maskMM, maskMX = masks
-        labels = fill_holes_watershed(labels, maskDS, maskMM)
-        labels = fill_holes_watershed(labels, maskDS, maskMX)
+        MMlabels = fill_holes_watershed(labels, maskDS, maskMM)
+        MXlabels = fill_holes_watershed(labels, maskDS, maskMX)
+        labels = np.maximum(MMlabels, MXlabels)
 
     return labels
 
 
 def fill_holes_watershed(labels, maskDS, maskMM):
+    """Fill holes not reachable from unmyelinated axons space."""
 
-    mask2 = ~maskDS | maskMM | labels.astype('bool')
+    mask = ~maskDS | maskMM | labels.astype('bool')
+    labels_mask = label(~mask)
 
-    labels_mask2 = label(~mask2)
-    counts = np.bincount(labels_mask2.ravel())
+    counts = np.bincount(labels_mask.ravel())
     bg = np.argmax(counts[1:]) + 1
-    mask3 = ~maskDS | maskMM | labels_mask2 == bg
-    labels = watershed(mask3, labels, mask=~mask3)
+
+    mask = ~maskDS | maskMM | (labels_mask == bg)
+    labels = watershed(mask, labels, mask=~mask)
 
     return labels
 
