@@ -24,6 +24,8 @@ def main(argv):
                         help='...')
     parser.add_argument('-l', '--labelset_files', nargs='*', default=[],
                         help='...')
+    parser.add_argument('-f', '--fwmap', default=[],
+                        help='...')
     parser.add_argument('-o', '--outpf', nargs=2,
                         default=['_labelMA', 'stack'],
                         help='...')
@@ -34,21 +36,44 @@ def main(argv):
     dset_name = args.dset_name
     supervoxels = args.supervoxels
     labelset_files = args.labelset_files
+    fwmap = args.fwmap
     outpf = args.outpf
 
     ws, elsize, al = loadh5(datadir, dset_name + supervoxels[0],
                             fieldname=supervoxels[1])
 
-    maxlabel = np.amax(ws)
+    ulabels = np.unique(ws)
+    maxlabel = np.amax(ulabels)
     print("number of labels in watershed: %d" % maxlabel)
-    fw = np.zeros(maxlabel + 1, dtype='i')
 
     for lsfile in labelset_files:
         labelsets = read_labelsets(lsfile)
 
-    fwmapped = forward_map(np.array(fw), ws, labelsets)
+    if fwmap:
+        fw = np.load(os.path.join(datadir, dset_name + fwmap + '.npy'))
+        for lsk, lsv in labelsets.items():
+            remapped = []
+            for l in lsv:
+                idx = np.argwhere(fw==l)
+                if idx.size:
+                    remapped.append(idx[0][0])
+            labelsets[lsk] = set(remapped)
 
-    fstem = dset_name + supervoxels[0] + outpf[0]
+    fw = np.zeros(maxlabel + 1, dtype='i')
+    fwmapped = forward_map(np.array(fw), ws, labelsets)
+    fstem = dset_name + supervoxels[0] + outpf[0] + '_MAsel'
+    writeh5(fwmapped, datadir, fstem, outpf[1], 'int32', elsize, al)
+
+    fw = np.array([l if l in ulabels else 0
+                   for l in range(0, maxlabel + 1)])
+    fwmapped = forward_map(np.array(fw), ws, labelsets, delete_labelsets=True)
+    fstem = dset_name + supervoxels[0] + outpf[0] + '_MAdel'
+    writeh5(fwmapped, datadir, fstem, outpf[1], 'int32', elsize, al)
+
+    fw = np.array([l if l in ulabels else 0
+                   for l in range(0, maxlabel + 1)])
+    fwmapped = forward_map(np.array(fw), ws, labelsets)
+    fstem = dset_name + supervoxels[0] + outpf[0] + '_MAadd'
     writeh5(fwmapped, datadir, fstem, outpf[1], 'int32', elsize, al)
 
 
@@ -62,7 +87,7 @@ def read_labelsets(lsfile):
 
     e = os.path.splitext(lsfile)[1]
     if e == '.pickle':
-        with open(lsfile) as f:
+        with open(lsfile, 'rb') as f:
             labelsets = pickle.load(f)
     else:
         labelsets = read_labelsets_from_txt(lsfile)
@@ -110,14 +135,18 @@ def write_labelsets_to_txt(labelsets, filepath):
             file.write('\n')
 
 
-def forward_map(fw, labels, labelsets):
+def forward_map(fw, labels, labelsets, delete_labelsets=False):
     """Map all labelset in value to key."""
 
     for lsk, lsv in labelsets.items():
         lsv = sorted(list(lsv))
         for l in lsv:
-            fw[l] = lsk
+            if delete_labelsets:
+                fw[l] = 0
+            else:
+                fw[l] = lsk
 
+    fw[0] = 0
     fwmapped = fw[labels]
 
     return fwmapped
