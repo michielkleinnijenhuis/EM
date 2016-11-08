@@ -201,13 +201,6 @@ def main(argv):
             fw = [l for l in range(0, np.amax(ulabels) + 1)]
             fw = np.array(fw)
 
-        if neighbourmerge:
-
-            fw = merge_overlap(fw, fstack, gstack,
-                               (x, X, y, Y, z, Z),
-                               (ox, oX, oy, oY, oz, oZ),
-                               margin, fullsize)
-
         if save_fwmap:
 
             fname = dset_name + outpf[0] + '.npy'
@@ -231,12 +224,25 @@ def main(argv):
             idims = data.shape
             Z, Y, X = (int(c + d) for c, d in zip ( (z, y, x), idims) )
             odims = gstack[z:Z, y:Y, x:X].shape
-            oZ, oY, oX = (c - 1 if i > o else c
-                          for c, i, o in zip( (oZ, oY, oX), idims, odims ) )
+            oz, oy, ox = (0, 0, 0)
+            oZ, oY, oX = tuple(data.shape)
 
         else:
 
             data = fstack[oz:oZ, oy:oY, ox:oX]
+
+        if neighbourmerge:
+            margin_br = (int(margin[0]/blockreduce[0]),
+                         int(margin[1]/blockreduce[1]),
+                         int(margin[2]/blockreduce[2]))
+
+            print(margin)
+            print((x, X, y, Y, z, Z))
+            print((ox, oX, oy, oY, oz, oZ))
+            fw = merge_overlap(fw, data, gstack,
+                               (x, X, y, Y, z, Z),
+                               (ox, oX, oy, oY, oz, oZ),
+                               margin_br, outsize)
 
         gstack[z:Z, y:Y, x:X] = fw[data]
 
@@ -383,31 +389,26 @@ def merge_overlap(fw, fstack, gstack, granges, oranges,
         data_section, nb_section = get_overlap(side, fstack, gstack,
                                                granges, oranges,
                                                margin, fullsize)
-        print(nb_section)
         if nb_section is None:
             continue
 
-        print(nb_section, data_section)
         data_labels = np.trim_zeros(np.unique(data_section))
-        print(data_labels)
         for data_label in data_labels:
-            print(data_label)
 
             mask_data = data_section == data_label
             bins = np.bincount(nb_section[mask_data])
             if len(bins) <= 1:
-                print("lenbins")
                 continue
 
             nb_label = np.argmax(bins[1:]) + 1
             n_data = np.sum(mask_data)
             n_nb = bins[nb_label]
             if float(n_nb) / float(n_data) < 0.1:
-                print("div", n_nb, n_data, nb_label)
+#                 print("div", n_nb, n_data, nb_label)
                 continue
 
             fw[data_label] = nb_label
-            print('%s: mapped label %d to %d' % (side, data_label, nb_label))
+#             print('%s: mapped label %d to %d' % (side, data_label, nb_label))
 
     return fw
 
