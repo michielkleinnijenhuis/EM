@@ -6,6 +6,7 @@ from argparse import ArgumentParser
 
 import h5py
 import numpy as np
+from skimage.measure import regionprops
 from skimage.morphology import watershed
 from scipy.ndimage.morphology import grey_dilation, binary_dilation, binary_erosion
 from scipy.special import expit
@@ -20,32 +21,33 @@ def main(argv):
                         help='...')
     parser.add_argument('dset_name',
                         help='...')
-    parser.add_argument('-l', '--labelvolume', nargs=2,
+    parser.add_argument('-l', '--labelMA', nargs=2,
                         default=['_labelMA', 'stack'],
                         help='...')
+    parser.add_argument('-L', '--labelMM', nargs=2, default=[],
+                        help='...')
     parser.add_argument('-o', '--outpf', nargs=2,
-                        default=['_labelMM_ws', 'stack'],
+                        default=['_labelMM', 'stack'],
                         help='...')
     parser.add_argument('--maskDS', nargs=2, default=['_maskDS', 'stack'],
                         help='...')
     parser.add_argument('--maskMM', nargs=2, default=['_maskMM', 'stack'],
                         help='...')
-    parser.add_argument('--maskMA', nargs=2, default=None,
+    parser.add_argument('--maskMA', nargs=2, default=[],
                         help='...')
-    parser.add_argument('--MAdilation', type=int, default=None,
+    parser.add_argument('--MAdilation', type=int, default=0,
                         help='...')
-    parser.add_argument('--dist', nargs=2, default=None,
+    parser.add_argument('--dist', nargs=2, default=[],
                         help='...')
     parser.add_argument('-w', '--sigmoidweighting', action='store_true',
-                        help='...')
-    parser.add_argument('-d', '--distancefilter', action='store_true',
                         help='...')
 
     args = parser.parse_args()
 
     datadir = args.datadir
     dset_name = args.dset_name
-    labelvolume = args.labelvolume
+    labelMA = args.labelMA
+    labelMM = args.labelMM
     outpf = args.outpf
     maskDS = args.maskDS
     maskMM = args.maskMM
@@ -53,23 +55,22 @@ def main(argv):
     MAdilation = args.MAdilation
     dist = args.dist
     sigmoidweighting = args.sigmoidweighting
-    distancefilter = args.distancefilter
 
-    MA, elsize, al = loadh5(datadir, dset_name + labelvolume[0],
-                            fieldname=labelvolume[1])
-    maskDS = loadh5(datadir, dset_name + maskDS[0],
-                    fieldname=maskDS[1], dtype='bool')[0]
-    maskMM = loadh5(datadir, dset_name + maskMM[0],
-                    fieldname=maskMM[1], dtype='bool')[0]
-    if maskMA is not None:
+    MA, elsize, al = loadh5(datadir, dset_name + labelMA[0],
+                            fieldname=labelMA[1])
+    if maskMA:
         maskMA = loadh5(datadir, dset_name + maskMA[0],
                         fieldname=maskMA[1], dtype='bool')[0]
     else:
         maskMA = MA != 0
 
-    # mask to perform constrain the watershed in
-    mask = np.logical_and(maskMM, maskDS)
-    if MAdilation is not None:
+    if MAdilation:
+        # mask to perform constrain the watershed in
+        maskDS = loadh5(datadir, dset_name + maskDS[0],
+                        fieldname=maskDS[1], dtype='bool')[0]
+        maskMM = loadh5(datadir, dset_name + maskMM[0],
+                        fieldname=maskMM[1], dtype='bool')[0]
+        mask = np.logical_and(maskMM, maskDS)
         maskdist = binary_dilation(maskMA, iterations=MAdilation)
         aname = dset_name + outpf[0] + '_MAdilation'
         writeh5(maskdist, datadir, aname, fieldname=outpf[1],
@@ -80,7 +81,7 @@ def main(argv):
                 dtype='uint8', element_size_um=elsize, axislabels=al)
 
     # watershed on simple distance transform
-    if dist is not None:
+    if dist:
         distance = loadh5(datadir, dset_name + dist[0],
                           fieldname=dist[1])[0]
     else:
@@ -90,39 +91,31 @@ def main(argv):
         writeh5(distance, datadir, sname, fieldname=outpf[1],
                 dtype='float', element_size_um=elsize, axislabels=al)
 
-    # prepare the seeds to overlap with mask
-    seeds = grey_dilation(MA, size=(3,3,3))
-
     # perform the watershed
-    MM = watershed(distance, seeds, mask=mask)
-    sname = dset_name + outpf[0] + '_ws'
-    writeh5(MM, datadir, sname, fieldname=outpf[1],
-            dtype='int32', element_size_um=elsize, axislabels=al)
+    if labelMM:
+        MM = loadh5(datadir, dset_name + labelMM[0],
+                    fieldname=labelMM[1])
+    else:
+        # prepare the seeds to overlap with mask
+        seeds = grey_dilation(MA, size=(3,3,3))
+        MM = watershed(distance, seeds, mask=mask)
+        sname = dset_name + outpf[0] + '_ws'
+        writeh5(MM, datadir, sname, fieldname=outpf[1],
+                dtype='int32', element_size_um=elsize, axislabels=al)
 
     # watershed on sigmoid-modulated distance transform
     if sigmoidweighting:
 
-        distsum, lmask = sigmoid_weighted_distance(MM, MA, abs_elsize)
+        distsum = sigmoid_weighted_distance(MM, MA, abs_elsize)
+
         sname = dset_name + outpf[0] + '_distsum'
         writeh5(distsum, datadir, sname,
                 dtype='float', element_size_um=elsize, axislabels=al)
 
         MM = watershed(distsum, grey_dilation(MA, size=(3,3,3)), 
                        mask=np.logical_and(maskMM, maskDS))
+
         sname = dset_name + outpf[0] + '_sw'
-        writeh5(MM, datadir, sname,
-                dtype='int32', element_size_um=elsize, axislabels=al)
-
-    elif distancefilter:  # TODO simple distance th
-
-        lmask = np.zeros((MM.shape[0], MM.shape[1], MM.shape[2], 
-                          len(np.unique(MA)[1:])), dtype='bool')
-
-    if distancefilter:  # very mem-intensive
-
-        for i,l in enumerate(np.unique(MA)[1:]):
-            MM[np.logical_and(lmask[:,:,:,i], MM==l)] = 0
-        sname = dset_name + outpf[0] + '_df'
         writeh5(MM, datadir, sname,
                 dtype='int32', element_size_um=elsize, axislabels=al)
 
@@ -135,28 +128,43 @@ def main(argv):
 def sigmoid_weighted_distance(MM, MA, elsize):
     """"""
 
-    lmask = np.zeros((MM.shape[0], MM.shape[1], MM.shape[2], 
-                      len(np.unique(MA)[1:])), dtype='bool')
     distsum = np.ones_like(MM, dtype='float')
     medwidth = {}
-    for i,l in enumerate(np.unique(MA)[1:]):  # TODO: implement mpi?
-        print(i,l)
-        # TODO: take only bounding box / mask?
-        dist = distance_transform_edt(MA!=l, sampling=elsize)
-        # get the median distance at the outer rim:
-        MMfilled = MA + MM
-        binim = MMfilled == l
+
+    dims = MM.shape
+    # TODO: check if MM is filled already!
+#     MMfilled = MA + MM
+    MMfilled = MM
+
+    rp = regionprops(MA, MMfilled)
+
+    for prop in rp:
+        l = prop.label
+        print(l)
+        z, y, x, Z, Y, X = tuple(prop.bbox)
+        m = 10
+        z = max(0, z - m)
+        y = max(0, y - m)
+        x = max(0, x - m)
+        Z = min(dims[0], Z + m)
+        Y = min(dims[1], Y + m)
+        X = min(dims[2], X + m)
+
+        mask = MA[z:Z, y:Y, x:X] == l
+
+        dist = distance_transform_edt(~mask, sampling=elsize)
+
+        binim = MMfilled[z:Z, y:Y, x:X][mask] == l
         rim = np.logical_xor(binary_erosion(binim), binim)
         medwidth[l] = np.median(dist[rim])
-        # labelmask for voxels further than nmed medians from the object (mem? write to disk?)
-        nmed = 2  # TODO: make into argument  # to measured in um for low res processing
-        maxdist = nmed * medwidth[l]
-        lmask[:,:,:,i] = dist > maxdist
-        # median width weighted sigmoid transform on distance function
-        weighteddist = expit(dist/medwidth[l])  # TODO: create more pronounced transform
-        distsum = np.minimum(distsum, weighteddist)
 
-    return distsum, lmask
+        # median width weighted sigmoid transform on distance function
+        weighteddist = expit(dist/medwidth[l])  
+        # TODO: create more pronounced transform?
+        distsum[z:Z, y:Y, x:X] = np.minimum(distsum[z:Z, y:Y, x:X],
+                                            weighteddist)
+
+    return distsum
 
 
 def loadh5(datadir, dname, fieldname='stack', dtype=None):
