@@ -236,9 +236,6 @@ def main(argv):
                          int(margin[1]/blockreduce[1]),
                          int(margin[2]/blockreduce[2]))
 
-            print(margin)
-            print((x, X, y, Y, z, Z))
-            print((ox, oX, oy, oY, oz, oZ))
             fw = merge_overlap(fw, data, gstack,
                                (x, X, y, Y, z, Z),
                                (ox, oX, oy, oY, oz, oZ),
