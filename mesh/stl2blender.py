@@ -29,9 +29,10 @@ def main(argv):
     parser.add_argument('stldir', help='the input data directory')
     parser.add_argument('outfilename', help='the output file name')
     parser.add_argument('-L', '--labelimages', default=['UA'], nargs='+', help='...')
-    parser.add_argument('-d', '--decimationparams', type=float, nargs='+', help='...')
-    parser.add_argument('-s', '--smoothparams', type=float, nargs='+', help='...')
-    parser.add_argument('-e', '--ecs_shrinkvalue', type=float, help='...')
+    parser.add_argument('-d', '--decimationparams', type=float, nargs='+', default=None, help='...')
+    parser.add_argument('-s', '--smoothparams', nargs='+', default=None, help='...')
+    parser.add_argument('-l', '--smoothlaplacian', nargs='+', default=None, help='...')
+    parser.add_argument('-e', '--ecs_shrinkvalue', type=float, default=None, help='...')
     parser.add_argument('-c', '--connect', action='store_true',
                         help='connect fibres into one object')
     parser.add_argument('-r', '--randomcolour', action='store_true',
@@ -44,6 +45,7 @@ def main(argv):
     compartments = args.labelimages
     ecs_shrinkvalue = args.ecs_shrinkvalue
     smoothparams = args.smoothparams
+    smoothlaplacian = args.smoothlaplacian
     decimationparams = args.decimationparams
     connect = args.connect
     randomcolour = args.randomcolour
@@ -60,20 +62,25 @@ def main(argv):
             O.import_mesh.stl(filepath=fp)
             ob = C.scene.objects.active
             consistent_outward_normals(ob)
-            decimate_mesh_planar(ob)
-            triangulate_mesh(ob)
-            smooth_mesh_default(ob, use_x=False, use_y=False)
-            smooth_mesh_laplacian(ob)
-#             if decimationparams is not None:
-#                 decimate_mesh_planar(ob)
-#                 triangulate_mesh(ob)
-#             if smoothparams is not None:
-#                 if smoothparams[0]:
-#                     smooth_mesh_laplacian(ob, smoothparams[1], smoothparams[2], smoothparams[3])
-#                 else:
-#                     smooth_mesh_default(ob, smoothparams[1], smoothparams[2])
-#             if ecs_shrinkvalue:
-#                 shrink_mesh(ob, ecs_shrinkvalue)
+            if decimationparams is not None:
+                decimate_mesh_planar(ob, angle_limit=decimationparams[0])
+                triangulate_mesh(ob)
+            if smoothparams is not None:
+                smooth_mesh_default(ob,
+                                    iterations=int(smoothparams[0]),
+                                    factor=float(smoothparams[1]),
+                                    use_x=bool(smoothparams[2]),
+                                    use_y=bool(smoothparams[3]),
+                                    use_z=bool(smoothparams[4]))
+            if smoothlaplacian is not None:
+                smooth_mesh_laplacian(ob,
+                                      iterations=int(smoothlaplacian[0]),
+                                      lambda_factor=float(smoothlaplacian[1]),
+                                      lambda_border=float(smoothlaplacian[2]),
+                                      use_x=bool(smoothlaplacian[3]),
+                                      use_y=bool(smoothlaplacian[4]),
+                                      use_z=bool(smoothlaplacian[5]))
+                shrink_mesh(ob, ecs_shrinkvalue)
             if randomcolour:
                 colour = [random() for _ in range(0,3)]
                 mat = make_material('mat', colour, 0.2)
