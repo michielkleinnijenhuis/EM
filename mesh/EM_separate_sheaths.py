@@ -159,6 +159,7 @@ def sigmoid_weighted_distance(MM, MA, elsize):
         rim = np.logical_xor(binary_erosion(binim), binim)
         medwidth[l] = np.median(dist[rim])
 
+        # FIXME: distsum is mostly '1's after change to processing the partial image here
         weighteddist = expit(dist/medwidth[l])
         distsum[z:Z, y:Y, x:X] = np.minimum(distsum[z:Z, y:Y, x:X],
                                             weighteddist)
