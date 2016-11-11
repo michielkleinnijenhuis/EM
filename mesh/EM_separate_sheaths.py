@@ -154,13 +154,12 @@ def sigmoid_weighted_distance(MM, MA, elsize):
 
         dist = distance_transform_edt(~mask, sampling=elsize)
 
-        binim = MMfilled[z:Z, y:Y, x:X][mask] == l
+        MMregion = MMfilled[z:Z, y:Y, x:X]
+        binim = MMregion == l
         rim = np.logical_xor(binary_erosion(binim), binim)
         medwidth[l] = np.median(dist[rim])
 
-        # median width weighted sigmoid transform on distance function
-        weighteddist = expit(dist/medwidth[l])  
-        # TODO: create more pronounced transform?
+        weighteddist = expit(dist/medwidth[l])
         distsum[z:Z, y:Y, x:X] = np.minimum(distsum[z:Z, y:Y, x:X],
                                             weighteddist)
 
