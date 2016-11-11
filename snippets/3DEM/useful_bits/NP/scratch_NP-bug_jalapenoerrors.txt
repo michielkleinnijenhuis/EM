@@ -1,0 +1,36 @@
+66 michielk@jalapeno $ g++ -c -w -O3 -I$PREFIX/include  -I$PREFIX/include/vigra -I$PREFIX/include/python2.7 -I$PREFIX/include/boost  Algorithms/BatchMergeMRFh.cpp
+g++: Algorithms/BatchMergeMRFh.cpp: No such file or directory
+g++: no input files
+
+58 michielk@jalapeno $ g++ -c -w -O3 -I$PREFIX/include  -I$PREFIX/include/vigra -I$PREFIX/include/python2.7 -I$PREFIX/include/boost  DataStructures/Stack.cpp
+In file included from /vols/Data/km/michielk/workspace/miniconda/envs/neuroproof-test/include/vigra/resizeimage.hxx:47,
+                 from /vols/Data/km/michielk/workspace/miniconda/envs/neuroproof-test/include/vigra/stdimagefunctions.hxx:74,
+                 from /vols/Data/km/michielk/workspace/miniconda/envs/neuroproof-test/include/vigra/seededregiongrowing3d.hxx:45,
+                 from DataStructures/../Watershed/vigra_watershed.h:5,
+                 from DataStructures/Stack.h:17,
+                 from DataStructures/Stack.cpp:2:
+/vols/Data/km/michielk/workspace/miniconda/envs/neuroproof-test/include/vigra/splines.hxx:93: error: ‘ORDER’ is not a type
+/vols/Data/km/michielk/workspace/miniconda/envs/neuroproof-test/include/vigra/splines.hxx:93: error: expected ‘,’ or ‘...’ before ‘<’ token
+/vols/Data/km/michielk/workspace/miniconda/envs/neuroproof-test/include/vigra/splines.hxx:93: error: ISO C++ forbids declaration of ‘static_assert’ with no type
+
+59 michielk@jalapeno $ g++ -c -w -O3 -I$PREFIX/include  -I$PREFIX/include/vigra -I$PREFIX/include/python2.7 -I$PREFIX/include/boost  DataStructures/StackPredict.cpp
+In file included from /vols/Data/km/michielk/workspace/miniconda/envs/neuroproof-test/include/vigra/resizeimage.hxx:47,
+                 from /vols/Data/km/michielk/workspace/miniconda/envs/neuroproof-test/include/vigra/stdimagefunctions.hxx:74,
+                 from /vols/Data/km/michielk/workspace/miniconda/envs/neuroproof-test/include/vigra/seededregiongrowing3d.hxx:45,
+                 from DataStructures/../Watershed/vigra_watershed.h:5,
+                 from DataStructures/Stack.h:17,
+                 from DataStructures/StackPredict.cpp:1:
+/vols/Data/km/michielk/workspace/miniconda/envs/neuroproof-test/include/vigra/splines.hxx:93: error: ‘ORDER’ is not a type
+/vols/Data/km/michielk/workspace/miniconda/envs/neuroproof-test/include/vigra/splines.hxx:93: error: expected ‘,’ or ‘...’ before ‘<’ token
+/vols/Data/km/michielk/workspace/miniconda/envs/neuroproof-test/include/vigra/splines.hxx:93: error: ISO C++ forbids declaration of ‘static_assert’ with no type
+
+67 michielk@jalapeno $ g++ -c -w -O3 -I$PREFIX/include  -I$PREFIX/include/vigra -I$PREFIX/include/python2.7 -I$PREFIX/include/boost  NeuroProof_stack.cpp
+In file included from /vols/Data/km/michielk/workspace/miniconda/envs/neuroproof-test/include/vigra/resizeimage.hxx:47,
+                 from /vols/Data/km/michielk/workspace/miniconda/envs/neuroproof-test/include/vigra/stdimagefunctions.hxx:74,
+                 from /vols/Data/km/michielk/workspace/miniconda/envs/neuroproof-test/include/vigra/seededregiongrowing3d.hxx:45,
+                 from DataStructures/../Watershed/vigra_watershed.h:5,
+                 from DataStructures/Stack.h:17,
+                 from NeuroProof_stack.cpp:1:
+/vols/Data/km/michielk/workspace/miniconda/envs/neuroproof-test/include/vigra/splines.hxx:93: error: ‘ORDER’ is not a type
+/vols/Data/km/michielk/workspace/miniconda/envs/neuroproof-test/include/vigra/splines.hxx:93: error: expected ‘,’ or ‘...’ before ‘<’ token
+/vols/Data/km/michielk/workspace/miniconda/envs/neuroproof-test/include/vigra/splines.hxx:93: error: ISO C++ forbids declaration of ‘static_assert’ with no type

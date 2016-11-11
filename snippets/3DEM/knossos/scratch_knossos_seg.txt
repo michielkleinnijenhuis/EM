@@ -1,0 +1,48 @@
+2197: part should be new0004
+
+NEW0062 node6455 + SEG2200 node0410 DONE
+NEW0056 node6193 + SEG2238 node2632 DONE
+NEW0053 node5971 + SEG2184 node3901 DONE
+NEW0052 node5952 + SEG2185 node3948 DONE
+NEW0045 node5509 + SEG2182_2 node1578 DONE
+NEW0032 DONE
+NEW0029 node5302 + SEG2217 node0430 DONE
+NEW0019 node4444 + SEG2240 node2978 DONE
+NEW0016 node4363 + SEG2197 node0167 DONE
+NEW0011 node4304 + SEG7049 node3608 DONE
+NEW0009 node4277 + SEG2220 node0563 DONE
+NEW0008 node4259 + SEG2196 node0195 DONE
+NEW0066 node6528 + SEG2253 node3683 DONE
+NEW0067 node6710 + SEG2255 node3485 DONE
+NEW0071 node6782 + SEG2245 node3522 DONE
+NEW0072 node6794 extended; NEW0070 node6764 bent into other neurite
+NEW0073 node6808 + SEG2246 node3546 DONE
+NEW0076 node6875 ENDFIELD to map
+
+
+MITO:
+001-044: section001 single point
+045-094: section430 skeleton
+
+
+MA checks:
+1155 - added points
+1142 -
+1144 - OK
+1147 - OK
+1128 - needs control points outside (400-430), added points around inside (400-430)
+1166 - needs control points outside (0-25)
+1154 - added control points inside (~146), creates dual object
+1510 - added control points outside (151-195; ~363)
+1123 - no points within the 500x500x430 volume
+1149 - no points within the 500x500x430 volume (192-250)
+1150 - no points within the 500x500x430 volume
+1149 - no points within the 500x500x430 volume (90-110)
+1167 - no points within the 500x500x430 volume (1-50)
+1502 - (1-3)
+1147 - myelin blob
+1128 - myelin blob
+1144 - myelin blob (TODO: myelin (MM) control points)
+
+TODO: something odd happening with 1147
+TODO: label 1 found in _PA

@@ -1,0 +1,53 @@
+# m000_01000-02000_01000_02000_00030_00460
+1501 added
+1502-15.. added
+1510-1520 added
+
+1165 deleted
+1158 deleted
+1142
+1144
+1128 deleted and reintroduced as single! (TODO: myelinating loop; non-myelinated in high-z; double label 1128 in _seg!)
+1129 deleted!
+1147 (TODO: myelinating loop; mito; 1 mito filled manually: see if it is retained in ws)
+1148 (TODO: myelinating loops; mitos; split at high-z!)
+1121 (OK)
+1122 (TODO: mitofilling)
+1154 ()
+1153 ()
+1149
+1123
+1168 (TODO: mitofilling)
+1181 (OK)
+1150 (OK)
+1152 (OK)
+1155 (OK)
+1169 (OK)
+1174 (OK)
+1179 (OK)
+1172 (TODO: myelinating loop)
+1170
+1173 (TODO: myelinating loop)
+1177
+
+# m000_01000-02000_02000_03000_00030_00460
+1336 deleted (overflow because of overflow in _probs_ws_MA of seeds_MA2 02000-03000_02000-03000)
+1337 extended
+1265 split at low-z + overflow => deleted and reintroduced for single axon
+1285 extended (TODO: overflow)
+1277 extended
+1282 extended
+1272 extended
+
+# m000_02000-03000_02000_03000_00030_00460
+1270 overflow because of overflow in _probs_ws_MA of seeds_MA2 01000-02000_02000-03000
+1343 overflow (no idea where this label comes from)
+1242 extended
+1265 overflow (the cause is here)
+
+# m000_02000-03000_01000_02000_00030_00460 (TODO)
+1173 overflow
+1104 overflow from seeds_MA2 01000-02000_01000-02000
+1102 overflow from 01000-02000_01000-02000 => deleted and reintroduced for single axon
+1198 overflow at low z
+1114 overflow and partial fill

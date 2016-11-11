@@ -1,0 +1,25 @@
+- tiles2tif.py
+- {get_pairs.py + optimize_transforms.py + blend_tiles.py} OR {fiji_stitch + fiji_register}
+- EM_series2stack
+- EM_stack2stack (split)
+- Ilastik
+- EED [channel 0]
+- _maskDS (data > 0) and maskMM (myelinEED>0.2)
+- connected components on thresholded myelinEED>0.02
+- manual deletion of erroneously labeled components
+- watershed on -prob_ics on ~maskMM to get supervoxels (2/multiple levels?)
+- simple agglomeration of ws supervoxels in labeled myelinated axons
+- fill holes
+- manual deletion of erroneously labeled components
+
+- Neuroproof agglomeration to a small threshold (for myelinated axons specifically)
+- classify remainder of neurons as myelinated/unmyelinated axons
+- simple automated aggregation of ws supervoxels in labeled myelinated axons
+- manual split and merge of difficult myelinated axons
+- watershed of myelin compartment
+- Neuroproof agglomeration of unmyelinated axons
+- manual split and merge proofreading of unmyelinated axons
+
+- label2stl
+- stl2blender
+- difsim
