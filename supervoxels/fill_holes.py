@@ -13,7 +13,6 @@ from scipy.ndimage.morphology import (binary_closing,
 from skimage.measure import label
 from skimage.measure import regionprops
 from skimage.morphology import watershed
-from _symtable import DEF_BOUND
 
 
 def main(argv):
@@ -24,7 +23,11 @@ def main(argv):
                         help='...')
     parser.add_argument('dset_name',
                         help='...')
-    parser.add_argument('-w', '--method', default="2",
+    parser.add_argument('-w', '--methods', default="2",
+                        help='...')
+    parser.add_argument('-q', '--min_labelsize', type=int, default=10,
+                        help='...')
+    parser.add_argument('-s', '--selem', nargs='*', type=int, default=[3,3,3],
                         help='...')
     parser.add_argument('-L', '--labelvolume', default=['_labelMA', '/stack'],
                         nargs=2,
@@ -47,7 +50,8 @@ def main(argv):
 
     datadir = args.datadir
     dset_name = args.dset_name
-    method = args.method
+    methods = args.methods
+    selem = args.selem
     labelvolume = args.labelvolume
     labelmask = args.labelmask
     maskDS = args.maskDS
@@ -56,40 +60,42 @@ def main(argv):
     maskMA = args.maskMA
     outpf = args.outpf
 
-    labels, elsize = loadh5(datadir, dset_name + labelvolume[0],
-                            fieldname=labelvolume[1])
+    labels, elsize, al = loadh5(datadir, dset_name + labelvolume[0],
+                                labelvolume[1])
+
     if labelmask is not None:
         mask_label = loadh5(datadir, dset_name + labelmask[0],
-                           fieldname=labelmask[1], dtype='bool')[0]
+                           labelmask[1], 'bool')[0]
         labels[~mask_label] = 0
         del(mask_label)
 
-    masks = None
-    if method == "4":
-        masks = get_masks(datadir, dset_name, maskDS, maskMM, maskMX)
+    maskinfo = datadir, dset_name, maskDS, maskMM, maskMX
 
-    labels_filled = fill_holes(method, labels, masks)
+    labels_filled = np.copy(labels)
+    for m in methods:
+        labels_filled = fill_holes(m, labels_filled, selem, maskinfo)
+
     holes = np.copy(labels_filled)
     holes[labels>0] = 0
 
     writeh5(labels_filled, datadir,
-            dset_name + labelvolume[0] + outpf[0],
-            element_size_um=elsize, dtype='int32')
+            dset_name + labelvolume[0] + outpf[0], outpf[1],
+            'int32', elsize, al)
+    writeh5(holes, datadir,
+            dset_name + labelvolume[0] + outpf[0] + '_holes', outpf[1],
+            'int32', elsize, al)
 
     if maskMA is not None:
         writeh5(labels_filled.astype('bool'), datadir,
-                dset_name + maskMA[0] + outpf[0],
-                element_size_um=elsize, dtype='uint8')
+                dset_name + maskMA[0] + outpf[0], outpf[1],
+                'uint8', elsize, al)
 
     if maskMM is not None:
-        mask, elsize = loadh5(datadir, dset_name + maskMM[0],
-                              fieldname=maskMM[1])
+        mask = loadh5(datadir, dset_name + maskMM[0],
+                      fieldname=maskMM[1])[0]
         mask[holes>0] = 0
-        writeh5(mask, datadir, dset_name + maskMM[0] + outpf[0],
-                element_size_um=elsize, dtype='uint8')
-
-    writeh5(holes, datadir, dset_name + labelvolume[0] + outpf[0] + '_holes',
-            element_size_um=elsize, dtype='int32')
+        writeh5(mask, datadir, dset_name + maskMM[0] + outpf[0], outpf[1],
+                'uint8', elsize, al)
 
 
 # ========================================================================== #
@@ -97,7 +103,7 @@ def main(argv):
 # ========================================================================== #
 
 
-def fill_holes(method, labels, masks=None):
+def fill_holes(method, labels, selem=[3, 3, 3], maskinfo=None):
     """Fill holes in labels."""
 
     if method == '1':
@@ -110,7 +116,7 @@ def fill_holes(method, labels, masks=None):
         background = np.argmax(labelCount)
         holes[holes == background] = 0
 
-        labels_dil = grey_dilation(labels, size=(3,3,3))
+        labels_dil = grey_dilation(labels, size=selem)
 
         rp = regionprops(holes, labels_dil)
         mi = {prop.label: prop.max_intensity for prop in rp}
@@ -124,90 +130,133 @@ def fill_holes(method, labels, masks=None):
 
     elif method == "2":
 
-        for l in np.unique(labels)[1:]:
-            labels[binary_fill_holes(labels == l)] = l
-            labels[binary_closing(labels == l, iterations=10)] = l
-            labels[binary_fill_holes(labels == l)] = l
+        rp = regionprops(labels)
+        for prop in rp:
+            print(prop.label)
+            z, y, x, Z, Y, X = tuple(prop.bbox)
+            mask = prop.image
+#             mask = binary_fill_holes(mask)
+            mask = binary_closing(mask, iterations=selem[0])
+            mask = binary_fill_holes(mask)
+            imregion = labels[z:Z,y:Y,x:X]
+            imregion[mask] = prop.label
 
     elif method == "3":
 
-        for l in np.unique(labels)[1:]:
-            labels[binary_fill_holes(labels == l)] = l
+        rp = regionprops(labels)
+        for prop in rp:
+            print(prop.label)
+            z, y, x, Z, Y, X = tuple(prop.bbox)
+            mask = prop.image
+            mask = binary_fill_holes(mask)
+            imregion = labels[z:Z,y:Y,x:X]
+            imregion[mask] = prop.label
 
     elif method == "4":
 
-        maskDS, maskMM, maskMX = masks
-        MMlabels = fill_holes_watershed(labels, maskDS, maskMM)
-        MXlabels = fill_holes_watershed(labels, maskDS, maskMX)
+        datadir, dset_name, maskDS, maskMM, maskMX = maskinfo
+
+        mask = get_mask(datadir, dset_name, maskDS, maskMM)
+        MMlabels = fill_holes_watershed(labels, mask)
+
+        mask = get_mask(datadir, dset_name, maskDS, maskMX)
+        MXlabels = fill_holes_watershed(labels, mask)
+
         labels = np.maximum(MMlabels, MXlabels)
 
     return labels
 
 
-def fill_holes_watershed(labels, maskDS, maskMM):
+def fill_holes_watershed(labels, mask_in):
     """Fill holes not reachable from unmyelinated axons space."""
 
-    mask = ~maskDS | maskMM | labels.astype('bool')
+    mask = mask_in | labels.astype('bool')
     labels_mask = label(~mask)
 
     counts = np.bincount(labels_mask.ravel())
     bg = np.argmax(counts[1:]) + 1
 
-    mask = ~maskDS | maskMM | (labels_mask == bg)
+    mask = mask_in | (labels_mask == bg)
     labels = watershed(mask, labels, mask=~mask)
 
     return labels
 
 
-def get_masks(datadir, dset_name, maskDS, maskMM, maskMX):
+def get_mask(datadir, dset_name, maskDS, maskMM):
     """Load the set of masks for method4."""
 
-    maskDS = loadh5(datadir, dset_name + maskDS[0],
-                    fieldname=maskDS[1])[0]
-    maskMM = loadh5(datadir, dset_name + maskMM[0],
-                    fieldname=maskMM[1])[0]
-    maskMX = loadh5(datadir, dset_name + maskMX[0],
-                    fieldname=maskMX[1])[0]
+    maskDS = loadh5(datadir, dset_name + maskDS[0], maskDS[1])[0]
+    maskMM = loadh5(datadir, dset_name + maskMM[0], maskMM[1])[0]
 
-    return (maskDS, maskMM, maskMX)
+    mask = ~maskDS | maskMM
+
+    return mask
 
 
 def loadh5(datadir, dname, fieldname='stack', dtype=None):
-    """"""
+    """Load a h5 stack."""
 
     f = h5py.File(os.path.join(datadir, dname + '.h5'), 'r')
+
     if len(f[fieldname].shape) == 2:
         stack = f[fieldname][:, :]
     if len(f[fieldname].shape) == 3:
         stack = f[fieldname][:, :, :]
     if len(f[fieldname].shape) == 4:
         stack = f[fieldname][:, :, :, :]
-    if 'element_size_um' in f[fieldname].attrs.keys():
-        element_size_um = f[fieldname].attrs['element_size_um']
-    else:
-        element_size_um = None
+
+    element_size_um, axislabels = get_h5_attributes(f[fieldname])
+
     f.close()
 
     if dtype is not None:
         stack = np.array(stack, dtype=dtype)
 
-    return stack, element_size_um
+    return stack, element_size_um, axislabels
 
 
 def writeh5(stack, datadir, fp_out, fieldname='stack',
-            dtype='uint16', element_size_um=None):
-    """"""
+            dtype='uint16', element_size_um=None, axislabels=None):
+    """Write a h5 stack."""
+
     g = h5py.File(os.path.join(datadir, fp_out + '.h5'), 'w')
     g.create_dataset(fieldname, stack.shape, dtype=dtype, compression="gzip")
+
     if len(stack.shape) == 2:
         g[fieldname][:, :] = stack
     elif len(stack.shape) == 3:
         g[fieldname][:, :, :] = stack
     elif len(stack.shape) == 4:
         g[fieldname][:, :, :, :] = stack
-    if element_size_um is not None:
-        g[fieldname].attrs['element_size_um'] = element_size_um
+
+    write_h5_attributes(g[fieldname], element_size_um, axislabels)
+
     g.close()
+
+
+def get_h5_attributes(stack):
+    """Get attributes from a stack."""
+
+    element_size_um = axislabels = None
+
+    if 'element_size_um' in stack.attrs.keys():
+        element_size_um = stack.attrs['element_size_um']
+
+    if 'DIMENSION_LABELS' in stack.attrs.keys():
+        axislabels = stack.attrs['DIMENSION_LABELS']
+
+    return element_size_um, axislabels
+
+
+def write_h5_attributes(stack, element_size_um=None, axislabels=None):
+    """Write attributes to a stack."""
+
+    if element_size_um is not None:
+        stack.attrs['element_size_um'] = element_size_um
+
+    if axislabels is not None:
+        for i, l in enumerate(axislabels):
+            stack.dims[i].label = l
 
 
 if __name__ == "__main__":
