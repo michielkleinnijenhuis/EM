@@ -22,7 +22,7 @@ def main(argv):
     parser.add_argument('inputstack', nargs=2,
                         help='...')
     parser.add_argument('-d', '--blockreduce', nargs=3, type=int,
-                        default=[1,7,7],
+                        default=[1, 7, 7],
                         help='...')
     parser.add_argument('-f', '--func', default='np.amax',
                         help='...')
@@ -43,20 +43,33 @@ def main(argv):
     fstack = f[inputstack[1]]
     elsize, al = get_h5_attributes(fstack)
 
-    outsize = [int(np.ceil(d/b))
-               for d,b in zip(fstack.shape, blockreduce)]
+    if func == 'expand':
+        outsize = [int(np.ceil(d*b))
+                   for d,b in zip(fstack.shape, blockreduce)]
+        gname = os.path.join(datadir, dset_name + outpf + inputstack[0] + '.h5')
+        g = h5py.File(gname, 'w')
+        outds = g.create_dataset(inputstack[1], outsize,
+                                 dtype=fstack.dtype,
+                                 compression="gzip")
+        out = fstack[:,:,:]
+        out = np.repeat(out, blockreduce[0], axis=0)
+        out = np.repeat(out, blockreduce[1], axis=1)
+        out = np.repeat(out, blockreduce[2], axis=2)
+        outds[:,:,:] = out
+        elsize = [e/b for e, b in zip(elsize, blockreduce)]
+    else:
+        outsize = [int(np.ceil(d/b))
+                   for d,b in zip(fstack.shape, blockreduce)]
+        gname = os.path.join(datadir, dset_name + outpf + inputstack[0] + '.h5')
+        g = h5py.File(gname, 'w')
+        outds = g.create_dataset(inputstack[1], outsize,
+                                 dtype=fstack.dtype,
+                                 compression="gzip")
+        outds[:,:,:] = block_reduce(fstack,
+                                    block_size=tuple(blockreduce),
+                                    func=eval(func))
+        elsize = [e*b for e, b in zip(elsize, blockreduce)]
 
-    gname = os.path.join(datadir, dset_name + outpf + inputstack[0] + '.h5')
-    g = h5py.File(gname, 'w')
-    outds = g.create_dataset(inputstack[1], outsize,
-                             dtype=fstack.dtype,
-                             compression="gzip")
-
-    outds[:,:,:] = block_reduce(fstack,
-                                block_size=tuple(blockreduce),
-                                func=eval(func))
-
-    elsize = [e*b for e, b in zip(elsize, blockreduce)]
     write_h5_attributes(outds, elsize, al)
 
     f.close()
