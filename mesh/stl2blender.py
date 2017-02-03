@@ -29,7 +29,7 @@ def main(argv):
     parser.add_argument('stldir', help='the input data directory')
     parser.add_argument('outfilename', help='the output file name')
     parser.add_argument('-L', '--labelimages', default=['UA'], nargs='+', help='...')
-    parser.add_argument('-S', '--stlfiles', default=[''], nargs='+', help='...')
+    parser.add_argument('-S', '--stlfiles', default=[], nargs='+', help='...')
     parser.add_argument('-d', '--decimationparams', type=float, nargs='+', default=None, help='...')
     parser.add_argument('-s', '--smoothparams', nargs='+', default=None, help='...')
     parser.add_argument('-l', '--smoothlaplacian', nargs='+', default=None, help='...')
