@@ -183,3 +183,43 @@ conda create --name scikit-image-devel_p34 python=3.4 numpy scipy h5py matplotli
 source activate scikit-image-devel_p34
 pip install git+git://github.com/scikit-image/scikit-image@master
 # NOTE: start from scratch or unload module first before running slic
+
+###=================###
+### neurodata tools ###
+###=================###
+conda create --name ndio
+
+#  numpy scipy networkx matplotlib
+source activate nd
+pip install ndio ndmg
+# nibabel dipy sklearn nilearn 
+
+
+
+conda create --name neurodata numpy scipy networkx matplotlib
+source activate neurodata
+pip install nibabel dipy sklearn nilearn ndio ndmg
+
+conda install -c ilastik ilastik-everything-but-tracking -y
+conda uninstall vigra -y
+conda install --channel https://conda.anaconda.org/FlyEM vigra -y
+conda install ipython notebook -y
+conda install requests gcc blosc -y
+pip install scikit-learn --upgrade
+pip install scikit-image --upgrade
+pip install mahotas
+pip install blosc==1.2.0
+pip install ndio  # this reverts blosc to 1.3.2
+pip install ndparse
+
+python ndmg/scripts/ndmg_pipeline.py \
+tests/data/KKI2009_113_1_DTI_s4.nii \
+tests/data/KKI2009_113_1_DTI_s4.bval \
+tests/data/KKI2009_113_1_DTI_s4.bvec \
+tests/data/KKI2009_113_1_MPRAGE_s4.nii \
+tests/data/MNI152_T1_1mm_s4.nii.gz \
+tests/data/MNI152_T1_1mm_brain_mask_s4.nii.gz \
+tests/data/outputs \
+tests/data/desikan_s4.nii.gz
+
+
