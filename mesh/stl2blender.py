@@ -29,6 +29,7 @@ def main(argv):
     parser.add_argument('stldir', help='the input data directory')
     parser.add_argument('outfilename', help='the output file name')
     parser.add_argument('-L', '--labelimages', default=['UA'], nargs='+', help='...')
+    parser.add_argument('-S', '--stlfiles', default=[''], nargs='+', help='...')
     parser.add_argument('-d', '--decimationparams', type=float, nargs='+', default=None, help='...')
     parser.add_argument('-s', '--smoothparams', nargs='+', default=None, help='...')
     parser.add_argument('-l', '--smoothlaplacian', nargs='+', default=None, help='...')
@@ -42,6 +43,7 @@ def main(argv):
     
     stldir = args.stldir
     outfilename = args.outfilename
+    stlfiles = args.stlfiles
     compartments = args.labelimages
     ecs_shrinkvalue = args.ecs_shrinkvalue
     smoothparams = args.smoothparams
@@ -54,11 +56,14 @@ def main(argv):
     # TODO: default to all compartments in stldir
     
     for comp in compartments:
-        fps = glob(os.path.join(stldir, comp + '*.stl'))
+        if not stlfiles:
+            stlfiles = glob(os.path.join(stldir, comp + '*.stl'))
+        else:
+            stlfiles = [os.path.join(stldir, stlfile) for stlfile in stlfiles]
         nonmanifolds = {}
         colour = [random() for _ in range(0,3)]
         mat = make_material('mat', colour, 0.2)
-        for fp in fps:
+        for fp in stlfiles:
             O.import_mesh.stl(filepath=fp)
             ob = C.scene.objects.active
             consistent_outward_normals(ob)
