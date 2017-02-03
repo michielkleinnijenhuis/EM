@@ -72,7 +72,7 @@ def main(argv):
     blockreduce = args.blockreduce
     elsize = args.element_size_um
 
-    dset_info, x, X, y, Y, z, Z = split_filename(dset_name, blockoffset)
+#     dset_info, x, X, y, Y, z, Z = split_filename(dset_name, blockoffset)
     x = args.x
     X = args.X
     y = args.y
@@ -109,45 +109,33 @@ def main(argv):
     ECSmask = np.zeros_like(mask, dtype='bool')
     # process the labelimages
     for l in labelimages:
+
         compdict = {}
         labeldata, elsize, al = loadh5(datadir, dset_name + l, fieldnamein)
+
         if blockreduce:
             labeldata = block_reduce(labeldata, block_size=tuple(blockreduce),
                                      func=np.amax)  # FIXME: reducefunc
             elsize = [e*b for e, b in zip(elsize, blockreduce)]
             zyxOffset = [o/b for o, b in zip(zyxOffset, blockreduce)]
+
         labeldata[~mask] = 0
 #         labeldata, elsize = resample_volume(labeldata, True, elsize, res)
-        # TODO: generalize
-        if 'PA' in l:
-            mask = np.logical_and(labeldata > 1000, labeldata < 2000)
-            compdict['MM'] = np.unique(labeldata[mask])
-            mask = np.logical_and(labeldata > 2000, labeldata < 6000)
-            compdict['UA'] = np.unique(labeldata[mask])
-            mask = np.logical_and(labeldata > 6000, labeldata < 7000)
-            compdict['GB'] = np.unique(labeldata[mask])
-            mask = np.logical_and(labeldata > 7000, labeldata < 8000)
-            compdict['GP'] = np.unique(labeldata[mask])
-        else:
-            compdict['MA'] = np.unique(labeldata)
-        labeldata = remove_small_objects(labeldata, 100)
+
+        compdict[l] = np.unique(labeldata)
+
+#         labeldata = remove_small_objects(labeldata, 100)
+
         if enforceECS:
             labeldata = enforce_ECS(labeldata)
             writeh5(labeldata, datadir, dset_name + l + '_enforceECS',
                     element_size_um=elsize, axislabels=al)
-        labels2meshes_vtk(surfdir, compdict, np.transpose(labeldata),
+
+        labels2meshes_vtk(surfdir, compdict,
+                          np.transpose(labeldata),
+                          labels=np.delete(compdict[l], 0),
                           spacing=np.absolute(elsize)[::-1],
                           offset=zyxOffset[::-1])
-        ECSmask[labeldata > 0] = True
-
-    compdict['ECS'] = [1]
-    binary_fill_holes(ECSmask, output=ECSmask)
-    writeh5(~ECSmask, datadir, dset_name + '_ECSmask',
-            element_size_um=elsize, axislabels=al)
-
-    labels2meshes_vtk(surfdir, compdict, np.transpose(~ECSmask),
-                      spacing=np.absolute(elsize)[::-1],
-                      offset=zyxOffset[::-1])
 
 
 # ========================================================================== #
@@ -317,50 +305,60 @@ def labels2meshes_vtk(surfdir, compdict, labelimage, labels=[],
                       spacing=[1, 1, 1], offset=[0, 0, 0], nvoxthr=0):
     """"""
 
-    if not labels:
+    if not labels.any():
         labels = np.unique(labelimage)
         labels = np.delete(labels, 0)
-        # labels = np.unique(labelimage[labelimage > 0])
-    print('number of labels to process: ', len(labels))
+    print('%d labels to process' % len(labels))
+
+#     labelimage = labelimage.tolist()
     labelimage = np.lib.pad(labelimage.tolist(),
                             ((1, 1), (1, 1), (1, 1)), 'constant')
+#    labelimage = np.pad(labelimage, 1, 'constant')
     dims = labelimage.shape
 
     vol = vtk.vtkImageData()
     vol.SetDimensions(dims[0], dims[1], dims[2])
-    vol.SetOrigin(offset[0]*spacing[0] + spacing[0],
-                  offset[1]*spacing[1] + spacing[1],
-                  offset[2]*spacing[2] + spacing[2])  # vol.SetOrigin(0, 0, 0)
+    vol.SetOrigin(offset[0] * spacing[0] + spacing[0],
+                  offset[1] * spacing[1] + spacing[1],
+                  offset[2] * spacing[2] + spacing[2])  # vol.SetOrigin(0, 0, 0)
     vol.SetSpacing(spacing[0], spacing[1], spacing[2])
+
     sc = vtk.vtkFloatArray()
     sc.SetNumberOfValues(labelimage.size)
     sc.SetNumberOfComponents(1)
     sc.SetName('tnf')
+
     # why swapaxes???
     for ii, val in enumerate(np.ravel(labelimage.swapaxes(0, 2))):
         sc.SetValue(ii, val)
+#     labelimage = np.ravel(labelimage.swapaxes(0, 2))
+#    labelimage = np.ravel(labelimage)
+#    for ii, val in enumerate(labelimage):
+#        sc.SetValue(ii, val)
+
     vol.GetPointData().SetScalars(sc)
+
     dmc = vtk.vtkDiscreteMarchingCubes()
     dmc.SetInput(vol)
     dmc.ComputeNormalsOn()
 
     for ii, label in enumerate(labels):
+
         for labelclass, labels in compdict.items():
             if label in labels:
                 break
             else:
                 labelclass = 'NN'
+
         ndepth = 1
         fpath = os.path.join(surfdir, labelclass +
                              '.{:05d}.{:02d}.stl'.format(label, ndepth))
-        print("Processing labelnr " + str(ii) +
-              " of class " + labelclass +
-              " with value: " + str(label))
-#         print("Saving to " + fpath)
+        print("Processing labelnr %05d of class %s with value: %05d" % (ii, labelclass, label))
 
         dmc.SetValue(0, label)
         # dmc.GenerateValues(nb_labels, 0, nb_labels)
         dmc.Update()
+
         writer = vtk.vtkSTLWriter()
         writer.SetInputConnection(dmc.GetOutputPort())
         writer.SetFileName(fpath)
