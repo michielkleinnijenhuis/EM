@@ -83,7 +83,7 @@ def main(argv):
                                       use_x=bool(smoothlaplacian[3]),
                                       use_y=bool(smoothlaplacian[4]),
                                       use_z=bool(smoothlaplacian[5]))
-                shrink_mesh(ob, ecs_shrinkvalue)
+            shrink_mesh(ob, ecs_shrinkvalue)
             if randomcolour:
                 colour = [random() for _ in range(0,3)]
                 mat = make_material('mat', colour, 0.2)
