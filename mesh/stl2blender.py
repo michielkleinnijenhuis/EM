@@ -65,9 +65,6 @@ def main(argv):
             O.import_mesh.stl(filepath=fp)
             ob = C.scene.objects.active
             consistent_outward_normals(ob)
-            if decimationparams is not None:
-                decimate_mesh_planar(ob, angle_limit=decimationparams[0])
-                triangulate_mesh(ob)
             if smoothparams is not None:
                 smooth_mesh_default(ob,
                                     iterations=int(smoothparams[0]),
@@ -82,7 +79,13 @@ def main(argv):
                                       lambda_border=float(smoothlaplacian[2]),
                                       use_x=bool(smoothlaplacian[3]),
                                       use_y=bool(smoothlaplacian[4]),
-                                      use_z=bool(smoothlaplacian[5]))
+                                      use_z=bool(smoothlaplacian[5]),
+                                      use_volume_preserve=bool(smoothlaplacian[6]),
+                                      use_normalized=bool(smoothlaplacian[7]))
+            if decimationparams is not None:
+                decimate_mesh_default(ob, ratio=decimationparams[0])
+#                 decimate_mesh_planar(ob, angle_limit=decimationparams[0])
+                triangulate_mesh(ob)
             shrink_mesh(ob, ecs_shrinkvalue)
             if randomcolour:
                 colour = [random() for _ in range(0,3)]
@@ -193,12 +196,16 @@ def smooth_mesh_default(ob, iterations=10, factor=0.5, use_x=True, use_y=True, u
     mod.use_z = use_z
     O.object.modifier_apply(modifier=mod.name)
 
-def smooth_mesh_laplacian(ob, iterations=100, lambda_factor=0.2, lambda_border=0.01, use_x=True, use_y=True, use_z=True, vg=""):
+def smooth_mesh_laplacian(ob, iterations=100, lambda_factor=0.2, lambda_border=0.01,
+                          use_x=True, use_y=True, use_z=True,
+                          use_volume_preserve=False, use_normalized=True, vg=""):
     """"""
     mod = ob.modifiers.new("laplaciansmooth", type='LAPLACIANSMOOTH')
     mod.iterations = iterations
     mod.lambda_factor = lambda_factor
     mod.lambda_border = lambda_border
+    mod.use_volume_preserve = use_volume_preserve
+    mod.use_normalized = use_normalized
     mod.use_x = use_x
     mod.use_y = use_y
     mod.use_z = use_z
