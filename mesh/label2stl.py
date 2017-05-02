@@ -15,6 +15,7 @@ from skimage.morphology import remove_small_objects
 from skimage.measure import label, block_reduce
 from scipy.ndimage.interpolation import shift
 from scipy.ndimage.morphology import binary_fill_holes
+from skimage.measure import label
 
 
 def main(argv):
@@ -106,7 +107,7 @@ def main(argv):
     if blockreduce:
         mask = block_reduce(mask, block_size=tuple(blockreduce), func=np.amax)
 
-    ECSmask = np.zeros_like(mask, dtype='bool')
+#     ECSmask = np.zeros_like(mask, dtype='bool')
     # process the labelimages
     for l in labelimages:
 
@@ -122,9 +123,12 @@ def main(argv):
         labeldata[~mask] = 0
 #         labeldata, elsize = resample_volume(labeldata, True, elsize, res)
 
-        compdict[l] = np.unique(labeldata)
+        labelset_orig = set(np.unique(labeldata))
+        labeldata[mask_small_objects(labeldata, 1000)] = 0
+        labelset_final = set(np.unique(labeldata))
+        print('removed: ', labelset_orig-labelset_final)
 
-#         labeldata = remove_small_objects(labeldata, 100)
+        compdict[l] = np.unique(labeldata)
 
         if enforceECS:
             labeldata = enforce_ECS(labeldata)
@@ -188,7 +192,7 @@ def split_filename(filename, blockoffset=[0, 0, 0]):
     return dset_info, x, X, y, Y, z, Z
 
 
-def remove_small_objects(labeldata, minvoxelcount):
+def mask_small_objects(labeldata, minvoxelcount):
     """"""
 
     labeled, nlabels = label(labeldata, connectivity=1, return_num=True)
@@ -196,9 +200,9 @@ def remove_small_objects(labeldata, minvoxelcount):
     forward_map = np.zeros(nlabels + 1, 'bool')
     forward_map[0:len(x)] = x
     tinysegments = forward_map[labeled]
-    labeldata[tinysegments > 0] = 0
+    mask = tinysegments > 0
 
-    return labeldata
+    return mask
 
 
 def mkdir_p(path):
