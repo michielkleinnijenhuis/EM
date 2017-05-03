@@ -187,11 +187,11 @@ def main(argv):
                     add_labels = np.empty(size)
 
                 add_labels = comm.bcast(add_labels, root=0)
-                fw[1:] += add_labels[rank]
+                fw[fw>0] += add_labels[rank]
 
             else:
 
-                fw[1:] += maxlabel
+                fw[fw>0] += maxlabel
                 if len(fw) > 1:
                     maxlabel = np.amax(fw)
 
@@ -339,7 +339,7 @@ def get_overlap(side, fstack, gstack, granges, oranges,
     data_section = None
     nb_section = None
 
-    print(margin, x, X, y, Y, z, Z, ox, oX, oy, oY, oz, oZ)
+#     print(margin, x, X, y, Y, z, Z, ox, oX, oy, oY, oz, oZ)
     if (side == 'xmin') & (x > 0):
 #        data_section = fstack[:, :, :margin[2]]
 #        if x > 0:
@@ -389,6 +389,7 @@ def merge_overlap(fw, fstack, gstack, granges, oranges,
         if nb_section is None:
             continue
 
+        data_section = fw[data_section]
         data_labels = np.trim_zeros(np.unique(data_section))
         for data_label in data_labels:
 
