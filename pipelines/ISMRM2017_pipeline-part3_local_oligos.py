@@ -1,5 +1,5 @@
 
-# labeling/watershedding additional space not yet filled
+# labeling/watershedding additional space not yet filled by Neuroproof agglomeration
 import os
 import h5py
 import numpy as np
@@ -8,7 +8,7 @@ from skimage.measure import regionprops, label
 datadir = "/Users/michielk/oxdata/P01/EM/M3/M3_S1_GNU/M3S1GNU/ds7_arc"
 dset_name = 'M3S1GNUds7'
 
-labelvolume = ['_maskALL', 'stack']
+labelvolume = ['_maskALL', 'stack']  # this should probably be labelALL?
 f = h5py.File(os.path.join(datadir, dset_name + labelvolume[0] + '.h5'), 'r')
 MM = f[labelvolume[1]][:, :, :].astype('bool')
 f.close()

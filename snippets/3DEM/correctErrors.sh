@@ -15,6 +15,8 @@ import glob
 inputdir = "/data/ndcn-fmrib-water-brain/ndcn0180/EM/M3/M3_S1_GNU_old"
 inputdir = "/data/ndcn-fmrib-water-brain/ndcn0180/EM/M3/M3_S1_GNU_old/pred_new"
 inputdir = "/Users/michielk/oxdata/P01/EM/M3/M3_S1_GNU/M3S1GNU/ds7_arc"
+inputdir = "/Users/michielk/oxdata/P01/EM/M3/M3_S1_GNU/M3S1GNU/ds7_arc"
+inputdir = '/Users/michielk/oxdox/papers/abstracts/ISMRM2017/Eposter/anims/M3S1GNUvols/data'
 
 regexp = "*_probs.h5"
 elsize = [0.05, 0.0073, 0.0073, 1]
@@ -23,6 +25,7 @@ field = 'volume/predictions'
 
 regexp = "M3S1GNUds7_labelMA_core*.h5"
 regexp = "M3S1GNUds7_*_final.h5"
+regexp = "M3S1GNUds7_labelMA_2D*.h5"
 elsize = [0.05, 0.0511, 0.0511]
 axislabels = 'zyx'
 field = 'stack'

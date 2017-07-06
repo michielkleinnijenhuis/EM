@@ -1,10 +1,9 @@
 #!/usr/bin/env python
 
-"""
-Convert DM3 to tifs.
+"""Convert .dm3 files to tifs.
 
 ImageJ headless doesn't take arguments easily...
-Example usage on ARC arcus cluster:
+Example usage on Oxford's ARC arcus cluster:
 
 scriptdir="${HOME}/workspace/EM"
 dm3dir="${DATA}/EM/M3/20Mar15/montage/Montage_"
@@ -31,12 +30,12 @@ echo "cd \$PBS_O_WORKDIR" >> $qsubfile
 echo "$imagej --headless \\" >> $qsubfile
 echo "$datadir/EM_tiles2tif_m\`printf %03d \$PBS_ARRAYID\`.py" >> $qsubfile
 qsub -t 0-3 $qsubfile
-
 """
 
 import sys
-from os import path
+import os
 import glob
+
 from loci.plugins import BF
 from ij import IJ
 
@@ -48,13 +47,13 @@ def main(argv):
     outputdir = 'OUTPUTDIR'
     output_postfix = 'OUTPUT_POSTFIX'
 
-    infiles = glob.glob(path.join(inputdir, '*.dm3'))
+    infiles = glob.glob(os.path.join(inputdir, '*.dm3'))
 
     for infile in infiles:
         imp = BF.openImagePlus(infile)
-        head, tail = path.split(infile)
-        filename, ext = path.splitext(tail)
-        outpath = path.join(outputdir, filename[-4:] + output_postfix + '.tif')
+        tail = os.path.split(infile)[1]
+        filename = os.path.splitext(tail)[0][-4:] + output_postfix + '.tif'
+        outpath = os.path.join(outputdir, filename)
         IJ.save(imp[0], outpath)
 
 

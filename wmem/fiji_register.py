@@ -1,10 +1,9 @@
 #!/usr/bin/env python
 
-"""
-Register the slices in a stack.
+"""Register the slices in a stack.
 
 ImageJ headless doesn't take arguments easily...
-Example usage on ARC arcus-b cluster:
+Example usage on Oxford's ARC arcus-b cluster:
 
 scriptdir="${HOME}/workspace/EM"
 imagej=/system/software/linux-x86_64/fiji/20140602/ImageJ-linux64
@@ -29,15 +28,16 @@ echo "#SBATCH --job-name=EM_reg" >> $qsubfile
 echo "$imagej --headless \\" >> $qsubfile
 echo "$datadir/fiji_register.py" >> $qsubfile
 sbatch $qsubfile
-
 """
 
 import sys
+
 from ij import IJ
 from register_virtual_stack import Register_Virtual_Stack_MT
 
 
 def main(argv):
+    """Register the slices in a stack."""
 
     source_dir = 'SOURCE_DIR/'
     target_dir = 'TARGET_DIR/'

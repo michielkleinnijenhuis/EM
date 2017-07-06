@@ -35,8 +35,8 @@ sed "s?INPUTDIR?$datadir/tifs?;\
     s?OUTPUTDIR?$datadir/stitched?;\
     s?Z_START?$z?;\
     s?Z_END?$Z/tifs?g" \
-    $scriptdir/reg/EM_montage2stitched.py \
-    > $datadir/EM_montage2stitched_`printf %03d $i`.py
+    $scriptdir/reg/fiji_stitch.py \
+    > $datadir/fiji_stitch_`printf %03d $i`.py
     i=$((i+1))
 done
 
@@ -55,8 +55,8 @@ sed "s?SOURCE_DIR?$datadir/stitched?;\
     s?TARGET_DIR?$datadir/$regname?;\
     s?REFNAME?$refname?;\
     s?TRANSF_DIR?$datadir/$regname/trans?g" \
-    $scriptdir/reg/EM_register.py \
-    > $datadir/EM_register.py
+    $scriptdir/reg/fiji_register.py \
+    > $datadir/fiji_register.py
 
 qsubfile=$datadir/EM_register_submit.sh
 echo '#!/bin/bash' > $qsubfile
@@ -80,7 +80,7 @@ dspf='ds'; ds=7;
 export template='single' additions='mpi'
 export njobs=1 nodes=1 tasks=16 memcpu=60000 wtime="00:10:00" q="d"
 export jobname="ds"
-export cmd="python $scriptdir/convert/EM_downsample.py \
+export cmd="python $scriptdir/downsample_slices.py \
 $datadir/reg0250 $datadir/reg0250_${dspf}${ds} -d ${ds} -m"
 source $scriptdir/pipelines/template_job_$template.sh
 
