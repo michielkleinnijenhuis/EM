@@ -329,8 +329,12 @@ def h5_load(dspath, load_data=False,
     ds_in = file_in[h5path_dset]  # proxy
 
     elsize, axlab = h5_load_attributes(ds_in)
-    elsize = elsize or [1] * ds_in.ndim
-    axlab = inlayout or axlab or 'zyxct'[:ds_in.ndim]
+    if elsize is None:
+        elsize = [1] * ds_in.ndim
+    if inlayout is not None:
+        axlab = inlayout
+    elif axlab is None:
+        axlab = 'zyxct'[:ds_in.ndim]
 
     if load_data:
         outlayout = outlayout or axlab

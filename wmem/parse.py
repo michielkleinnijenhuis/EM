@@ -18,67 +18,6 @@ def parse_common(parser):
         """
         )
 
-#     parser.add_argument(
-#         '-x',
-#         type=int,
-#         default=0,
-#         help='lower x-index'
-#         )
-#     parser.add_argument(
-#         '-X',
-#         type=int,
-#         default=0,
-#         help='upper x-index'
-#         )
-#     parser.add_argument(
-#         '-y',
-#         type=int,
-#         default=0,
-#         help='lower y-index'
-#         )
-#     parser.add_argument(
-#         '-Y',
-#         type=int,
-#         default=0,
-#         help='upper y-index'
-#         )
-#     parser.add_argument(
-#         '-z',
-#         type=int,
-#         default=0,
-#         help='lower z-index'
-#         )
-#     parser.add_argument(
-#         '-Z',
-#         type=int,
-#         default=0,
-#         help='upper z-index'
-#         )
-#     parser.add_argument(
-#         '-c',
-#         type=int,
-#         default=0,
-#         help='lower c-index'
-#         )
-#     parser.add_argument(
-#         '-C',
-#         type=int,
-#         default=0,
-#         help='upper C-index'
-#         )
-#     parser.add_argument(
-#         '-t',
-#         type=int,
-#         default=0,
-#         help='lower t-index'
-#         )
-#     parser.add_argument(
-#         '-T',
-#         type=int,
-#         default=0,
-#         help='upper T-index'
-#         )
-
     parser.add_argument(
         '-M', '--usempi',
         action='store_true',
@@ -179,6 +118,67 @@ def parse_stack2stack(parser):
     parser.add_argument(
         'outputfile',
         help='the outputfile'
+        )
+
+    parser.add_argument(
+        '-x',
+        type=int,
+        default=0,
+        help='lower x-index'
+        )
+    parser.add_argument(
+        '-X',
+        type=int,
+        default=0,
+        help='upper x-index'
+        )
+    parser.add_argument(
+        '-y',
+        type=int,
+        default=0,
+        help='lower y-index'
+        )
+    parser.add_argument(
+        '-Y',
+        type=int,
+        default=0,
+        help='upper y-index'
+        )
+    parser.add_argument(
+        '-z',
+        type=int,
+        default=0,
+        help='lower z-index'
+        )
+    parser.add_argument(
+        '-Z',
+        type=int,
+        default=0,
+        help='upper z-index'
+        )
+    parser.add_argument(
+        '-c',
+        type=int,
+        default=0,
+        help='lower c-index'
+        )
+    parser.add_argument(
+        '-C',
+        type=int,
+        default=0,
+        help='upper C-index'
+        )
+    parser.add_argument(
+        '-t',
+        type=int,
+        default=0,
+        help='lower t-index'
+        )
+    parser.add_argument(
+        '-T',
+        type=int,
+        default=0,
+        help='upper T-index'
         )
 
     parser.add_argument(
