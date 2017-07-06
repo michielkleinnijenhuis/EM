@@ -78,6 +78,10 @@ def mergeblocks(h5paths_in,
 
     # open data for reading
     h5file_in, ds_in, elsize, axlab = utils.h5_load(h5paths_in[0])
+    try:
+        ndim = ds_in.ndim
+    except AttributeError:
+        ndim = len(ds_in.dims)
 
     # get the size of the outputfile # TODO: option to derive fullsize from dset_names?
     if blockreduce is not None:
@@ -87,7 +91,7 @@ def mergeblocks(h5paths_in,
         elsize = [e*b for e, b in zip(elsize, blockreduce)]
     else:  # FIXME: 'zyx(c)' stack assumed
         outsize = np.subtract(fullsize, blockoffset)
-        if ds_in.ndim == 4:
+        if ndim == 4:
             outsize = outsize + [ds_in.shape[3]]
 
     # open data for writing
@@ -133,7 +137,7 @@ def mergeblocks(h5paths_in,
         """NOTE:
         it is assumed that the inputs are not 4D labelimages
         """
-        if ds_in.ndim == 4:
+        if ndim == 4:
             ds_out[oz:oZ, oy:oY, ox:oX, :] = ds_in[iz:iZ, iy:iY, ix:iX, :]
             h5file_in.close()
             continue

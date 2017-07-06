@@ -77,6 +77,10 @@ def stack2stack(
             return
 
     h5file_in, ds_in, h5elsize, h5axlab = utils.h5_load(inputfile)
+    try:
+        ndim = ds_in.ndim
+    except AttributeError:
+        ndim = len(ds_in.dims)
 
     # output root and exts
     if '.h5' in outputfile + ''.join(additional_outputs):
@@ -91,7 +95,7 @@ def stack2stack(
     outexts = list(set(additional_outputs + [ext]))
 
     # data layout  # FIXME: h5axlab not necessarily xyzct!
-    inlayout = inlayout or ''.join(h5axlab) or 'zyxct'[0:ds_in.ndim]
+    inlayout = inlayout or ''.join(h5axlab) or 'zyxct'[0:ndim]
     outlayout = outlayout or inlayout
     in2out = [inlayout.index(l) for l in outlayout]
 
@@ -130,19 +134,19 @@ def stack2stack(
     insel = [stdsel[i] for i in std2in]
 
     # get the data  # TODO: most memory-efficient solution
-    if ds_in.ndim == 2:
+    if ndim == 2:
         data = ds_in[insel[0][0]:insel[0][1],
                      insel[1][0]:insel[1][1]]
-    elif ds_in.ndim == 3:
+    elif ndim == 3:
         data = ds_in[insel[0][0]:insel[0][1],
                      insel[1][0]:insel[1][1],
                      insel[2][0]:insel[2][1]]
-    elif ds_in.ndim == 4:
+    elif ndim == 4:
         data = ds_in[insel[0][0]:insel[0][1],
                      insel[1][0]:insel[1][1],
                      insel[2][0]:insel[2][1],
                      insel[3][0]:insel[3][1]]
-    elif ds_in.ndim == 5:
+    elif ndim == 5:
         data = ds_in[insel[0][0]:insel[0][1],
                      insel[1][0]:insel[1][1],
                      insel[2][0]:insel[2][1],
