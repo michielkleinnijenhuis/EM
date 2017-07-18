@@ -47,15 +47,26 @@ def main(argv):
         )
 
 
-def remap_labels(inputfile,
-                 delete_labels=[], delete_files=[], except_files=[],
-                 merge_labels=[], merge_files=[],
-                 split_labels=[], split_files=[],
-                 aux_labelvolume='',
-                 min_labelsize=0, min_segmentsize=0,
-                 keep_only_largest=False, conncomp=False,
-                 nifti_output=False, nifti_transpose=False,
-                 h5path_out='', save_steps=False, protective=False):
+def remap_labels(
+        inputfile,
+        delete_labels=[],
+        delete_files=[],
+        except_files=[],
+        merge_labels=[],
+        merge_files=[],
+        split_labels=[],
+        split_files=[],
+        aux_labelvolume='',
+        min_labelsize=0,
+        min_segmentsize=0,
+        keep_only_largest=False,
+        conncomp=False,
+        nifti_output=False,
+        nifti_transpose=False,
+        h5path_out='',
+        save_steps=False,
+        protective=False,
+        ):
     """Delete/split/merge/... labels in a labelvolume."""
 
     # check output paths

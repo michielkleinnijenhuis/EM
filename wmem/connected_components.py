@@ -102,9 +102,14 @@ def main(argv):
 # ========================================================================== #
 
 
-def CC_3D(h5path_in, h5path_mask='',
-          min_size_maskMM=0, min_area=0,
-          h5path_out='', protective=False):
+def CC_3D(
+        h5path_in,
+        h5path_mask='',
+        min_size_maskMM=0,
+        min_area=0,
+        h5path_out='',
+        protective=False,
+        ):
     """Label connected components in a 3D stack."""
 
     # check output path
@@ -161,8 +166,14 @@ def CC_3D(h5path_in, h5path_mask='',
         return labels
 
 
-def CC_2D(h5path_in, h5path_mask='', slicedim=0,
-          usempi=False, h5path_out='', protective=False):
+def CC_2D(
+        h5path_in,
+        h5path_mask='',
+        slicedim=0,
+        usempi=False,
+        h5path_out='',
+        protective=False,
+        ):
     """Label connected components in all slices."""
 
     # check output path
@@ -242,10 +253,16 @@ def CC_2D(h5path_in, h5path_mask='', slicedim=0,
         return ds_out
 
 
-def CC_2Dfilter(h5path_labels, h5path_mask,
-                map_propnames, criteria,
-                slicedim=0,
-                usempi=False, outputfile='', protective=False):
+def CC_2Dfilter(
+        h5path_labels,
+        h5path_mask,
+        map_propnames,
+        criteria,
+        slicedim=0,
+        usempi=False,
+        outputfile='',
+        protective=False,
+        ):
     """Get forward mapping of labels/properties filtered by criteria."""
 
     (min_area,
@@ -329,9 +346,14 @@ def CC_2Dfilter(h5path_labels, h5path_mask,
     return outarray
 
 
-def CC_2Dprops(h5path_labels, basename,
-               map_propnames,
-               usempi=False, h5path_out='', protective=False):
+def CC_2Dprops(
+        h5path_labels,
+        basename,
+        map_propnames,
+        usempi=False,
+        h5path_out='',
+        protective=False,
+        ):
     """Map the labels/properties."""
 
     # check output paths
@@ -381,7 +403,11 @@ def CC_2Dprops(h5path_labels, basename,
     h5file_in.close()
 
 
-def CC_2Dto3D(h5path_in, h5path_out='', protective=False):
+def CC_2Dto3D(
+        h5path_in,
+        h5path_out='',
+        protective=False,
+        ):
     """Label connected components in 3D from the 2D-generated mask."""
 
     # check output path

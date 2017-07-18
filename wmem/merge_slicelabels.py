@@ -56,10 +56,15 @@ def main(argv):
             )
 
 
-def evaluate_overlaps(h5path_in, slicedim,
-                      offsets, threshold_overlap,
-                      usempi=False,
-                      outputfile='', protective=False):
+def evaluate_overlaps(
+        h5path_in,
+        slicedim,
+        offsets,
+        threshold_overlap,
+        usempi=False,
+        outputfile='',
+        protective=False,
+        ):
     """Check for slicewise overlaps between labels."""
 
     # open data for reading
@@ -116,9 +121,15 @@ def evaluate_overlaps(h5path_in, slicedim,
             pickle.dump(MAlist, f)
 
 
-def map_labels(h5path_in, h5path_mm='',
-               min_labelsize=0, close=None, relabel=False,
-               h5path_out='', protective=False):
+def map_labels(
+        h5path_in,
+        h5path_mm='',
+        min_labelsize=0,
+        close=None,
+        relabel=False,
+        h5path_out='',
+        protective=False,
+        ):
     """Map groups of labels to a single label."""
 
     # check output path

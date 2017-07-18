@@ -45,11 +45,20 @@ def main(argv):
         )
 
 
-def separate_sheaths(h5path_in, h5path_lmm='', h5path_wsmask='',
-                     h5path_mds='', h5path_mmm='',
-                     MAdilation=0, h5path_dist='',
-                     sigmoidweighting=0, margin=50,
-                     h5path_out='', save_steps=False, protective=False):
+def separate_sheaths(
+        h5path_in,
+        h5path_lmm='',
+        h5path_wsmask='',
+        h5path_mds='',
+        h5path_mmm='',
+        MAdilation=0,
+        h5path_dist='',
+        sigmoidweighting=0,
+        margin=50,
+        h5path_out='',
+        save_steps=False,
+        protective=False,
+        ):
     """Separate the myelin compartment into individual myelin sheaths."""
 
     # check output paths

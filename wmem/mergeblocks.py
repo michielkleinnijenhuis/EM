@@ -59,14 +59,23 @@ def main(argv):
         )
 
 
-def mergeblocks(h5paths_in,
-                blockoffset=[0, 0, 0], blocksize=[],
-                margin=[0, 0, 0], fullsize=[],
-                is_labelimage=False, relabel=False,
-                neighbourmerge=False, save_fwmap=False,
-                blockreduce=[], func='np.amax',
-                usempi=False,
-                h5path_out='', save_steps=False, protective=False):
+def mergeblocks(
+        h5paths_in,
+        blockoffset=[0, 0, 0],
+        blocksize=[],
+        margin=[0, 0, 0],
+        fullsize=[],
+        is_labelimage=False,
+        relabel=False,
+        neighbourmerge=False,
+        save_fwmap=False,
+        blockreduce=[],
+        func='np.amax',
+        usempi=False,
+        h5path_out='',
+        save_steps=False,
+        protective=False,
+        ):
     """Merge blocks of data into a single hdf5 file."""
 
     # TODO: save_steps

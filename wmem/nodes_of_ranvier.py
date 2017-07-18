@@ -44,13 +44,20 @@ def main(argv):
         )
 
 
-def nodes_of_ranvier(h5path_in,
-                     min_labelsize=0, remove_small_labels=False,
-                     h5path_boundarymask='',
-                     merge_methods=['neighbours'],
-                     overlap_threshold=20,
-                     h5path_data='', h5path_mmm='', searchradius=[100, 30, 30],
-                     h5path_out='', save_steps=False, protective=False):
+def nodes_of_ranvier(
+        h5path_in,
+        min_labelsize=0,
+        remove_small_labels=False,
+        h5path_boundarymask='',
+        merge_methods=['neighbours'],
+        overlap_threshold=20,
+        h5path_data='',
+        h5path_mmm='',
+        searchradius=[100, 30, 30],
+        h5path_out='',
+        save_steps=False,
+        protective=False,
+        ):
     """Find labels that do not traverse through the volume."""
 
     # check output paths

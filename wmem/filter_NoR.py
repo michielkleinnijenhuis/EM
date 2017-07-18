@@ -38,8 +38,13 @@ def main(argv):
         )
 
 
-def filter_NoR(h5path_in, h5path_2D,
-               h5path_out='', save_steps=False, protective=False):
+def filter_NoR(
+        h5path_in,
+        h5path_2D,
+        h5path_out='',
+        save_steps=False,
+        protective=False,
+        ):
     """Filter nodes of ranvier."""
 
     # check output paths

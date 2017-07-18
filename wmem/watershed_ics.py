@@ -38,10 +38,17 @@ def main(argv):
         )
 
 
-def watershed_ics(h5path_in, masks=[],
-                  h5path_seeds='', seed_size=64,
-                  lower_threshold=None, upper_threshold=None,
-                  h5path_out='', save_steps=False, protective=False):
+def watershed_ics(
+        h5path_in,
+        masks=[],
+        h5path_seeds='',
+        seed_size=64,
+        lower_threshold=None,
+        upper_threshold=None,
+        h5path_out='',
+        save_steps=False,
+        protective=False,
+        ):
     """Perform watershed on the intracellular space compartments."""
 
     # check output paths

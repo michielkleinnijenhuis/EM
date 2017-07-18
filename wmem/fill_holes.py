@@ -44,12 +44,20 @@ def main(argv):
         )
 
 
-def fill_holes(h5path_in, methods, selem,
-               h5path_mask='',
-               h5path_md='', h5path_mm='', h5path_mx='',
-               h5path_out='',
-               h5path_out_holes='', h5path_out_ma='', h5path_out_mm='',
-               protective=False):
+def fill_holes(
+        h5path_in,
+        methods,
+        selem,
+        h5path_mask='',
+        h5path_md='',
+        h5path_mm='',
+        h5path_mx='',
+        h5path_out='',
+        h5path_out_holes='',
+        h5path_out_ma='',
+        h5path_out_mm='',
+        protective=False,
+        ):
     """Fill holes in labels."""
 
     # check output path  # TODO check other output volumes (holes, ma, mm)

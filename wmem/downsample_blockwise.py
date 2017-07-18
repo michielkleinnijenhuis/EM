@@ -34,9 +34,13 @@ def main(argv):
         )
 
 
-def downsample_blockwise(h5path_in,
-                         blockreduce=[3, 3, 3], func='np.amax',
-                         h5path_out='', protective=False):
+def downsample_blockwise(
+        h5path_in,
+        blockreduce=[3, 3, 3],
+        func='np.amax',
+        h5path_out='',
+        protective=False,
+        ):
     """Downsample volume by blockwise reduction."""
 
     if '.h5' in h5path_out:

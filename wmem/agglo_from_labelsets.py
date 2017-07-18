@@ -33,8 +33,14 @@ def main(argv):
         )
 
 
-def agglo_from_labelsets(h5path_in, labelset_files='', fwmap='',
-                         h5path_out='', save_steps=False, protective=False):
+def agglo_from_labelsets(
+        h5path_in,
+        labelset_files='',
+        fwmap='',
+        h5path_out='',
+        save_steps=False,
+        protective=False,
+        ):
     """Apply mapping of labelsets to a labelvolume."""
 
     # check output paths

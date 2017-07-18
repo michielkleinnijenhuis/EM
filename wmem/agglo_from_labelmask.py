@@ -34,8 +34,14 @@ def main(argv):
         )
 
 
-def agglo_from_labelmask(h5path_in, h5path_lv='', ratio_threshold=0,
-                         h5path_out='', save_steps=False, protective=False):
+def agglo_from_labelmask(
+        h5path_in,
+        h5path_lv='',
+        ratio_threshold=0,
+        h5path_out='',
+        save_steps=False,
+        protective=False,
+        ):
     """Apply mapping of labelsets to a labelvolume."""
 
     # check output paths

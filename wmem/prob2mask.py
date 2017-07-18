@@ -39,12 +39,18 @@ def main(argv):
         )
 
 
-def prob2mask(h5path_probs, channel=None,
-              lower_threshold=0, upper_threshold=1,
-              size=0, dilation=0,
-              h5path_mask=None,
-              blockreduce=None,
-              h5path_out='', protective=False):
+def prob2mask(
+        h5path_probs,
+        channel=None,
+        lower_threshold=0,
+        upper_threshold=1,
+        size=0,
+        dilation=0,
+        h5path_mask=None,
+        blockreduce=None,
+        h5path_out='',
+        protective=False,
+        ):
     """Create thresholded hard segmentation."""
 
     if bool(h5path_out):
