@@ -21,7 +21,7 @@ def main(argv):
         description=__doc__,
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
         )
-    parser = parse.parse_stack2stack(parser)
+    parser = parse.parse_prob2mask(parser)
     parser = parse.parse_common(parser)
     args = parser.parse_args()
 
