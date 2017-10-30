@@ -68,9 +68,9 @@ def main(argv):
 
         CC_2Dfilter(
             args.inputfile,
-            args.maskMB,
             args.map_propnames,
             criteria,
+            args.maskMB,
             args.slicedim,
             args.usempi & ('mpi4py' in sys.modules),
             args.outputfile,
@@ -255,9 +255,9 @@ def CC_2D(
 
 def CC_2Dfilter(
         h5path_labels,
-        h5path_mask,
         map_propnames,
         criteria,
+        h5path_int='',
         slicedim=0,
         usempi=False,
         outputfile='',
@@ -277,7 +277,11 @@ def CC_2Dfilter(
 
     # open data for reading
     h5file_mm, ds_mm, _, _ = utils.h5_load(h5path_labels)
-    h5file_mb, ds_mb, _, _ = utils.h5_load(h5path_mask)  # FIXME: why mask??
+    if h5path_int:
+        h5file_mb, ds_mb, _, _ = utils.h5_load(h5path_int)
+    else:
+        ds_mb = None
+    # mask used as intensity image in mean_intensity criterium
 
     # get the maximum labelvalue in the input
     root = h5path_labels.split('.h5')[0]
@@ -312,7 +316,10 @@ def CC_2Dfilter(
 
         for i in series:
             slcMM = utils.get_slice(ds_mm, i, slicedim)
-            slcMB = utils.get_slice(ds_mb, i, slicedim, 'bool')
+            if h5path_int:
+                slcMB = utils.get_slice(ds_mb, i, slicedim, 'bool')
+            else:
+                slcMB = None
             fws = check_constraints(slcMM, fws, map_propnames,
                                     criteria, slcMB)
         if usempi:  # FIXME
@@ -330,9 +337,9 @@ def CC_2Dfilter(
     # write the forward maps to a numpy vector
     if rank == 0:
         slc = int(n_slices/2)
-        datatypes = get_prop_datatypes(ds_mm[:, :, slc],
-                                       ds_mb[:, :, slc],
-                                       map_propnames)
+        slcMM = ds_mm[slc, :, :]
+        slcMB = ds_mb[slc, :, :] if h5path_int else None
+        datatypes = get_prop_datatypes(slcMM, map_propnames, slcMB)
         for i, propname in enumerate(map_propnames):
             root = os.path.splitext(outputfile)[0]
             nppath = '{}_{}.npy'.format(root, propname)
@@ -341,7 +348,8 @@ def CC_2Dfilter(
 
     # close and return
     h5file_mm.close()
-    h5file_mb.close()
+    if h5path_int:
+        h5file_mb.close()
 
     return outarray
 
@@ -388,8 +396,8 @@ def CC_2Dprops(
 
         # open data for writing
         h5path_prop = os.path.join(h5path_out, propname)
-        print(h5path_prop)
-        h5file_prop, ds_prop = utils.h5_write(None, ds_in.shape, 'uint32',
+        h5file_prop, ds_prop = utils.h5_write(None, ds_in.shape,
+                                              fws[propname].dtype,
                                               h5path_prop,
                                               element_size_um=elsize,
                                               axislabels=axlab,
@@ -452,6 +460,7 @@ def check_constraints(labels, fws, propnames, criteria, MB=None):
 
     for prop in rp:
 
+        # TODO: ordering
         if min_area is not None:
             if prop.area < min_area:
                 fws = set_fws(fws, prop, propnames, is_valid=False)
@@ -486,7 +495,7 @@ def check_constraints(labels, fws, propnames, criteria, MB=None):
     return fws
 
 
-def get_prop_datatypes(labels, MB, propnames):
+def get_prop_datatypes(labels, propnames, MB=None):
     """Retrieve the per-property output datatypes."""
 
     rp = regionprops(labels, intensity_image=MB, cache=True)
@@ -504,11 +513,16 @@ def set_fws(fws, prop, propnames, is_valid=False):
     """Set the forward maps entries for single labels."""
 
     for i, propname in enumerate(propnames):
-        if is_valid:
-            fws[prop.label, i] = prop[propname]
-        else:
+        if (propname == 'label') and (not is_valid):
             fws[prop.label, i] = 0
             # FIXME: for many prop '0' is a valid value (nan?)
+        else:
+            fws[prop.label, i] = prop[propname]
+#         if is_valid:  #  or (propname == 'orig')
+#             fws[prop.label, i] = prop[propname]
+#         else:
+#             fws[prop.label, i] = 0
+#             # FIXME: for many prop '0' is a valid value (nan?)
 
     return fws
 
