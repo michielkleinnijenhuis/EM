@@ -264,6 +264,12 @@ def parse_prob2mask(parser):
         )
 
     parser.add_argument(
+        '-c', '--channel',
+        type=int,
+        help='pick a channel from a 4D (zyx)c dataset'
+        )
+
+    parser.add_argument(
         '-i', '--inputmask',
         nargs=2,
         default=None,
@@ -289,6 +295,12 @@ def parse_prob2mask(parser):
         type=float,
         default=1,
         help='the lower threshold to apply to the dataset'
+        )
+    parser.add_argument(
+        '-j', '--step',
+        type=float,
+        default=1.0,
+        help='multiple lower thresholds between 0 and 1 using this step'
         )
     parser.add_argument(
         '-s', '--size',

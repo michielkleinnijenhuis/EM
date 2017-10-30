@@ -5,6 +5,8 @@
 """
 
 import os
+import sys
+import importlib
 import errno
 import pickle
 
@@ -80,18 +82,30 @@ def xyz_datarange(xyz, files):
     return xyz[0], X, xyz[2], Y, xyz[4], Z
 
 
-def get_slice_objects_prc(dataslices, files):
+def get_slice_objects_prc(dataslices, zyxdims):
     """Get the full ranges for z, y, x if upper bound is undefined."""
 
     # set default dataslice
     if dataslices is None:
         dataslices = [0, 0, 1, 0, 0, 1, 0, 0, 1]
 
-    # derive the stop-values from the image data if not specified
-    firstimage = imread(files[0])
-    dataslices[1] = dataslices[1] or len(files)
-    dataslices[4] = dataslices[4] or firstimage.shape[0]
-    dataslices[7] = dataslices[7] or firstimage.shape[1]
+#     # derive the stop-values from the image data if not specified
+#     if files[0].endswith('.dm3'):
+#         try:
+#             import DM3lib as dm3
+#         except ImportError:
+#             raise
+#         dm3f = dm3.DM3(files[0], debug=0)
+#         dim0, dim1 = tuple(dm3f.imagedata.shape)
+# #         dim0 = dm3f.tags.get('root.ImageList.1.ImageData.Dimensions.0')
+# #         dim1 = dm3f.tags.get('root.ImageList.1.ImageData.Dimensions.1')
+#     else:
+#         dim0, dim1 = tuple(imread(files[0]).shape)
+# 
+#     zyxdims[0] = len(files)
+    dataslices[1] = dataslices[1] or zyxdims[0]
+    dataslices[4] = dataslices[4] or zyxdims[1]
+    dataslices[7] = dataslices[7] or zyxdims[2]
 
     # create the slice objects
     if dataslices is not None:
@@ -192,10 +206,11 @@ def output_check(outpaths, save_steps=True, protective=False):
         h5file_out.close()
 
         for _, outpath in outpaths.items():
-            status, info = h5_check(outpath, protective)
-            print("{}: {}".format(status, info))
-            if status == "CANCELLED":
-                return status
+            if outpath:
+                status, info = h5_check(outpath, protective)
+                print("{}: {}".format(status, info))
+                if status == "CANCELLED":
+                    return status
 
 
 def output_check_dir(outpaths, protective):
@@ -277,6 +292,15 @@ def load(dspath, load_data=False,
                         dtype, channels,
                         inlayout, outlayout)
 
+    try:
+        imread(dspath)
+    except:
+        pass
+    else:
+        return imf_load(dspath, load_data,
+                        dtype, channels,
+                        inlayout, outlayout)
+
 #     try:
 #         basepath, h5path_dset = dspath.split('.h5')
 # #         h5path_file = basepath + '.h5'
@@ -292,6 +316,28 @@ def load(dspath, load_data=False,
 #     return fun_load(dspath, load_data, dtype, channels, inlayout, outlayout)
 
 
+def imf_load(dspath, load_data=True,
+             dtype='', channels=None,
+             inlayout=None, outlayout=None):
+
+    # FIXME: proper handling of inlayout etc
+
+    data = imread(dspath)
+    elsize = np.array([1, 1])
+    axlab = 'yxc'
+    outlayout = outlayout or axlab
+
+    if channels is not None:
+        data = data[:, :, channels]
+
+    return data, elsize, axlab
+
+
+def imf_write(dspath, data):
+
+    imsave(dspath, data)
+
+
 def nii_load(dspath, load_data=False,
              dtype='', channels=None,
              inlayout=None, outlayout=None):
@@ -302,8 +348,9 @@ def nii_load(dspath, load_data=False,
     ds_in = file_in.dataobj  # proxy
 
     elsize = list(file_in.header.get_zooms())
-    axlab = 'xyztc'[:ds_in.ndim]  # FIXME: get from header?
-    axlab = inlayout or axlab or 'xyztc'[:ds_in.ndim]
+    ndim = len(elsize)
+    axlab = 'xyztc'[:ndim]  # FIXME: get from header?
+    axlab = inlayout or axlab or 'xyztc'[:ndim]
 
     if load_data:
         outlayout = outlayout or axlab
@@ -335,7 +382,7 @@ def h5_load(dspath, load_data=False,
 
     elsize, axlab = h5_load_attributes(ds_in)
     if elsize is None:
-        elsize = [1] * ndim
+        elsize = np.array([1] * ndim)
     if inlayout is not None:
         axlab = inlayout
     elif axlab is None:
@@ -349,9 +396,7 @@ def h5_load(dspath, load_data=False,
 
         return data, elsize, axlab
 
-    else:
-
-        return file_in, ds_in, elsize, axlab
+    return file_in, ds_in, elsize, axlab
 
 
 def load_dataset(ds, elsize, axlab,
@@ -361,17 +406,34 @@ def load_dataset(ds, elsize, axlab,
     # TODO: make new groups for h5?
     # TODO: test most memory-efficient solution
 
-    if axlab != outlayout:
+    if list(axlab) != list(outlayout):
         in2out = [axlab.index(l) for l in outlayout]
         data = np.transpose(ds[:], in2out)
-        elsize = elsize[in2out]
+        elsize = np.array(elsize)[in2out]
         axlab = outlayout
 
     # TODO: load data subset/partial view
     if channels is not None:
         data = ds[:, :, :, channels]
+        if ds.ndim > data.ndim:  # FIXME: remove sloppiness
+            elsize = elsize[:3]
+            axlab = axlab[:3]
+        try:
+            data.shape[3]
+        except IndexError:
+            pass
+        else:
+            if data.shape[3] == 1:
+                data = data.reshape(data.shape[:3])
+                elsize = elsize[:3]
+                axlab = axlab[:3]
+    else:
+        data = ds[:]
 
-    return data.astype(dtype, copy=False), elsize, axlab
+    if dtype:
+        data = data.astype(dtype, copy=False)
+
+    return data, elsize, axlab
 
 
 def ds_in2out(in2out, ds, elsize):
@@ -402,7 +464,10 @@ def h5_write(data, shape, dtype,
         h5path_file = basepath + '.h5'
 
 #         if not isinstance(h5file, h5py.File):
-        h5file = h5py.File(h5path_file, 'a', driver=driver, comm=comm)
+        if usempi:
+            h5file = h5py.File(h5path_file, 'a', driver=driver, comm=comm)
+        else:
+            h5file = h5py.File(h5path_file, 'a')
 
         h5ds = h5file.create_dataset(h5path_dset,
                                      shape=shape,
@@ -495,6 +560,9 @@ def write_to_nifti(filepath, data, element_size_um):
         mat[0][0] = element_size_um[0]
         mat[1][1] = element_size_um[1]
         mat[2][2] = element_size_um[2]
+
+    if data.dtype == 'bool':
+        data = data.astype('uint8')
 
     nib.Nifti1Image(data, mat).to_filename(filepath)
 
@@ -688,3 +756,143 @@ def filter_on_size(labels, min_labelsize, remove_small_labels=False,
                       element_size_um, axislabels)
 
     return labels, ls_small
+
+
+def load_config(filepath, run_from='', run_upto='', run_only=''):
+    """Load a configuration for 2D myelin segmentation."""
+
+    configdir, configfile = os.path.split(os.path.realpath(filepath))
+    if configdir not in sys.path:
+        sys.path.append(configdir)
+    conf = importlib.import_module(os.path.splitext(configfile)[0])
+
+    return conf.config(run_from=run_from, run_upto=run_upto, run_only=run_only)
+
+
+def normalize_datasets(datadir, datasets, postfix='_norm.tif'):
+    """Normalize the datasets on their global signal."""
+
+    data_ref = imread(os.path.join(datadir, datasets[0] + '.tif'))
+    mean_ref = np.sum(data_ref) / data_ref.size
+
+    imsave(os.path.join(datadir, datasets[0] + postfix),
+           data_ref)
+
+    for dataset in datasets[1:]:
+        data_tar = imread(os.path.join(datadir, dataset + '.tif'))
+        mean_tar = np.sum(data_tar) / data_tar.size
+        data_tar_norm = data_tar * (mean_ref / mean_tar)
+        imsave(os.path.join(datadir, dataset + postfix),
+               data_tar_norm.astype(data_tar.dtype))
+
+
+def nii2h5(niipath, h5path_out,
+           inlayout='xyz', outlayout='zyx',
+           protective=False):
+    """Convert nifti to hdf5."""
+
+    # check output path
+    if '.h5' in h5path_out:
+        status, info = h5_check(h5path_out, protective)
+        print(info)
+        if status == "CANCELLED":
+            return
+
+    # load nifti data
+    data, elsize, axlab = nii_load(
+        niipath, load_data=True,
+        inlayout=inlayout, outlayout=outlayout
+        )
+
+    # open data for writing
+    h5file_out, ds_out = h5_write(None, data.shape, data.dtype,
+                                  h5path_out,
+                                  element_size_um=elsize,
+                                  axislabels=axlab)
+    ds_out[:] = data
+    h5file_out.close()
+
+
+def h5_del(h5path_full):
+    """Delete a hdf5 dataset."""
+
+    basepath, h5path_dset = h5path_full.split('.h5/')
+    h5path_file = basepath + '.h5'
+    with h5py.File(h5path_file, 'a') as f:
+        if f.get(h5path_dset):
+            del f[h5path_dset]
+
+
+def tif2h5_3D(datadir, dataset, dset,
+              elsize, axlab, postfix='_norm.tif'):
+    """Convert 2D tif to 3D h5."""
+
+    h5path = os.path.join(datadir, dataset + '.h5')
+    h5file = h5py.File(h5path, 'a')
+
+    tifpath = os.path.join(datadir, dataset + postfix)
+    data = imread(tifpath, as_grey=True)
+
+    dsshape = (1,) + tuple(data.shape)
+    ds0 = h5file.create_dataset(dset, shape=dsshape, dtype=data.dtype)
+    ds0[0, :, :] = data
+
+    ds0.attrs['element_size_um'] = elsize
+    for i, label in enumerate(axlab):
+        ds0.dims[i].label = label
+
+    h5file.close()
+
+
+def tif2h5_4D(datadir, dataset, dset,
+              elsize, axlab, postfix='.tif'):
+    """Convert 3D tif to 4D h5."""
+
+    h5path = os.path.join(datadir, dataset + '.h5')
+    h5file = h5py.File(h5path, 'a')
+
+    tifpath = os.path.join(datadir, dataset + postfix)
+    data = imread(tifpath)
+
+    dsshape = (1,) + tuple(data.shape)
+    ds0 = h5file.create_dataset(dset, shape=dsshape, dtype=data.dtype)
+    ds0[0, :, :, :] = data
+
+    ds0.attrs['element_size_um'] = elsize
+    for i, label in enumerate(axlab):
+        ds0.dims[i].label = label
+
+    h5file.close()
+
+
+def split_and_permute(h5path, dset0, dsets):
+    """Split and transpose h5 dataset.
+
+    This corrects for matlab's wonky h5 output after EED filter.
+    """
+
+    h5file = h5py.File(h5path, 'a')
+    ds0 = h5file[dset0]
+    data = ds0[:].transpose()
+
+    dsshape = tuple(data.shape[:3])
+    for i, dset in enumerate(dsets):
+        ds = h5file.create_dataset(dset, shape=dsshape, dtype=data.dtype)
+        ds[0, :, :] = data[0, :, :, i]
+
+    h5file.close()
+
+
+def copy_attributes(h5path, dset0, dsets):
+    """Copy attributes from one h5 dataset to another."""
+
+    h5file = h5py.File(h5path, 'a')
+    ds0 = h5file[dset0]
+
+    for dset in dsets:
+        ds = h5file[dset]
+        ds.attrs['element_size_um'] = ds0.attrs['element_size_um']
+        for i, label in enumerate(ds0.attrs['DIMENSION_LABELS']):
+            ds.dims[i].label = label
+
+    h5file.close()
