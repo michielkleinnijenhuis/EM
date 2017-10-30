@@ -95,7 +95,7 @@ def parse_series2stack(parser):
         '-e', '--element_size_um',
         nargs=3,
         type=float,
-        default=[1, 1, 1],
+        default=[None, None, None],
         help='dataset element sizes in the order of outlayout'
         )
     parser.add_argument(

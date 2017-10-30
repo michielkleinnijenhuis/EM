@@ -29,6 +29,11 @@ try:
 except ImportError:
     print("mpi4py could not be loaded")
 
+try:
+    import DM3lib as dm3
+except ImportError:
+    print("dm3lib could not be loaded")
+
 from wmem import parse, utils
 
 
@@ -61,7 +66,7 @@ def main(argv):
 def series2stack(
         inputdir,
         regex='*.tif',
-        element_size_um=[1, 1, 1],
+        element_size_um=[None, None, None],
         outlayout='zyx',
         datatype='',
         chunksize=[20, 20, 20],
@@ -82,19 +87,22 @@ def series2stack(
     # Get the list of input filepaths.
     files = sorted(glob.glob(os.path.join(inputdir, regex)))
 
+    # Get some metadata from the inputfiles
+    zyxdims, datatype, element_size_um = get_metadata(files,
+                                                      datatype,
+                                                      outlayout,
+                                                      element_size_um)
+
     # (plane, row, column) indexing to outlayout (where prc -> zyx).
     in2out = ['zyx'.index(o) for o in outlayout]
 
     # Get the properties of the output dataset.
-    slices = utils.get_slice_objects_prc(dataslices, files)  # prc-order
+    slices = utils.get_slice_objects_prc(dataslices, zyxdims)  # prc-order
     files = files[slices[0]]
-
     datashape_out_prc = (len(files),
                          len(range(*slices[1].indices(slices[1].stop))),
                          len(range(*slices[2].indices(slices[2].stop))))
     datashape_out = [datashape_out_prc[i] for i in in2out]
-
-    datatype = datatype or io.imread(files[0]).dtype
 
     # Reshape the file list into a list of blockwise file lists.
     scs = chunksize[outlayout.index('z')]  # chunksize slice dimension
@@ -149,11 +157,60 @@ def process_block(files, ds_out, slcs_in, slcs_out, in2out):
                        len(range(*slcs_in[2].indices(slcs_in[2].stop))))
     block = np.empty(datashape_block)
     for i, fpath in enumerate(files):
-        block[i, :, :] = io.imread(fpath)[slcs_in[1], slcs_in[2]]
+        if fpath.endswith('.dm3'):
+            dm3f = dm3.DM3(fpath, debug=0)
+            im = dm3f.imagedata
+        else:
+            im = io.imread(fpath)
+
+        block[i, :, :] = im[slcs_in[1], slcs_in[2]]
 
     ds_out[slcs_out[0], slcs_out[1], slcs_out[2]] = block.transpose(in2out)
 
     return ds_out
+
+
+def get_metadata(files, datatype, outlayout, elsize):
+
+    # derive the stop-values from the image data if not specified
+    if files[0].endswith('.dm3'):
+
+        try:
+            import DM3lib as dm3
+        except ImportError:
+            raise
+
+        dm3f = dm3.DM3(files[0], debug=0)
+
+#         yxdims = dm3f.imagedata.shape
+        alt_dtype = dm3f.imagedata.dtype
+#         yxelsize = dm3f.pxsize[0]
+
+        id = 'root.ImageList.1.ImageData'
+        tag = '{}.Dimensions.{:d}'
+        yxdims = []
+        for dim in [0, 1]:
+            yxdims += [int(dm3f.tags.get(tag.format(id, dim)))]
+
+        # TODO: read z-dim from dm3
+        tag = '{}.Calibrations.Dimension.{:d}.Scale'
+        for lab, dim in zip('xy', [0, 1]):
+            if elsize[outlayout.index(lab)] == -1:
+                pxsize = float(dm3f.tags.get(tag.format(id, dim)))
+                elsize[outlayout.index(lab)] = pxsize
+
+    else:
+        yxdims = imread(files[0]).shape
+
+        alt_dtype = io.imread(files[0]).dtype
+
+    zyxdims = [len(files)] + yxdims
+
+    datatype = datatype or alt_dtype
+
+    elsize = [0 if el is None else el for el in elsize]
+
+    return zyxdims, datatype, elsize
 
 
 if __name__ == "__main__":
