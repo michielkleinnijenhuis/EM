@@ -1038,3 +1038,61 @@ def parse_filter_NoR(parser):
         )
 
     return parser
+
+
+def parse_convert_dm3(parser):
+
+    parser.add_argument(
+        'inputfile',
+        help="""path to hdf5 dataset <filepath>.h5/<...>/<dataset>:
+                """
+        )
+    parser.add_argument(
+        'outputfile',
+        default='',
+        help="""path to hdf5 dataset <filepath>.h5/<...>/<dataset>:
+                """
+        )
+
+    parser.add_argument(
+        '--input2D',
+        help="""path to hdf5 dataset <filepath>.h5/<...>/<dataset>:
+                """
+        )
+
+    return parser
+
+
+def parse_seg_stats(parser):
+
+    parser.add_argument(
+        '--h5path_labelMA',
+        help="""path to hdf5 dataset <filepath>.h5/<...>/<dataset>:
+                """
+        )
+    parser.add_argument(
+        '--h5path_labelMF',
+        default='',
+        help="""path to hdf5 dataset <filepath>.h5/<...>/<dataset>:
+                """
+        )
+    parser.add_argument(
+        '--h5path_labelUA',
+        default='',
+        help="""path to hdf5 dataset <filepath>.h5/<...>/<dataset>:
+                """
+        )
+
+    parser.add_argument(
+        '--stats',
+        nargs='*',
+        default=['area', 'AD', 'centroid', 'eccentricity', 'solidity'],
+        help="""the statistics to export"""
+        )
+
+    parser.add_argument(
+        '--outputbasename',
+        help="""basename for the output"""
+        )
+
+    return parser
