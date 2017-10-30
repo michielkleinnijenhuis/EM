@@ -79,10 +79,11 @@ def remap_labels(
     h5file_in, ds_in, elsize, axlab = utils.load(inputfile)
 
     # open data for writing
-    h5file_out, ds_out = utils.h5_write(ds_in[:], ds_in.shape, ds_in.dtype,
+    h5file_out, ds_out = utils.h5_write(None, ds_in.shape, ds_in.dtype,
                                         h5path_out,
                                         element_size_um=elsize,
                                         axislabels=axlab)
+    ds_out[:] = ds_in[:]
 
     # filter labels on size
     root = os.path.splitext(h5file_out.filename)[0]
@@ -92,26 +93,23 @@ def remap_labels(
     delete_labels = set(delete_labels) | ls_small
 
     # delete labels
-    ds_out[:] = delete_labelsets(ds_out[:], delete_labels, delete_files,
-                                 except_files)
+    delete_labelsets(ds_out, delete_labels, delete_files, except_files)
     if save_steps:  # FIXME!
         save_diff(ds_in[:], ds_out[:], 'deleted', outpaths, elsize, axlab)
 
     # split labels
-    ds_out[:] = split_labelsets(ds_out[:], split_labels, split_files,
-                                aux_labelvolume, conncomp)
+    split_labelsets(ds_out, split_labels, split_files, aux_labelvolume, conncomp)
     if save_steps:
         save_diff(ds_in[:], ds_out[:], 'split', outpaths, elsize, axlab)
 
     # merge labels
-    ds_out[:] = merge_labelsets(ds_out[:], merge_labels, merge_files)
+    merge_labelsets(ds_out, merge_labels, merge_files)
     if save_steps:
         save_diff(ds_in[:], ds_out[:], 'merged', outpaths, elsize, axlab)
 
     # remove small, non-contiguous segments of labels
     if min_segmentsize or keep_only_largest:
-        ds_out[:] = filter_segments(ds_out[:], min_segmentsize,
-                                    keep_only_largest)
+        filter_segments(ds_out[:], min_segmentsize, keep_only_largest)
 
     if nifti_output:
         if nifti_transpose:
@@ -150,7 +148,7 @@ def delete_labelsets(labels, delete_labels=[], delete_files=[],
         fw = [l if ((l in ulabels) and
                     (l not in delete_labels)) else 0
               for l in range(0, np.amax(ulabels) + 1)]
-        labels = np.array(fw)[labels]
+        labels[:] = np.array(fw)[labels[:]]
 
     return labels, fw
 
@@ -223,18 +221,18 @@ def merge_labelsets(labels, merge_labels=[], merge_files=[]):
         for merfile in merge_files:
             mersets = utils.read_labelsets(merfile)
             print('merging ', mersets)
-            labels = utils.forward_map(np.array(fw), labels, mersets)
+            labels[:] = utils.forward_map(np.array(fw), labels[:], mersets)
 
     if merge_labels:
-        print('merging ', merge_labels)
         merge_labels = np.reshape(np.array(merge_labels), (-1, 2))
+        print('merging ', merge_labels)
         ulabels = np.unique(labels)
-        fw = [l if ((l in ulabels) and
-                    (l not in merge_labels) and
-                    (np.remainder(np.argwhere(merge_labels == l), 2) == 0))
-              else merge_labels[np.argwhere(merge_labels == l) + 1]
+        fw = [l if l in ulabels else 0
               for l in range(0, np.amax(ulabels) + 1)]
-        labels = np.array(fw)[labels]
+        for ml in merge_labels:
+            fw[ml[1]] = ml[0]
+
+        labels[:] = np.array(fw)[labels[:]]
 
     return labels, fw
 
