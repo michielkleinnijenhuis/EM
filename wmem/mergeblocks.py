@@ -51,7 +51,7 @@ def main(argv):
         args.neighbourmerge,
         args.save_fwmap,
         args.blockreduce,
-        args.blockreduce_func,
+        args.func,
         args.usempi & ('mpi4py' in sys.modules),
         args.outputfile,
         args.save_steps,
@@ -93,7 +93,7 @@ def mergeblocks(
         ndim = len(ds_in.dims)
 
     # get the size of the outputfile # TODO: option to derive fullsize from dset_names?
-    if blockreduce is not None:
+    if blockreduce:
         datasize = np.subtract(fullsize, blockoffset)
         outsize = [int(np.ceil(d/b))
                    for d, b in zip(datasize, blockreduce)]
@@ -135,10 +135,14 @@ def mergeblocks(
         # ix, iX, iy, iY, iz, iZ are indices into the input dataset
         # ox, oX, oy, oY, oz, oZ are indices into the output dataset
         """
-        _, x, X, y, Y, z, Z = utils.split_filename(h5file_in.filename, blockoffset)
-        (oz, oZ), (iz, iZ) = margins(z, Z, blocksize[0], margin[0], fullsize[0])
-        (oy, oY), (iy, iY) = margins(y, Y, blocksize[1], margin[1], fullsize[1])
-        (ox, oX), (ix, iX) = margins(x, X, blocksize[2], margin[2], fullsize[2])
+        _, x, X, y, Y, z, Z = utils.split_filename(h5file_in.filename,
+                                                   blockoffset)
+        (oz, oZ), (iz, iZ) = margins(z, Z, blocksize[0],
+                                     margin[0], fullsize[0])
+        (oy, oY), (iy, iY) = margins(y, Y, blocksize[1],
+                                     margin[1], fullsize[1])
+        (ox, oX), (ix, iX) = margins(x, X, blocksize[2],
+                                     margin[2], fullsize[2])
         ixyz = ix, iX, iy, iY, iz, iZ
         oxyz = ox, oX, oy, oY, oz, oZ
 

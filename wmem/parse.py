@@ -310,6 +310,7 @@ def parse_mergeblocks(parser):
 
     parser.add_argument(
         'inputfiles',
+        nargs='*',
         help="""paths to hdf5 datasets <filepath>.h5/<...>/<dataset>:
                 datasets to merge together"""
         )
