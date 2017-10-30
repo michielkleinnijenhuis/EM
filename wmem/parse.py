@@ -716,6 +716,7 @@ def parse_separate_sheaths(parser):
     parser.add_argument(
         '-m', '--margin',
         type=int,
+        default=50,
         help="""margin of the box used when calculating
                 the sigmoid-weighted distance map"""
         )
