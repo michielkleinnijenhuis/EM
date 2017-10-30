@@ -143,10 +143,13 @@ def xyz_datashape(al, xyz):
     return datalayout
 
 
-def get_mpi_info(mpi_dtype=MPI.SIGNED_LONG_LONG):
+def get_mpi_info(mpi_dtype=''):
     """Get an MPI communicator."""
 
+    if not mpi_dtype:
+        mpi_dtype = MPI.SIGNED_LONG_LONG
     comm = MPI.COMM_WORLD
+
     mpi_info = {
         'comm': comm,
         'rank': comm.Get_rank(),
