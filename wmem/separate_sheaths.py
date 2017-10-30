@@ -49,7 +49,7 @@ def separate_sheaths(
         h5path_in,
         h5path_lmm='',
         h5path_wsmask='',
-        h5path_mds='',
+        h5path_mask='',
         h5path_mmm='',
         MAdilation=0,
         h5path_dist='',
@@ -82,7 +82,7 @@ def separate_sheaths(
 
     # load/calculate a mask to constrain the watershed in
     mask_mmregion = get_wsmask(outpaths, ds_mma, h5path_wsmask,
-                               h5path_mds, h5path_mmm, MAdilation,
+                               h5path_mask, h5path_mmm, MAdilation,
                                elsize, axlab)
 
     elsize_abs = np.absolute(elsize)
@@ -199,12 +199,18 @@ def distance_transform_sw(labelMA, labelMM, elsize, weight=1, margin=50):
     rp = regionprops(labelMA)
 
     for prop in rp:
-        print(prop.label)
-        z, y, x, Z, Y, X = tuple(prop.bbox)
-        z = max(0, z - margin)
+#         print(prop.label)
+        if len(prop.bbox) > 4:
+            z, y, x, Z, Y, X = tuple(prop.bbox)
+            z = max(0, z - margin)
+            Z = min(dims[0], Z + margin)
+        else:
+            y, x, Y, X = tuple(prop.bbox)
+            z = 0
+            Z = 1
+
         y = max(0, y - margin)
         x = max(0, x - margin)
-        Z = min(dims[0], Z + margin)
         Y = min(dims[1], Y + margin)
         X = min(dims[2], X + margin)
 
