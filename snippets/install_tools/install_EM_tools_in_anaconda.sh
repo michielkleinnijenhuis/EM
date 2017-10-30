@@ -59,7 +59,7 @@ source activate gala
 gala-segmentation-pipeline
 
 
-###########################
+########################### https://github.com/ilastik/ilastik-build-conda
 ### Ilastik in anaconda ### local
 ###########################
 # create
