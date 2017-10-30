@@ -13,7 +13,11 @@ import pickle
 import numpy as np
 
 from skimage.io import imread, imsave
-import nibabel as nib
+
+try:
+    import nibabel as nib
+except ImportError:
+    print("nibabel could not be loaded")
 
 try:
     from mpi4py import MPI
