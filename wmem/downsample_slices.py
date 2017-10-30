@@ -78,7 +78,8 @@ def downsample_slices(
         return
 
     # Get the slice objects for the input data.
-    slices = utils.get_slice_objects_prc(dataslices, files)
+    zyxdims = [len(files)] + imread(files[0]).shape
+    slices = utils.get_slice_objects_prc(dataslices, zyxdims)
 
     # Prepare for processing with MPI.
     series = np.array(range(slices[0].start,
