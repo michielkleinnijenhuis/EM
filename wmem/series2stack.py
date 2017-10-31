@@ -57,7 +57,8 @@ def main(argv):
         args.chunksize,
         args.dataslices,
         args.usempi & ('mpi4py' in sys.modules),
-        args.outputfile,
+        args.outputformats,
+        args.outputpath,
         args.save_steps,
         args.protective,
         )
@@ -72,17 +73,19 @@ def series2stack(
         chunksize=[20, 20, 20],
         dataslices=None,
         usempi=False,
-        h5path_out='',
+        outputformats=['.h5'],
+        outputpath='',
         save_steps=False,
         protective=False,
         ):
     """"Convert a directory of tifs to an hdf5 stack."""
 
     # Check if any output paths already exist.
-    outpaths = {'out': h5path_out}
-    status = utils.output_check(outpaths, save_steps, protective)
-    if status == "CANCELLED":
-        return
+    if '.h5' in outputformats:
+        outpaths = {'out': outputpath}
+        status = utils.output_check(outpaths, save_steps, protective)
+        if status == "CANCELLED":
+            return
 
     # Get the list of input filepaths.
     files = sorted(glob.glob(os.path.join(inputdir, regex)))
@@ -127,26 +130,35 @@ def series2stack(
         comm = None
 
     # Open the outputfile for writing and create the dataset or output array.
-    h5file_out, ds_out = utils.h5_write(None, datashape_out, datatype,
-                                        h5path_out,
-                                        element_size_um=element_size_um,
-                                        axislabels=outlayout,
-                                        chunks=tuple(chunksize),
-                                        usempi=usempi, comm=comm)
+    if '.h5' in outputformats:
+        h5file_out, ds_out = utils.h5_write(None, datashape_out, datatype,
+                                            outputpath,
+                                            element_size_um=element_size_um,
+                                            axislabels=outlayout,
+                                            chunks=tuple(chunksize),
+                                            usempi=usempi, comm=comm)
+        outdir = os.path.dirname(outputpath.split('.h5')[0])
+    else:
+        ds_out = None
+        outdir = os.path.dirname(outputpath)
 
-    # Write blocks of 2D images to the outputfile.
+    # Write blocks of 2D images to the outputfile(s).
     for blocknr in series:
         ds_out = process_block(files_blocks[blocknr], ds_out,
-                               slices, slices_out[blocknr], in2out)
+                               slices, slices_out[blocknr], in2out,
+                               outputformats, outdir)
 
     # Close the h5 files or return the output array.
     try:
         h5file_out.close()
     except (ValueError, AttributeError):
         return ds_out
+    except UnboundLocalError:
+        pass
 
 
-def process_block(files, ds_out, slcs_in, slcs_out, in2out):
+def process_block(files, ds_out, slcs_in, slcs_out, in2out,
+                  outputformats=['.h5'], outdir=''):
     """Read the block from 2D images and write to stack.
 
     NOTE: slices is in prc-order, slices_out is in outlayout-order
@@ -165,7 +177,13 @@ def process_block(files, ds_out, slcs_in, slcs_out, in2out):
 
         block[i, :, :] = im[slcs_in[1], slcs_in[2]]
 
-    ds_out[slcs_out[0], slcs_out[1], slcs_out[2]] = block.transpose(in2out)
+    for ext in outputformats:
+        if ext == '.h5':
+            ds_out[slcs_out[0], slcs_out[1], slcs_out[2]] = block.transpose(in2out)
+        elif ext in ('.tif', '.png', '.jpg'):
+            utils.write_to_img(outdir, block,
+                               'zyx', nzfills=5, ext=ext,
+                               slcoffset=slcs_out[0].start)
 
     return ds_out
 

@@ -580,6 +580,9 @@ def write_to_img(basepath, data, outlayout, nzfills=5, ext='.png', slcoffset=0):
     mkdir_p(basepath)
     fstring = '{{:0{0}d}}'.format(nzfills)
 
+    if ext != '.tif':
+        data = normalize_data(data)[0]
+
     for slc in range(0, data.shape[outlayout.index('z')]):
         slcno = slc + slcoffset
         if outlayout.index('z') == 0:
@@ -591,6 +594,18 @@ def write_to_img(basepath, data, outlayout, nzfills=5, ext='.png', slcoffset=0):
 
         filepath = os.path.join(basepath, fstring.format(slcno) + ext)
         imsave(filepath, slcdata)
+
+
+def normalize_data(data):
+    """Normalize data between 0 and 1."""
+
+    data = data.astype('float64')
+    datamin = np.amin(data)
+    datamax = np.amax(data)
+    data -= datamin
+    data *= 1/(datamax-datamin)
+
+    return data, [datamin, datamax]
 
 
 def get_slice(ds, i, slicedim, datatype=''):

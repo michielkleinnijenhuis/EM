@@ -72,7 +72,7 @@ def parse_series2stack(parser):
         help='a directory with images'
         )
     parser.add_argument(
-        'outputfile',
+        'outputpath',
         help='the path to the output dataset'
         )
 
@@ -90,6 +90,12 @@ def parse_series2stack(parser):
         '-o', '--outlayout',
         default='zyx',
         help='axis labels: any permutation of "zyx"'
+        )
+    parser.add_argument(
+        '-O', '--outputformats',
+        nargs='*',
+        default=['.h5'],
+        help='output formats'
         )
     parser.add_argument(
         '-e', '--element_size_um',
