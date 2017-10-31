@@ -574,14 +574,14 @@ def write_to_nifti(filepath, data, element_size_um):
     nib.Nifti1Image(data, mat).to_filename(filepath)
 
 
-def write_to_img(basepath, data, outlayout, nzfills=5, ext='.png'):
+def write_to_img(basepath, data, outlayout, nzfills=5, ext='.png', slcoffset=0):
     """Write a 3D dataset to a stack of 2D image files."""
 
     mkdir_p(basepath)
     fstring = '{{:0{0}d}}'.format(nzfills)
 
     for slc in range(0, data.shape[outlayout.index('z')]):
-        slcno = slc  # + slcoffset
+        slcno = slc + slcoffset
         if outlayout.index('z') == 0:
             slcdata = data[slc, :, :]
         elif outlayout.index('z') == 1:
