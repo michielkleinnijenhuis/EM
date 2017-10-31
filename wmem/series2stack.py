@@ -140,13 +140,18 @@ def series2stack(
         outdir = os.path.dirname(outputpath.split('.h5')[0])
     else:
         ds_out = None
-        outdir = os.path.dirname(outputpath)
+        outdir = outputpath
 
     # Write blocks of 2D images to the outputfile(s).
     for blocknr in series:
-        ds_out = process_block(files_blocks[blocknr], ds_out,
-                               slices, slices_out[blocknr], in2out,
-                               outputformats, outdir)
+        if '.h5' in outputformats:
+            ds_out = process_block(files_blocks[blocknr], ds_out,
+                                   slices, slices_out[blocknr], in2out,
+                                   outputformats, outdir)
+        else:
+            process_slices(files_blocks[blocknr],
+                           slices, slices_out[blocknr],
+                           outputformats, outdir)
 
     # Close the h5 files or return the output array.
     try:
@@ -164,28 +169,60 @@ def process_block(files, ds_out, slcs_in, slcs_out, in2out,
     NOTE: slices is in prc-order, slices_out is in outlayout-order
     """
 
-    datashape_block = (len(files),
-                       len(range(*slcs_in[1].indices(slcs_in[1].stop))),
-                       len(range(*slcs_in[2].indices(slcs_in[2].stop))))
+    datashape_block = (
+        len(files),
+        len(range(*slcs_in[1].indices(slcs_in[1].stop))),
+        len(range(*slcs_in[2].indices(slcs_in[2].stop))),
+        )
     block = np.empty(datashape_block)
     for i, fpath in enumerate(files):
-        if fpath.endswith('.dm3'):
-            dm3f = dm3.DM3(fpath, debug=0)
-            im = dm3f.imagedata
-        else:
-            im = io.imread(fpath)
-
+        im = get_image(fpath)
         block[i, :, :] = im[slcs_in[1], slcs_in[2]]
 
     for ext in outputformats:
         if ext == '.h5':
-            ds_out[slcs_out[0], slcs_out[1], slcs_out[2]] = block.transpose(in2out)
+            ds_out[slcs_out[0],
+                   slcs_out[1],
+                   slcs_out[2]] = block.transpose(in2out)
         elif ext in ('.tif', '.png', '.jpg'):
             utils.write_to_img(outdir, block,
                                'zyx', nzfills=5, ext=ext,
                                slcoffset=slcs_out[0].start)
 
     return ds_out
+
+
+def process_slices(files, slcs_in, slcs_out,
+                   outputformats=['.tif'], outdir=''):
+    """Read the block from 2D images and write to stack.
+
+    NOTE: slices is in prc-order, slices_out is in outlayout-order
+    """
+
+    for i, fpath in enumerate(files):
+        slcno = slcs_out[0].start + i
+        im = get_image(fpath)
+
+        for ext in outputformats:
+            savedir = os.path.join(outdir, ext[1:])
+            utils.mkdir_p(savedir)
+            data = im[slcs_in[1], slcs_in[2]]
+            if ext != '.tif':
+                data = utils.normalize_data(data)[0]
+            fname = '{:05d}{}'.format(slcno, ext)
+            filepath = os.path.join(savedir, fname)
+            io.imsave(filepath, data)
+
+
+def get_image(fpath):
+
+    if fpath.endswith('.dm3'):
+        dm3f = dm3.DM3(fpath, debug=0)
+        im = dm3f.imagedata
+    else:
+        im = io.imread(fpath)
+
+    return im
 
 
 def get_metadata(files, datatype, outlayout, elsize):
