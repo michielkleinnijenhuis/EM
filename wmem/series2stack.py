@@ -251,12 +251,14 @@ def get_metadata(files, datatype, outlayout, elsize):
         for dim in [0, 1]:
             yxdims += [int(dm3f.tags.get(tag.format(id, dim)))]
 
-        # TODO: read z-dim from dm3
         tag = '{}.Calibrations.Dimension.{:d}.Scale'
         for lab, dim in zip('xy', [0, 1]):
             if elsize[outlayout.index(lab)] == -1:
                 pxsize = float(dm3f.tags.get(tag.format(id, dim)))
                 elsize[outlayout.index(lab)] = pxsize
+        tag = 'root.ImageList.1.ImageTags.SBFSEM.Record.Slice thickness'
+        slicethickness = float(dm3f.tags.get(tag.format(id, dim)))
+        elsize[outlayout.index('z')] = slicethickness / 1000
 
     else:
         yxdims = io.imread(files[0]).shape
