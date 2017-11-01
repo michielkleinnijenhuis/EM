@@ -110,7 +110,9 @@ def series2stack(
     # Reshape the file list into a list of blockwise file lists.
     scs = chunksize[outlayout.index('z')]  # chunksize slice dimension
     files_blocks = zip(* [iter(files)] * scs)
-    files_blocks += [tuple(files[-(len(files) % scs):])]
+    rem = len(files) % scs
+    if rem:
+        files_blocks += [tuple(files[-rem:])]
 
     # Get slice objects for every output block.
     slices_out_prc = [[slice(bnr * scs, bnr * scs + scs),
