@@ -151,7 +151,7 @@ def series2stack(
         else:
             process_slices(files_blocks[blocknr],
                            slices, slices_out[blocknr],
-                           outputformats, outdir)
+                           outputformats, outdir, datatype)
 
     # Close the h5 files or return the output array.
     try:
@@ -176,7 +176,7 @@ def process_block(files, ds_out, slcs_in, slcs_out, in2out,
         )
     block = np.empty(datashape_block)
     for i, fpath in enumerate(files):
-        im = get_image(fpath)
+        im = get_image(fpath, ds_out.dtype)
         block[i, :, :] = im[slcs_in[1], slcs_in[2]]
 
     for ext in outputformats:
@@ -193,7 +193,8 @@ def process_block(files, ds_out, slcs_in, slcs_out, in2out,
 
 
 def process_slices(files, slcs_in, slcs_out,
-                   outputformats=['.tif'], outdir=''):
+                   outputformats=['.tif'], outdir='',
+                   datatype='uint16'):
     """Read the block from 2D images and write to stack.
 
     NOTE: slices is in prc-order, slices_out is in outlayout-order
@@ -201,7 +202,7 @@ def process_slices(files, slcs_in, slcs_out,
 
     for i, fpath in enumerate(files):
         slcno = slcs_out[0].start + i
-        im = get_image(fpath)
+        im = get_image(fpath, datatype)
 
         for ext in outputformats:
             savedir = os.path.join(outdir, ext[1:])
@@ -209,12 +210,13 @@ def process_slices(files, slcs_in, slcs_out,
             data = im[slcs_in[1], slcs_in[2]]
             if ext != '.tif':
                 data = utils.normalize_data(data)[0]
+                # FIXME: normalize over full dataset
             fname = '{:05d}{}'.format(slcno, ext)
             filepath = os.path.join(savedir, fname)
             io.imsave(filepath, data)
 
 
-def get_image(fpath):
+def get_image(fpath, datatype):
 
     if fpath.endswith('.dm3'):
         dm3f = dm3.DM3(fpath, debug=0)
@@ -222,7 +224,7 @@ def get_image(fpath):
     else:
         im = io.imread(fpath)
 
-    return im
+    return im.astype(datatype)
 
 
 def get_metadata(files, datatype, outlayout, elsize):
@@ -255,7 +257,7 @@ def get_metadata(files, datatype, outlayout, elsize):
                 elsize[outlayout.index(lab)] = pxsize
 
     else:
-        yxdims = imread(files[0]).shape
+        yxdims = io.imread(files[0]).shape
 
         alt_dtype = io.imread(files[0]).dtype
 
