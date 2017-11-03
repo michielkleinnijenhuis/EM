@@ -265,7 +265,7 @@ def get_metadata(files, datatype, outlayout, elsize):
 
         alt_dtype = io.imread(files[0]).dtype
 
-    zyxdims = [len(files)] + yxdims
+    zyxdims = [len(files)] + list(yxdims)
 
     datatype = datatype or alt_dtype
 
