@@ -59,12 +59,12 @@ def split_filename(filename, blockoffset=[0, 0, 0]):
     datadir, tail = os.path.split(filename)
     fname = os.path.splitext(tail)[0]
     parts = fname.split("_")
-    x = int(parts[1].split("-")[0]) - blockoffset[0]
-    X = int(parts[1].split("-")[1]) - blockoffset[0]
-    y = int(parts[2].split("-")[0]) - blockoffset[1]
-    Y = int(parts[2].split("-")[1]) - blockoffset[1]
-    z = int(parts[3].split("-")[0]) - blockoffset[2]
-    Z = int(parts[3].split("-")[1]) - blockoffset[2]
+    x = int(parts[-3].split("-")[0]) - blockoffset[0]
+    X = int(parts[-3].split("-")[1]) - blockoffset[0]
+    y = int(parts[-2].split("-")[0]) - blockoffset[1]
+    Y = int(parts[-2].split("-")[1]) - blockoffset[1]
+    z = int(parts[-1].split("-")[0]) - blockoffset[2]
+    Z = int(parts[-1].split("-")[1]) - blockoffset[2]
 
     dset_info = {'datadir': datadir, 'base': parts[0],
                  'nzfills': len(parts[1].split("-")[0]),
