@@ -21,10 +21,14 @@ else
     addpath(genpath(cf_path));
 end
 
-filepath = [datadir filesep invol '.h5'];
-stackinfo = h5info(filepath, ds_in);
 % NOTE: ilastik zyxc is transposed to cxyz;
 % NOTE: axistags not read properly;
+filepath = [datadir filesep invol '.h5'];
+stackinfo = h5info(filepath, ds_in);
+dsize = stackinfo.Dataspace.Size(end-2:end);
+if length(stackinfo.Dataspace.Size) == 3
+    start_c = 1; count_c = 1;
+end
 
 % create outputfile
 outpath = [datadir filesep invol '_eed.h5'];
@@ -48,27 +52,39 @@ count = [...
     margin_z_lower + count_z + margin_z, ...
     margin_y_lower + count_y + margin_y, ...
     margin_x_lower + count_x + margin_x];
-count(1) = min([count(1), stackinfo.Dataspace.Size(4) - start_z + 1]);
-count(2) = min([count(2), stackinfo.Dataspace.Size(3) - start_y + 1]);
-count(3) = min([count(3), stackinfo.Dataspace.Size(2) - start_x + 1]);
+count(1) = min([count(1), dsize(3) - start_z + 1]);
+count(2) = min([count(2), dsize(2) - start_y + 1]);
+count(3) = min([count(3), dsize(1) - start_x + 1]);
 
-% read data
+
 start = [start_c, start(3), start(2), start(1)];
 count = [count_c, count(3), count(2), count(1)];
+start_out = [start_c, start_x, start_y, start_z];
+count_out = [count_c, count_x, count_y, count_z];
+ul = zeros([count_c, count_x, count_y, count_z]);
+if length(stackinfo.Dataspace.Size) == 3
+    start(1) = [];
+    count(1) = [];
+    start_out(1) = [];
+    count_out(1) = [];
+end
+
+% read data
 data = h5read(filepath, ds_in, start, count);
+if length(stackinfo.Dataspace.Size) == 3
+    data = permute(data, [4, 1, 2, 3]);
+end
 
 % calculate EED
-ul = zeros([count_c, count_x, count_y, count_z]);
 for c = start_c : start_c + count_c - 1
     u = CoherenceFilter(squeeze(data(c,:,:,:)), ...
         struct('T', 50, 'dt', 1, 'rho', 1, ...
         'Scheme', 'R', 'eigenmode', 2, 'verbose', 'full'));
+    size(u)
     ul(c,:,:,:) = u(margin_x_lower + 1 : count_x + margin_x_lower, ...
           margin_y_lower + 1 : count_y + margin_y_lower, ...
           margin_z_lower + 1 : count_z + margin_z_lower);
 end
 
 % write to file
-start_out = [start_c, start_x, start_y, start_z];
-count_out = [count_c, count_x, count_y, count_z];
-h5write(outpath, ds_out, ul, start_out, count_out);
+h5write(outpath, ds_out, squeeze(ul), start_out, count_out);
