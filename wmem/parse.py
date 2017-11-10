@@ -14,7 +14,7 @@ def parse_common(parser):
         help="""
         Data slices, specified as triplets of <start> <stop> <step>;
         setting any <stop> to 0 or will select the full extent;
-        provide triplets in the order of the input datset.
+        provide triplets in the order of the input dataset.
         """
         )
 
@@ -270,12 +270,6 @@ def parse_prob2mask(parser):
         )
 
     parser.add_argument(
-        '-c', '--channel',
-        type=int,
-        help='pick a channel from a 4D (zyx)c dataset'
-        )
-
-    parser.add_argument(
         '-i', '--inputmask',
         nargs=2,
         default=None,
@@ -305,7 +299,7 @@ def parse_prob2mask(parser):
     parser.add_argument(
         '-j', '--step',
         type=float,
-        default=1.0,
+        default=0.0,
         help='multiple lower thresholds between 0 and 1 using this step'
         )
     parser.add_argument(

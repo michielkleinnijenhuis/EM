@@ -86,6 +86,26 @@ def xyz_datarange(xyz, files):
     return xyz[0], X, xyz[2], Y, xyz[4], Z
 
 
+def get_slice_objects(dataslices, dims):
+    """Get the full ranges for z, y, x if upper bound is undefined."""
+
+    # set default dataslices
+    if dataslices is None:
+        dataslices = []
+        for dim in dims:
+            dataslices += [0, dim, 1]
+
+    starts = dataslices[::3]
+    stops = dataslices[1::3]
+    stops = [dim if stop == 0 else stop
+             for stop, dim in zip(stops, dims)]
+    steps = dataslices[2::3]
+    slices = [slice(start, stop, step)
+              for start, stop, step in zip(starts, stops, steps)]
+
+    return slices
+
+
 def get_slice_objects_prc(dataslices, zyxdims):
     """Get the full ranges for z, y, x if upper bound is undefined."""
 
@@ -264,7 +284,6 @@ def h5_check(h5path_full, protective=False):
             else:
                 status = "WARNING"
                 info = "overwriting {}".format(h5path_full)
-                h5file.__delitem__(h5path_dset)
         else:
             status = "INFO"
             info = "writing to {}".format(h5path_full)
@@ -275,7 +294,7 @@ def h5_check(h5path_full, protective=False):
 
 
 def load(dspath, load_data=False,
-         dtype='', channels=None,
+         dtype='', dataslices=None,
          inlayout=None, outlayout=None):
     """Load a dataset."""
 
@@ -285,7 +304,7 @@ def load(dspath, load_data=False,
         pass
     else:
         return h5_load(dspath, load_data,
-                       dtype, channels,
+                       dtype, dataslices,
                        inlayout, outlayout)
 
     try:
@@ -296,7 +315,7 @@ def load(dspath, load_data=False,
         raise
     else:
         return nii_load(dspath, load_data,
-                        dtype, channels,
+                        dtype, dataslices,
                         inlayout, outlayout)
 
     try:
@@ -305,7 +324,7 @@ def load(dspath, load_data=False,
         pass
     else:
         return imf_load(dspath, load_data,
-                        dtype, channels,
+                        dtype, dataslices,
                         inlayout, outlayout)
 
 #     try:
@@ -324,18 +343,18 @@ def load(dspath, load_data=False,
 
 
 def imf_load(dspath, load_data=True,
-             dtype='', channels=None,
+             dtype='', dataslices=None,
              inlayout=None, outlayout=None):
 
     # FIXME: proper handling of inlayout etc
 
-    data = imread(dspath)
+    ds_in = imread(dspath)
     elsize = np.array([1, 1])
     axlab = 'yxc'
     outlayout = outlayout or axlab
 
-    if channels is not None:
-        data = data[:, :, channels]
+    data, elsize, axlab, slices = load_dataset(
+        ds_in, elsize, axlab, outlayout, dtype, dataslices)
 
     return data, elsize, axlab
 
@@ -346,7 +365,7 @@ def imf_write(dspath, data):
 
 
 def nii_load(dspath, load_data=False,
-             dtype='', channels=None,
+             dtype='', dataslices=None,
              inlayout=None, outlayout=None):
     """Load a nifti dataset."""
 
@@ -361,8 +380,8 @@ def nii_load(dspath, load_data=False,
 
     if load_data:
         outlayout = outlayout or axlab
-        data, elsize, axlab = load_dataset(ds_in, elsize, axlab,
-                                           outlayout, dtype, channels)
+        data, elsize, axlab, slices = load_dataset(
+            ds_in, elsize, axlab, outlayout, dtype, dataslices)
 
         return data, elsize, axlab
 
@@ -372,7 +391,7 @@ def nii_load(dspath, load_data=False,
 
 
 def h5_load(dspath, load_data=False,
-            dtype='', channels=None,
+            dtype='', dataslices=None,
             inlayout=None, outlayout=None):
     """Load a h5 dataset."""
 
@@ -397,8 +416,8 @@ def h5_load(dspath, load_data=False,
 
     if load_data:
         outlayout = outlayout or axlab
-        data, elsize, axlab = load_dataset(ds_in, elsize, axlab,
-                                           outlayout, dtype, channels)
+        data, elsize, axlab, slices = load_dataset(
+            ds_in, elsize, axlab, outlayout, dtype, dataslices)
         file_in.close()
 
         return data, elsize, axlab
@@ -407,40 +426,38 @@ def h5_load(dspath, load_data=False,
 
 
 def load_dataset(ds, elsize, axlab,
-                 outlayout, dtype, channels):
+                 outlayout, dtype, dataslices=None):
     """Load data from a proxy and select/transpose/convert/...."""
 
-    # TODO: make new groups for h5?
-    # TODO: test most memory-efficient solution
+    slices = get_slice_objects(dataslices, ds.shape)
+
+    try:
+        ndim = ds.ndim
+    except AttributeError:
+        ndim = len(ds.dims)
+
+    if ndim == 1:
+        data = ds[slices[0]]
+    elif ndim == 2:
+        data = ds[slices[0], slices[1]]
+    elif ndim == 3:
+        data = ds[slices[0], slices[1], slices[2]]
+    elif ndim == 4:
+        data = ds[slices[0], slices[1], slices[2], slices[3]]
+    elif ndim == 5:
+        data = ds[slices[0], slices[1], slices[2], slices[3], slices[4]]
 
     if list(axlab) != list(outlayout):
         in2out = [axlab.index(l) for l in outlayout]
-        data = np.transpose(ds[:], in2out)
+        data = np.transpose(data, in2out)
         elsize = np.array(elsize)[in2out]
         axlab = outlayout
-
-    # TODO: load data subset/partial view
-    if channels is not None:
-        data = ds[:, :, :, channels]
-        if ds.ndim > data.ndim:  # FIXME: remove sloppiness
-            elsize = elsize[:3]
-            axlab = axlab[:3]
-        try:
-            data.shape[3]
-        except IndexError:
-            pass
-        else:
-            if data.shape[3] == 1:
-                data = data.reshape(data.shape[:3])
-                elsize = elsize[:3]
-                axlab = axlab[:3]
-    else:
-        data = ds[:]
+        slices = slices[in2out]
 
     if dtype:
         data = data.astype(dtype, copy=False)
 
-    return data, elsize, axlab
+    return data, elsize, axlab, slices
 
 
 def ds_in2out(in2out, ds, elsize):
@@ -456,7 +473,8 @@ def h5_write(data, shape, dtype,
              h5path_full, h5file=None,
              element_size_um=None, axislabels=None,
              chunks=True, compression="gzip",
-             usempi=False, driver=None, comm=None):
+             usempi=False, driver=None, comm=None,
+             slices=None):
     """Write a h5 dataset."""
 
     if usempi:
@@ -467,26 +485,29 @@ def h5_write(data, shape, dtype,
 
     if h5path_full:
 
-        basepath, h5path_dset = h5path_full.split('.h5')
-        h5path_file = basepath + '.h5'
+        if not isinstance(h5file, h5py.File):
+            basepath, h5path_dset = h5path_full.split('.h5')
+            h5path_file = basepath + '.h5'
+            if usempi:
+                h5file = h5py.File(h5path_file, 'a',
+                                   driver=driver, comm=comm)
+            else:
+                h5file = h5py.File(h5path_file, 'a')
 
-#         if not isinstance(h5file, h5py.File):
-        if usempi:
-            h5file = h5py.File(h5path_file, 'a', driver=driver, comm=comm)
+        if h5path_dset in h5file:
+            h5ds = h5file[h5path_dset]
         else:
-            h5file = h5py.File(h5path_file, 'a')
-
-        h5ds = h5file.create_dataset(h5path_dset,
-                                     shape=shape,
-                                     dtype=dtype,
-                                     chunks=chunks,
-                                     compression=compression)
-
-        h5_write_attributes(h5ds, element_size_um, axislabels)
+            h5ds = h5file.create_dataset(h5path_dset,
+                                         shape=shape,
+                                         dtype=dtype,
+                                         chunks=chunks,
+                                         compression=compression)
+            h5_write_attributes(h5ds, element_size_um, axislabels)
 
         if data is not None:
 
-            h5ds[:] = data
+            write_to_h5ds(h5ds, data, slices)
+
             h5file.close()
 
         else:
@@ -496,6 +517,32 @@ def h5_write(data, shape, dtype,
     else:
 
         return None, np.empty(shape, dtype)
+
+
+def write_to_h5ds(h5ds, data, slices=None):
+    """Write data to a hdf5 dataset."""
+
+    if slices is None:
+
+        h5ds[:] = data
+
+    else:
+
+        try:
+            ndim = data.ndim
+        except AttributeError:
+            ndim = len(data.dims)
+
+        if ndim == 1:
+            h5ds[slices[0]] = data
+        elif ndim == 2:
+            h5ds[slices[0], slices[1]] = data
+        elif ndim == 3:
+            h5ds[slices[0], slices[1], slices[2]] = data
+        elif ndim == 4:
+            h5ds[slices[0], slices[1], slices[2], slices[3]] = data
+        elif ndim == 5:
+            h5ds[slices[0], slices[1], slices[2], slices[3], slices[4]] = data
 
 
 def h5_load_attributes(h5ds):
