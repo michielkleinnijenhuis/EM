@@ -219,6 +219,7 @@ def parse_stack2stack(parser):
     parser.add_argument(
         '-b', '--blockoffset',
         type=int,
+        default=[0, 0, 0],
         nargs='*',
         help='...'
         )
