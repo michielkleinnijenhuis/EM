@@ -33,7 +33,6 @@ def main(argv):
                 args.size,
                 args.dilation,
                 args.inputmask,
-                args.blockreduce,
                 args.outputfile.format(thr),
                 args.protective,
                 )
@@ -46,7 +45,6 @@ def main(argv):
             args.size,
             args.dilation,
             args.inputmask,
-            args.blockreduce,
             args.outputfile,
             args.protective,
             )
