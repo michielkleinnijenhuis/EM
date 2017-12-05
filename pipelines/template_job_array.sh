@@ -1,5 +1,7 @@
 #!/bin/bash
 
+jobfiles=()
+
 for n in `seq 0 $((njobs-1))`; do
 
     qsubfile=$datadir/EM_${jobname}_$n.sh
@@ -55,3 +57,4 @@ for n in `seq 0 $((njobs-1))`; do
 
 done
 
+export jobfiles
