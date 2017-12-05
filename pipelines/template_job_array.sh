@@ -49,9 +49,9 @@ for n in `seq 0 $((njobs-1))`; do
 
     echo "wait" >> $qsubfile
 
-    [ "$q" = "d" ] &&
-        sbatch -p devel $qsubfile ||
-            sbatch $qsubfile
+    [ "$q" = "h" ] && jobfiles+=($qsubfile) || {
+        [ "$q" = "d" ] && sbatch -p devel $qsubfile ||
+            sbatch $qsubfile ; }
 
 done
 
