@@ -62,25 +62,52 @@ def downsample_slices(
         ):
     """Downsample a series of 2D images."""
 
-    # Get the list of input filepaths.
-    files = sorted(glob.glob(os.path.join(inputdir, regex)))
+    if '.h5' in outputdir:
+        status, info = utils.h5_check(outputdir, protective)
+        print(info)
+        if status == "CANCELLED":
+            return
 
-    # Get the list of output filepaths.
-    utils.mkdir_p(outputdir)
-    outpaths = []
-    for fpath in files:
-        root, ext = os.path.splitext(fpath)
-        tail = os.path.split(root)[1]
-        outpaths.append(os.path.join(outputdir, tail + ext))
-    # Check if any output paths already exist.
-    status = utils.output_check_dir(outpaths, protective)
-    if status == "CANCELLED":
-        return
+    if '.h5' in inputdir:  # FIXME: assumed zyx for now
+
+        h5file_in, ds_in, elsize, axlab = utils.h5_load(inputdir)
+        zyxdims = ds_in.shape
+
+    else:
+
+        # Get the list of input filepaths.
+        files = sorted(glob.glob(os.path.join(inputdir, regex)))
+        zyxdims = [len(files)] + list(io.imread(files[0]).shape)
+        axlab = 'zyx'
+
+    if '.h5' in outputdir:
+
+        elsize[1] = elsize[1] / ds_factor
+        elsize[2] = elsize[2] / ds_factor
+        outsize = [ds_in.shape[0],
+                   ds_in.shape[1] / ds_factor,
+                   ds_in.shape[2] / ds_factor]
+        h5file_out, ds_out = utils.h5_write(None, outsize, ds_in.dtype,
+                                            outputdir,
+                                            element_size_um=elsize,
+                                            axislabels=axlab)
+
+    else:
+
+        # Get the list of output filepaths.
+        utils.mkdir_p(outputdir)
+        outpaths = []
+        for fpath in files:
+            root, ext = os.path.splitext(fpath)
+            tail = os.path.split(root)[1]
+            outpaths.append(os.path.join(outputdir, tail + ext))
+        # Check if any output paths already exist.
+        status = utils.output_check_dir(outpaths, protective)
+        if status == "CANCELLED":
+            return
 
     # Get the slice objects for the input data.
-    zyxdims = [len(files)] + list(io.imread(files[0]).shape)
     slices = utils.get_slice_objects_prc(dataslices, zyxdims)
-
     # Prepare for processing with MPI.
     series = np.array(range(slices[0].start,
                             slices[0].stop,
@@ -91,8 +118,26 @@ def downsample_slices(
 
     # Downsample and save the images.
     for slc in series:
-        sub = io.imread(files[slc])[slices[1], slices[2]]
-        downsample_image(outpaths[slc], sub, ds_factor)
+        if '.h5' in inputdir:
+            sub = ds_in[slc, slices[1], slices[2]]
+        else:
+            sub = io.imread(files[slc])[slices[1], slices[2]]
+
+        img_ds = resize(sub, (sub.shape[0] / ds_factor,
+                              sub.shape[1] / ds_factor))
+
+        if '.h5' in outputdir:
+            ds_out[slc, :, :] = img_ds
+        else:
+            imsave(outpaths[slc], img_ds)
+#         downsample_image(outpaths[slc], sub, ds_factor)
+
+    try:
+        h5file_in.close()
+        h5file_out.close()
+    except (ValueError, AttributeError):
+        pass
+#         return ds_out
 
 
 def downsample_image(outputpath, img, ds_factor=4):
