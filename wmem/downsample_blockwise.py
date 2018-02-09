@@ -29,6 +29,7 @@ def main(argv):
         args.inputfile,
         args.blockreduce,
         args.func,
+        args.dataslices,
         args.outputfile,
         args.protective,
         )
@@ -38,6 +39,7 @@ def downsample_blockwise(
         h5path_in,
         blockreduce=[3, 3, 3],
         func='np.amax',
+        dataslices=None,
         h5path_out='',
         protective=False,
         ):
@@ -56,11 +58,14 @@ def downsample_blockwise(
 
     if h5path_out:
         h5file_out, ds_out = utils.h5_write(None, outsize, ds_in.dtype,
-                                            h5path_out, h5file=h5file_in,
+                                            h5path_out,  # h5file=h5file_in,
                                             element_size_um=elsize,
                                             axislabels=axlab)
     else:
         h5file_out, ds_out = None, np.empty(outsize, dtype=ds_in.dtype)
+
+    # Get the slice objects for the input data.
+    slices = utils.get_slice_objects_prc(dataslices, ds_in.shape)
 
     if func == 'expand':
         out = ds_in[:, :, :]
@@ -68,8 +73,7 @@ def downsample_blockwise(
             out = np.repeat(out, blockreduce[axis], axis=axis)
         ds_out[:] = out
     else:
-        ds_out[:] = block_reduce(ds_in, block_size=tuple(blockreduce),
-                                 func=eval(func))
+        ds_out[slices[0], :, :] = block_reduce(ds_in[slices[0], :, :], block_size=tuple(blockreduce), func=eval(func))
 
     try:
         h5file_in.close()
