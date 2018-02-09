@@ -413,9 +413,8 @@ def parse_downsample_blockwise(parser):
 
     parser.add_argument(
         '-B', '--blockreduce',
-        nargs=3,
+        nargs='*',
         type=int,
-        default=[1, 7, 7],
         help='the blocksize'
         )
     parser.add_argument(

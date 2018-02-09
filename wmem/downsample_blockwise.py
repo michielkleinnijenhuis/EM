@@ -58,7 +58,7 @@ def downsample_blockwise(
 
     if h5path_out:
         h5file_out, ds_out = utils.h5_write(None, outsize, ds_in.dtype,
-                                            h5path_out,  # h5file=h5file_in,
+                                            h5path_out,
                                             element_size_um=elsize,
                                             axislabels=axlab)
     else:
@@ -68,12 +68,19 @@ def downsample_blockwise(
     slices = utils.get_slice_objects_prc(dataslices, ds_in.shape)
 
     if func == 'expand':
-        out = ds_in[:, :, :]
-        for axis in range(0, 3):
+        out = ds_in[:]
+        for axis in range(0, ds_out.ndim):
             out = np.repeat(out, blockreduce[axis], axis=axis)
         ds_out[:] = out
     else:
-        ds_out[slices[0], :, :] = block_reduce(ds_in[slices[0], :, :], block_size=tuple(blockreduce), func=eval(func))
+        """ TODO: flexible mapping from in to out
+        now:
+        the reduction factor of the first axis must be 1;
+        the extent of the remaining axes must be full
+        """
+        ds_out[slices[0], ...] = block_reduce(ds_in[slices[0], ...],
+                                              block_size=tuple(blockreduce),
+                                              func=eval(func))
 
     try:
         h5file_in.close()
