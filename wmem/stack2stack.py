@@ -120,8 +120,8 @@ def stack2stack(
     def get_bound(dim):
         return ds_in.shape[inlayout.index(dim)] if dim in inlayout else None
 
-    if dset_name:  # override from filename FIXME? dset_name / outputfile
-        _, x, X, y, Y, z, Z = utils.split_filename(outputfile, blockoffset)
+    if dset_name:
+        _, x, X, y, Y, z, Z = utils.split_filename(dset_name, blockoffset)
     else:
         X = X or get_bound('x')
         Y = Y or get_bound('y')
