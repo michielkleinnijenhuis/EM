@@ -30,6 +30,7 @@ for n in `seq 0 $((njobs-1))`; do
     for t in `seq 0 $((tasks-1))`; do
 
         datastem=${datastems[n*tasks+t]}
+        [ -z "$datastem" ] && continue
 
         cmdt=$cmd
 
