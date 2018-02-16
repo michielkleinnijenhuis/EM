@@ -1,5 +1,7 @@
 #!/bin/bash
 
+JOBS=()
+
 for n in `seq 0 $((njobs-1))`; do
 
     qsubfile=$datadir/EM_${jobname}_$n.sh
@@ -13,7 +15,13 @@ for n in `seq 0 $((njobs-1))`; do
             echo "#SBATCH --time=$wtime" >> $qsubfile
     echo "#SBATCH --job-name=EM_$jobname" >> $qsubfile
 
-    if [[ $additions == *"conda"* ]]
+    datastem=${datastems[n]}
+    if [[ $additions == *"mpi"* ]]
+    then
+        echo ". enable_arcus-b_mpi.sh" >> $qsubfile
+    fi
+
+        if [[ $additions == *"conda"* ]]
     then
       echo "export PATH=$CONDA_PATH:\$PATH" >> $qsubfile
       echo "source activate $CONDA_ENV" >> $qsubfile
@@ -28,15 +36,17 @@ for n in `seq 0 $((njobs-1))`; do
     datastem=${datastems[n]}
     if [[ $additions == *"mpi"* ]]
     then
-        echo ". enable_arcus-b_mpi.sh" >> $qsubfile
         echo "mpirun \$MPI_HOSTS ${cmd//datastem/$datastem}" >> $qsubfile
     else
         echo "${cmd//datastem/$datastem}" >> $qsubfile
     fi
 
-    [ "$q" = "d" ] &&
-        sbatch -p devel $qsubfile ||
-            sbatch $qsubfile
+    [ "$q" = "h" ] && JOB=($qsubfile) || {
+        [ "$q" = "d" ] &&
+            JOB=$(sbatch -p devel $qsubfile) ||
+                JOB=$(sbatch $qsubfile) ; }
+    JOBS+=${JOB##* }
 
 done
 
+export JOBS

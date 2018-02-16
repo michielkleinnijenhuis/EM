@@ -1,6 +1,6 @@
 #!/bin/bash
 
-jobfiles=()
+JOBS=()
 
 for n in `seq 0 $((njobs-1))`; do
 
@@ -52,10 +52,12 @@ for n in `seq 0 $((njobs-1))`; do
 
     echo "wait" >> $qsubfile
 
-    [ "$q" = "h" ] && jobfiles+=($qsubfile) || {
-        [ "$q" = "d" ] && sbatch -p devel $qsubfile ||
-            sbatch $qsubfile ; }
+    [ "$q" = "h" ] && JOB=($qsubfile) || {
+        [ "$q" = "d" ] &&
+            JOB=$(sbatch -p devel $qsubfile) ||
+                JOB=$(sbatch $qsubfile) ; }
+    JOBS+=${JOB##* }
 
 done
 
-export jobfiles
+export JOBS
