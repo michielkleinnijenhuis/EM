@@ -1108,3 +1108,46 @@ def parse_seg_stats(parser):
         )
 
     return parser
+
+
+def parse_correct_attributes(parser):
+
+    parser.add_argument(
+        'inputfile',
+        help="""path to hdf5 dataset <filepath>.h5/<...>/<dataset>:
+                """
+        )
+    parser.add_argument(
+        'auxfile',
+        default='',
+        help="""path to hdf5 dataset <filepath>.h5/<...>/<dataset>:
+                """
+        )
+
+    return parser
+
+
+def parse_combine_vols(parser):
+
+    parser.add_argument(
+        'inputfile',
+        help="""path to hdf5 dataset <filepath>.h5/<...>/<dataset>:
+                """
+        )
+    parser.add_argument(
+        'outputfile',
+        default='',
+        help="""path to hdf5 dataset <filepath>.h5/<...>/<dataset>:
+                """
+        )
+
+    parser.add_argument(
+        '-i', '--volidxs',
+        nargs='*',
+        type=int,
+        default=[0, 2, 4, 7],
+        help="""indices to the volumes"""
+        )
+
+    return parser
+
