@@ -308,20 +308,23 @@ def CC_2Dfilter(
     fws = np.zeros((maxlabel + 1, len(map_propnames)),
                    dtype='float')
 
+    mapall = criteria.count(None) == len(criteria)
+
     # pick labels observing the constraints
     go2D = ((max_eccentricity is not None) or
             (min_solidity is not None) or
-            (min_euler_number is not None))
+            (min_euler_number is not None) or
+            mapall)
     if go2D:
 
         for i in series:
             slcMM = utils.get_slice(ds_mm, i, slicedim)
             if h5path_int:
-                slcMB = utils.get_slice(ds_mb, i, slicedim, 'bool')
+                slcMB = utils.get_slice(ds_mb, i, slicedim)  # , 'bool'
             else:
                 slcMB = None
             fws = check_constraints(slcMM, fws, map_propnames,
-                                    criteria, slcMB)
+                                    criteria, slcMB, mapall)
         if usempi:  # FIXME
             comm.Reduce(fws, fws_reduced, op=MPI.MAX, root=0)
         else:
@@ -331,7 +334,7 @@ def CC_2Dfilter(
 
         if rank == 0:
             fws = check_constraints(ds_mm, fws, map_propnames,
-                                    criteria, ds_mb)
+                                    criteria, ds_mb, mapall)
             fws_reduced = fws
 
     # write the forward maps to a numpy vector
@@ -445,7 +448,7 @@ def CC_2Dto3D(
         return ds_out
 
 
-def check_constraints(labels, fws, propnames, criteria, MB=None):
+def check_constraints(labels, fws, propnames, criteria, MB=None, mapall=False):
     """Compose forward maps according to label validity criteria."""
 
     (min_area,
@@ -459,6 +462,10 @@ def check_constraints(labels, fws, propnames, criteria, MB=None):
     rp = regionprops(labels, intensity_image=MB, cache=True)
 
     for prop in rp:
+
+        if mapall:
+            fws = set_fws(fws, prop, propnames, is_valid=True)
+            continue
 
         # TODO: ordering
         if min_area is not None:
