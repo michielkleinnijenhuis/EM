@@ -1,0 +1,13 @@
+myelin
+myelin_inner
+myelin_outer
+mitobound
+mito
+ICS_MA
+membrane
+ICS_UA
+
+min 3 full slices (115, 215, 315)
+ @ 25 min per slice 500x500
+min 6 additional slices for mitobound+mito (140, 165, 190, 240, 265, 290)
+ @ 2 min per slice 500x500
