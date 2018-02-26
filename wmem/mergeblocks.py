@@ -136,7 +136,9 @@ def mergeblocks(
         # ox, oX, oy, oY, oz, oZ are indices into the output dataset
         """
         _, x, X, y, Y, z, Z = utils.split_filename(h5file_in.filename,
-                                                   blockoffset)
+                                                   [blockoffset[2],
+                                                    blockoffset[1],
+                                                    blockoffset[0]])
         (oz, oZ), (iz, iZ) = margins(z, Z, blocksize[0],
                                      margin[0], fullsize[0])
         (oy, oY), (iy, iY) = margins(y, Y, blocksize[1],
