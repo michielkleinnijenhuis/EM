@@ -127,67 +127,6 @@ def parse_stack2stack(parser):
         )
 
     parser.add_argument(
-        '-x',
-        type=int,
-        default=0,
-        help='lower x-index'
-        )
-    parser.add_argument(
-        '-X',
-        type=int,
-        default=0,
-        help='upper x-index'
-        )
-    parser.add_argument(
-        '-y',
-        type=int,
-        default=0,
-        help='lower y-index'
-        )
-    parser.add_argument(
-        '-Y',
-        type=int,
-        default=0,
-        help='upper y-index'
-        )
-    parser.add_argument(
-        '-z',
-        type=int,
-        default=0,
-        help='lower z-index'
-        )
-    parser.add_argument(
-        '-Z',
-        type=int,
-        default=0,
-        help='upper z-index'
-        )
-    parser.add_argument(
-        '-c',
-        type=int,
-        default=0,
-        help='lower c-index'
-        )
-    parser.add_argument(
-        '-C',
-        type=int,
-        default=0,
-        help='upper C-index'
-        )
-    parser.add_argument(
-        '-t',
-        type=int,
-        default=0,
-        help='lower t-index'
-        )
-    parser.add_argument(
-        '-T',
-        type=int,
-        default=0,
-        help='upper T-index'
-        )
-
-    parser.add_argument(
         '-s', '--chunksize',
         type=int,
         nargs='*',
@@ -212,19 +151,6 @@ def parse_stack2stack(parser):
         )
 
     parser.add_argument(
-        '-p', '--dset_name',
-        default='',
-        help='the identifier of the datablock'
-        )
-    parser.add_argument(
-        '-b', '--blockoffset',
-        type=int,
-        default=[0, 0, 0],
-        nargs='*',
-        help='...'
-        )
-
-    parser.add_argument(
         '-a', '--additional_outputs',
         nargs='*',
         default=[],
@@ -237,13 +163,6 @@ def parse_stack2stack(parser):
         help='number of characters at the end that define z'
         )
 
-    parser.add_argument(
-        '-r', '--downscale',
-        type=int,
-        nargs='*',
-        default=[],
-        help='factors to downscale (in order of outlayout)'
-        )
     parser.add_argument(
         '-d', '--datatype',
         default='',

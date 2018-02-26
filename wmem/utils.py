@@ -213,16 +213,52 @@ def output_check(outpaths, save_steps=True, protective=False):
         print("{}: {}".format(status, info))
         return status
 
+    # validate any additional output formats
+    if 'addext' in outpaths.keys():
+        root = outpaths['addext'][0]
+        for ext in outpaths['addext'][1]:
+            status = output_check_all(root, ext, None,
+                                      save_steps, protective)
+            if status == "CANCELLED":
+                return status
+
+    # validate the main output
+    root, ext = os.path.splitext(outpaths['out'])
+    status = output_check_all(root, ext, outpaths,
+                              save_steps, protective)
+
+    return status
+
+
+def output_check_all(root, ext, outpaths=None, save_steps=False, protective=False):
+
+    if '.h5' in ext:
+        if outpaths is None:
+            status = output_check_h5(['{}{}'.format(root, ext)], save_steps, protective)
+        else:
+            status = output_check_h5(outpaths, save_steps, protective)
+    elif '.nii' in ext:
+        status = output_check_dir(['{}{}'.format(root, ext)], protective)
+    else:  # directory with images assumed
+        status = output_check_dir([root], protective)
+
+    return status
+
+
+def output_check_h5(outpaths, save_steps=True, protective=False):
+
     try:
         root, ds_main = outpaths['out'].split('.h5')
         h5file_out = h5py.File(root + '.h5', 'a')
+
     except ValueError:
         status = "CANCELLED"
         info = "main output is not a valid h5 dataset"
         print("{}: {}".format(status, info))
         return status
-    else:
 
+    else:
+        # create a group and set outpath for any intermediate steps
         for dsname, outpath in outpaths.items():
             if ((dsname != 'out') and save_steps and (not outpath)):
                 grpname = ds_main + "_steps"
@@ -234,6 +270,7 @@ def output_check(outpaths, save_steps=True, protective=False):
 
         h5file_out.close()
 
+        # check the path for each h5 output
         for _, outpath in outpaths.items():
             if outpath:
                 status, info = h5_check(outpath, protective)
@@ -252,7 +289,7 @@ def output_check_dir(outpaths, protective):
                 status = 'CANCELLED'
                 info = "protecting {}".format(outpath)
                 print("{}: {}".format(status, info))
-                return
+                return status
             else:
                 status = "WARNING"
                 info = 'overwriting {}'.format(outpath)
@@ -428,7 +465,7 @@ def h5_load(dspath, load_data=False,
 
 
 def load_dataset(ds, elsize, axlab,
-                 outlayout, dtype, dataslices=None):
+                 outlayout, dtype, dataslices=None, uint8conv=False):
     """Load data from a proxy and select/transpose/convert/...."""
 
     slices = get_slice_objects(dataslices, ds.shape)
@@ -454,10 +491,15 @@ def load_dataset(ds, elsize, axlab,
         data = np.transpose(data, in2out)
         elsize = np.array(elsize)[in2out]
         axlab = outlayout
-        slices = slices[in2out]
+        slices = [slices[i] for i in in2out]
 
     if dtype:
         data = data.astype(dtype, copy=False)
+
+    if uint8conv:
+        from skimage import img_as_ubyte
+        data = normalize_data(data)[0]
+        data = img_as_ubyte(data)
 
     return data, elsize, axlab, slices
 
