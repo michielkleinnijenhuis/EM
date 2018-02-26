@@ -158,15 +158,13 @@ def nodes_of_ranvier(
 def get_boundarymask(h5path_mask, masktype='invdil'):
     """Load or generate a mask."""
 
-    if h5path_mask:
-        mask = utils.h5_load(h5path_mask, load_data=True, dtype='bool')[0]
-    else:
-        if masktype == 'ero':
-            mask = binary_erosion(mask, ball(3))
-        elif masktype == 'invdil':
-            mask = scipy_binary_dilation(~mask, iterations=1, border_value=0)
-            mask[:4, :, :] = 0
-            mask[-4:, :, :] = 0
+    mask = utils.h5_load(h5path_mask, load_data=True, dtype='bool')[0]
+    if masktype == 'ero':
+        mask = binary_erosion(mask, ball(3))
+    elif masktype == 'invdil':
+        mask = scipy_binary_dilation(~mask, iterations=1, border_value=0)
+        mask[:4, :, :] = 0
+        mask[-4:, :, :] = 0
 
     return mask
 
