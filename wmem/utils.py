@@ -10,6 +10,7 @@ import importlib
 import errno
 import pickle
 import re
+from random import shuffle
 
 import numpy as np
 
@@ -966,3 +967,18 @@ def copy_attributes(h5path, dset0, dsets):
             ds.dims[i].label = label
 
     h5file.close()
+
+
+def shuffle_labels(labels):
+    """Shuffle labels to a random order."""
+
+    ulabels = np.unique(labels)
+    maxlabel = np.amax(ulabels)
+    fw = np.array([l if l in ulabels else 0
+                   for l in range(0, maxlabel + 1)])
+    mask = fw != 0
+    fw_nz = fw[mask]
+    shuffle(fw_nz)
+    fw[mask] = fw_nz
+
+    return fw
