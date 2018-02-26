@@ -52,7 +52,7 @@ def watershed_ics(
     """Perform watershed on the intracellular space compartments."""
 
     # check output paths
-    outpaths = {'out': h5path_out, 'seeds': h5path_seeds}
+    outpaths = {'out': h5path_out, 'seeds': h5path_seeds, 'mask': ''}
     status = utils.output_check(outpaths, save_steps, protective)
     if status == "CANCELLED":
         return
@@ -93,17 +93,25 @@ def watershed_ics(
     # determine the mask
     mask = np.ones(ds_in.shape[:3], dtype='bool')
     mask = utils.string_masks(masks, mask)
+    h5file_mask, ds_mask = utils.h5_write(None, ds_in.shape[:3], 'uint8',
+                                          outpaths['mask'],
+                                          element_size_um=elsize,
+                                          axislabels=axlab)
+    ds_mask[:] = mask
+#     ds_mask[:].fill(1)
+#     ds_mask[:] = utils.string_masks(masks, ds_mask[:])
 
     # perform the watershed
-    ds_out[:] = watershed(-ds_in[:], ds_sds[:], mask=mask)
+    ds_out[:] = watershed(-ds_in[:], ds_sds[:], mask=ds_mask[:])
 
     # close and return
     h5file_in.close()
     try:
         h5file_out.close()
         h5file_sds.close()
+        h5file_mask.close()
     except (ValueError, AttributeError):
-        return ds_out, ds_sds
+        return ds_out, ds_sds, ds_mask
 
 
 if __name__ == "__main__":
