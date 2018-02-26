@@ -16,6 +16,8 @@ if isdeployed
     margin_z = str2double(margin_z);
     margin_y = str2double(margin_y);
     margin_x = str2double(margin_x);
+    T = str2double(T);
+    dt = str2double(dt);
 else
     cf_path = '~/oxscripts/matlab/toolboxes/coherencefilter_version5b';
     addpath(genpath(cf_path));
@@ -27,7 +29,8 @@ filepath = [datadir filesep invol '.h5'];
 stackinfo = h5info(filepath, ds_in);
 dsize = stackinfo.Dataspace.Size(end-2:end);
 if length(stackinfo.Dataspace.Size) == 3
-    start_c = 1; count_c = 1;
+    start_c = 1;
+    count_c = 1;
 end
 
 % create outputfile
@@ -80,10 +83,14 @@ for c = start_c : start_c + count_c - 1
     u = CoherenceFilter(squeeze(data(c,:,:,:)), ...
         struct('T', T, 'dt', dt, 'rho', 1, ...
         'Scheme', 'R', 'eigenmode', 2, 'verbose', 'full'));
-    size(u)
-    ul(c,:,:,:) = u(margin_x_lower + 1 : count_x + margin_x_lower, ...
-          margin_y_lower + 1 : count_y + margin_y_lower, ...
-          margin_z_lower + 1 : count_z + margin_z_lower);
+    lower = [margin_x_lower + 1, margin_y_lower + 1, margin_z_lower + 1];
+    upper = [margin_x_lower + count_x, ...
+             margin_y_lower + count_y, ...
+             margin_z_lower + count_z];
+    upper(1) = min([upper(1), size(u, 1)]);
+    upper(2) = min([upper(2), size(u, 2)]);
+    upper(3) = min([upper(3), size(u, 3)]);
+    ul(c,:,:,:) = u(lower(1):upper(1), lower(2):upper(2), lower(3):upper(3));
 end
 
 % write to file
