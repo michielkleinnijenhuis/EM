@@ -29,13 +29,8 @@ def main(argv):
     args = parser.parse_args()
 
     convert_dm3(
-        args.inputfile,
-        args.masks,
-        args.seedimage,
-        args.seed_size,
-        args.lower_threshold,
-        args.upper_threshold,
-        args.outputfile,
+        args.inputdir,
+        args.outputdir,
         args.save_steps,
         args.protective,
         )
@@ -71,7 +66,6 @@ def convert_dm3(
         if '.tif' in outexts:
             outfilepath = os.path.join(outdir, fileref + '.tif')
             im.save(outfilepath)
-
 
 
 def read_dm3_as_ndimage(filepath):
