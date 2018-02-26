@@ -27,11 +27,19 @@ for n in `seq 0 $((njobs-1))`; do
       echo "source activate $CONDA_ENV" >> $qsubfile
     fi
 
+    if [[ $additions == *"ilastik"* ]]
+    then
+        echo "export LAZYFLOW_THREADS=$tasks" >> $qsubfile
+        echo "export LAZYFLOW_TOTAL_RAM_MB=$memcpu" >> $qsubfile
+    fi
+
     if [[ $additions == *"neuroproof"* ]]
     then
         echo "export PATH=$CONDA_PATH:\$PATH" >> $qsubfile
         echo "export LD_LIBRARY_PATH=$CONDA_PATH/envs/$CONDA_ENV/lib" >> $qsubfile
     fi
+
+    echo "export PYTHONPATH=$PYTHONPATH" >> $qsubfile
 
     datastem=${datastems[n]}
     if [[ $additions == *"mpi"* ]]
