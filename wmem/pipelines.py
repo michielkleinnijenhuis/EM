@@ -6,6 +6,8 @@
 
 import os
 from wmem import utils
+from wmem.series2stack import series2stack
+from wmem.downsample_slices import downsample_slices
 from wmem.stack2stack import stack2stack
 from wmem.prob2mask import prob2mask
 from wmem.connected_components import CC_2D, CC_2Dfilter, CC_2Dprops
