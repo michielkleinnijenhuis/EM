@@ -278,14 +278,6 @@ def parse_prob2mask(parser):
         )
 
     parser.add_argument(
-        '-b', '--blockreduce',
-        nargs=3,
-        type=int,
-        default=None,
-        help='downsample the output with scikit-image block_reduce (np.amax)'
-        )
-
-    parser.add_argument(
         '-l', '--lower_threshold',
         type=float,
         default=0,
@@ -313,7 +305,7 @@ def parse_prob2mask(parser):
         '-d', '--dilation',
         type=int,
         default=0,
-        help='perform a mask dilation with a ball-shaped selem of this size'
+        help='perform a mask dilation with a disk/ball-shaped selem of this size'
         )
 
     return parser
