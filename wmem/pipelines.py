@@ -226,3 +226,68 @@ def prob2mask_levels(h5path, step=0.1, min_size=1000):
             lower_threshold=thr, upper_threshold=1.1,
             size=min_size
             )
+
+
+def pipeline_myelin3D(configfile='',
+                      datadir='', datasets='',
+                      options='', parameters='',
+                      run_from='', run_upto='', run_only=''):
+    """Run pipeline to segment myelinated axons in 2D.
+
+    This function expects ... [TODO]
+    """
+
+    # retrieve requested configuration
+    if configfile:
+        ddir, dsets, opts, pars = utils.load_config(
+            configfile,
+            run_from=run_from, run_upto=run_upto, run_only=run_only,
+            )
+    datadir = datadir or ddir
+    datasets = datasets or dsets
+    options = options or opts
+    parameters = parameters or pars
+
+    if ((not datadir) or (not datasets) or
+            (not options) or (not parameters)):
+        print("missing info")
+        return
+
+    # simple mean intensity normalization over datasets
+    if options['normalize_datasets']:
+        utils.normalize_datasets(
+            datadir, datasets,
+            postfix=parameters['ds']['datapostfix'],
+            )
+
+    # process all datasets
+    for dataset in datasets:
+        run_pipeline_myelin3D(datadir, dataset, options, parameters)
+
+
+def run_pipeline_myelin3D(datadir, dataset, options, parameters):
+    """Run pipeline to segment myelinated axons in 3D.
+
+    This function expects ... [TODO]
+    """
+
+    h5path = os.path.join(datadir, dataset + '.h5')
+
+    series2stack(
+            inputdir,
+            regex='*.dm3',
+            outlayout='zyx',
+            usempi=True,
+            outputformats=['.tif'],
+            h5path_out=os.path.join(h5path, 'data'),
+            )
+
+    downsample_slices(
+        inputdir,
+        outputdir,
+        regex='*.tif',
+        ds_factor=4,
+        dataslices=None,
+        use_mpi=False,
+        protective=False,
+        )
