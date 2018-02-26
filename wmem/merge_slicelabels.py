@@ -52,7 +52,7 @@ def main(argv):
             args.min_labelsize,
             args.close,
             args.relabel,
-            args.outpf,
+            args.outputfile,
             )
 
 
@@ -98,7 +98,7 @@ def evaluate_overlaps(
     h5file_in.close()
 
     # dump the list of overlapping neighbours in a pickle
-    root = outputfile('.h5')[0]
+    root = outputfile.split('.h5')[0]
     mname = "_host-{}_rank-{:02d}.pickle".format(socket.gethostname(), rank)
     with open(root + mname, "wb") as f:
         pickle.dump(MAlist, f)
@@ -149,7 +149,7 @@ def map_labels(
                                         axislabels=axlab)
 
     # load the pickled list of neighbours
-    root = h5path_out('.h5')[0]
+    root = h5path_out.split('.h5')[0]
     with open(root + ".pickle", "r") as f:
         MAlist = pickle.load(f)
 
@@ -157,7 +157,7 @@ def map_labels(
     ulabels = np.unique(ds_in[:])
     fw = [l if l in ulabels else 0
           for l in range(0, np.amax(ulabels) + 1)]
-    labels = utils.forward_map(np.array(fw), ds_in[:], MAlist)
+    labels = utils.forward_map_list(np.array(fw), ds_in[:], MAlist)
 
     if min_labelsize:
         remove_small_objects(labels, min_size=min_labelsize, in_place=True)
