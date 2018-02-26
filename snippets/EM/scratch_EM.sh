@@ -103,399 +103,79 @@ basepath=$datadir/${dataset}
 # basepath=$datadir/${dataset}
 
 
-###=========================================================================###
-### prepare environment
-###=========================================================================###
-export PATH=${DATA}/anaconda2/bin:$PATH
-export CONDA_PATH="$(conda info --root)"
-export scriptdir="${HOME}/workspace/EM"
-export PYTHONPATH=$scriptdir
-export PYTHONPATH=$PYTHONPATH:$HOME/workspace/pyDM3reader
-imagej=/system/software/linux-x86_64/fiji/20140602/ImageJ-linux64  # 20170515
-ilastik=$HOME/workspace/ilastik-1.2.2post1-Linux/run_ilastik.sh
-
-
-###=========================================================================###
-### dataset parameters
-###=========================================================================###
-basedir="${DATA}/EM/Myrf_01/SET-B"
-dataset='B-NT-S9-2a'
-datadir=$basedir/${dataset} && mkdir -p $datadir && cd $datadir
-source datastems_blocks.sh
-
-
-###=========================================================================###
-### dataset parameters
-###=========================================================================###
-basedir="${DATA}/EM/Myrf_01/SET-B"
-dataset='B-NT-S10-2d_ROI_00'
-datadir=$basedir/${dataset} && mkdir -p $datadir && cd $datadir
-source datastems_blocks.sh
-# Image Width: 8649 Image Length: 8308
-
-
-###=========================================================================###
-### dataset parameters
-###=========================================================================###
-basedir="${DATA}/EM/Myrf_01/SET-B"
-dataset='B-NT-S10-2d_ROI_02'
-datadir=$basedir/${dataset} && mkdir -p $datadir && cd $datadir
-source datastems_blocks.sh
-# Image Width: 8844 Image Length: 8521
-
-for tif in 'tif_ds'; do  # 'tif'
-mkdir $datadir/$tif/artefacts
-for i in `seq 4 9`; do
-mv $datadir/$tif/002$i?.tif $datadir/$tif/artefacts
-done
-mv $datadir/$tif/003??.tif $datadir/$tif/artefacts
-mv $datadir/$tif/004??.tif $datadir/$tif/artefacts
-done
-
-
-###=========================================================================###
-### dataset parameters
-###=========================================================================###
-basedir="${DATA}/EM/Myrf_01/SET-B"
-dataset='B-NT-S10-2f_ROI_00'
-datadir=$basedir/${dataset} && mkdir -p $datadir && cd $datadir
-source datastems_blocks.sh
-# Image Width: 8423 Image Length: 8316
-
-
-###=========================================================================###
-### dataset parameters
-###=========================================================================###
-basedir="${DATA}/EM/Myrf_01/SET-B"
-dataset='B-NT-S10-2f_ROI_01'
-datadir=$basedir/${dataset} && mkdir -p $datadir && cd $datadir
-source datastems_blocks.sh
-# Image Width: 8649 Image Length: 8287
-
-
-###=========================================================================###
-### dataset parameters
-###=========================================================================###
-basedir="${DATA}/EM/Myrf_01/SET-B"
-dataset='B-NT-S10-2f_ROI_02'
-datadir=$basedir/${dataset} && mkdir -p $datadir && cd $datadir
-source datastems_blocks.sh
-# Image Width: 8457 Image Length: 8453
-
-
-###=========================================================================###
-### convert to tif
-###=========================================================================###
-module load mpich2/1.5.3__gcc
-
-export template='single' additions='mpi'
-export njobs=1 nodes=4 tasks=16 memcpu=2000 wtime="01:00:00" q=""
-export jobname="dm3_convert"
-scriptfile=$datadir/EM_dm3_script.sh
-echo '#!/bin/bash' > $scriptfile
-echo "PATH=$CONDA_PATH:\$PATH" >> $scriptfile
-echo "source activate root" >> $scriptfile
-echo "PYTHONPATH=$PYTHONPATH" >> $scriptfile
-echo "python $scriptdir/wmem/series2stack.py \
-$dm3dir $datadir -r '*.dm3' -O '.tif' -d 'uint16' -M" >> $scriptfile
-export cmd="$scriptfile"
-chmod +x $scriptfile
-source $scriptdir/pipelines/template_job_$template.sh
-
-###=========================================================================###
-### downsample
-###=========================================================================###
-module load mpich2/1.5.3__gcc
-
-export template='single' additions='mpi'
-export njobs=1 nodes=2 tasks=16 memcpu=10000 wtime="00:40:00" q=""
-export jobname="ds"
-scriptfile=$datadir/EM_ds_script.sh
-echo '#!/bin/bash' > $scriptfile
-echo "PATH=$CONDA_PATH:\$PATH" >> $scriptfile
-echo "source activate root" >> $scriptfile
-echo "PYTHONPATH=$PYTHONPATH" >> $scriptfile
-echo "python $scriptdir/wmem/downsample_slices.py \
-$datadir/tif $datadir/tif_ds -r '*.tif' -f 8 -M" >> $scriptfile
-export cmd="$scriptfile"
-chmod +x $scriptfile
-source $scriptdir/pipelines/template_job_$template.sh
-
-
-###=========================================================================###
-### register
-###=========================================================================###
-
-mkdir -p $datadir/$regname/trans
-sed "s?SOURCE_DIR?$datadir/tif?;\
-    s?TARGET_DIR?$datadir/reg?;\
-    s?REFNAME?$regref?;\
-    s?TRANSF_DIR?$datadir/reg/trans?g" \
-    $scriptdir/wmem/fiji_register.py \
-    > $datadir/fiji_register.py
-
-qsubfile=$datadir/fiji_register_submit.sh
-echo '#!/bin/bash' > $qsubfile
-echo "#SBATCH --nodes=1" >> $qsubfile
-echo "#SBATCH --ntasks-per-node=1" >> $qsubfile
-echo "#SBATCH --time=10:00:00" >> $qsubfile
-echo "#SBATCH --job-name=EM_reg" >> $qsubfile
-echo "$imagej --headless \\" >> $qsubfile
-echo "$datadir/fiji_register.py" >> $qsubfile
-sbatch $qsubfile
-
-
-###=========================================================================###
-### downsample
-###=========================================================================###
-module load mpich2/1.5.3__gcc
-
-export template='single' additions='mpi'
-export njobs=1 nodes=1 tasks=16 memcpu=10000 wtime="00:40:00" q=""
-export jobname="ds"
-scriptfile=$datadir/EM_ds_script.sh
-echo '#!/bin/bash' > $scriptfile
-echo "PATH=$CONDA_PATH:\$PATH" >> $scriptfile
-echo "source activate root" >> $scriptfile
-echo "PYTHONPATH=$PYTHONPATH" >> $scriptfile
-echo "python $scriptdir/wmem/downsample_slices.py \
-$datadir/reg $datadir/reg_ds -r '*.tif' -f 8 -M" >> $scriptfile
-export cmd="$scriptfile"
-chmod +x $scriptfile
-source $scriptdir/pipelines/template_job_$template.sh
-
-
-###=========================================================================###
-### convert to h5
-###=========================================================================###
-module load mpich2/1.5.3__gcc
-
-scriptfile=$datadir/EM_h5_script.sh
-echo '#!/bin/bash' > $scriptfile
-echo "PATH=$CONDA_PATH:\$PATH" >> $scriptfile
-echo "source activate root" >> $scriptfile
-echo "python $scriptdir/wmem/series2stack.py \
-$datadir/reg ${basepath}.h5/data -r '*.tif' -O '.h5' -d 'uint16' -e ${ze} ${ye} ${xe}" >> $scriptfile
-
-export template='single' njobs=1 nodes=1 tasks=1 memcpu=30000 wtime='03:00:00' q='' jobname='h5' cmd="$scriptfile"
-chmod +x $scriptfile
-source $scriptdir/pipelines/template_job_$template.sh
-
-
-###=========================================================================###
-### split in blocks
-###=========================================================================###
-# need parallel hdf5 reads here?
-# module load hdf5-parallel/1.8.14_mvapich2_gcc
-# without parallel: adapt script: FIXME: hold the job submission
-mkdir -p $datadir/blocks
-export template='array' additions='conda' CONDA_ENV='root'
-export njobs=9 nodes=1 tasks=9 memcpu=6000 wtime='00:10:00' q='d'
-export jobname='split'
-export cmd="python $scriptdir/wmem/stack2stack.py \
-${basepath}.h5/data $datadir/blocks/datastem.h5/data -p datastem"
-source $scriptdir/pipelines/template_job_$template.sh
-
-for i in `seq 0 8`; do
-sed -i -e 's/node=9/node=1/g' EM_split_$i.sh
-sed -i -e 's/ &//g' EM_split_$i.sh
-sed -i -e 's/wait//g' EM_split_$i.sh
-sbatch -p devel EM_split_$i.sh
-done
-
-
-###=========================================================================###
-### train ilastik classifier
-###=========================================================================###
-mkdir -p $datadir/blocks
-export template='single' additions='' CONDA_ENV=''
-export njobs=1 nodes=1 tasks=1 memcpu=6000 wtime="00:10:00" q="d"
-export jobname="train"
-datastems=( "${dataset}_03000-03500_03000-03500_00000-`printf %05d ${Z}`" )
-export cmd="python $scriptdir/wmem/stack2stack.py \
-${basepath}.h5/data $datadir/blocks/datastem.h5/data -p datastem"
-source $scriptdir/pipelines/template_job_$template.sh
-
-dataset='B-NT-S9-1a'; Z=479;
-dataset='B-NT-S10-2d_ROI_00'; Z=135;
-dataset='B-NT-S10-2d_ROI_02'; Z=240;
-dataset='B-NT-S10-2f_ROI_00'; Z=184;
-dataset='B-NT-S10-2f_ROI_01'; Z=184;
-dataset='B-NT-S10-2f_ROI_02'; Z=184;
-rem_host='ndcn0180@arcus-b.arc.ox.ac.uk'
-rem_datadir="/data/ndcn-fmrib-water-brain/ndcn0180/EM/Myrf_01/SET-B/$dataset"
-loc_datadir="/Users/michielk/oxdata/P01/EM/Myrf_01/SET-B/$dataset"
-fname="blocks/${dataset}_03000-03500_03000-03500_00000-`printf %05d ${Z}`.h5"
-rsync -Pazv $rem_host:$rem_datadir/$fname $loc_datadir/blocks/
-
-scriptdir="$HOME/workspace/EM"
-export PYTHONPATH=$PYTHONPATH:$scriptdir
-alias ilastik=/Applications/ilastik-1.2.2post1-OSX.app/Contents/MacOS/ilastik
-ilastik &
-
-fname='pixclass.ilp'
-fname='pixclass_8class.ilp'
-rsync -Pazv $loc_datadir/$fname $rem_host:$rem_datadir
 
 ###=========================================================================###
 ### apply ilastik classifier
 ###=========================================================================###
-pixprob_trainingset="pixclass_8class"
-cp $basedir/B-NT-S10-2f_ROI_00/B-NT-S10-2f_ROI_00_03000-03500_03000-03500_00000-00184.h5 $datadir/blocks/
-cp $basedir/B-NT-S10-2f_ROI_00/$pixprob_traningset.ilp $datadir/
-
-# array job on blocks
+### array job on blocks
 # nblocks=81
 # datastems=("${datastems[@]:0:nblocks}")
-source datastems_blocks.sh
-datastems=( B-NT-S10-2f_ROI_00_00950-02050_04950-06050_00000-00184 B-NT-S10-2f_ROI_00_01950-03050_06950-08050_00000-00184 B-NT-S10-2f_ROI_00_02950-04050_05950-07050_00000-00184 )
-datastems=( B-NT-S10-2f_ROI_00_03000-03500_03000-03500_00000-00184 )
-nblocks=`echo "${datastems[@]}" | wc -w`
+# source datastems_blocks.sh
+# datastems=( B-NT-S10-2f_ROI_00_00950-02050_04950-06050_00000-00184 B-NT-S10-2f_ROI_00_01950-03050_06950-08050_00000-00184 B-NT-S10-2f_ROI_00_02950-04050_05950-07050_00000-00184 )
+# datastems=( B-NT-S10-2f_ROI_00_03000-03500_03000-03500_00000-00184 )
+# nblocks=`echo "${datastems[@]}" | wc -w`
 
-scriptfile=$datadir/EM_ilastik_script.sh
-echo '#!/bin/bash' > $scriptfile
-echo "#SBATCH --nodes=1" >> $scriptfile
-echo "#SBATCH --ntasks-per-node=16" >> $scriptfile
-echo "#SBATCH --mem-per-cpu=60000" >> $scriptfile
-echo "#SBATCH --time=00:10:00" >> $scriptfile
-echo "#SBATCH --job-name=EM_ilastik" >> $scriptfile
-echo "export datastems=( "${datastems[@]}" )" >> $scriptfile
-echo "export LAZYFLOW_THREADS=16; export LAZYFLOW_TOTAL_RAM_MB=60000;" >> $scriptfile
-echo "$ilastik --headless \
---preconvert_stacks \
---project=$datadir/$pixprob_trainingset.ilp \
---output_axis_order=zyxc \
---output_format='compressed hdf5' \
---output_filename_format=$datadir/blocks/\${datastems[\$SLURM_ARRAY_TASK_ID]}_probs.h5 \
---output_internal_path=volume/predictions \
-$datadir/blocks/\${datastems[\$SLURM_ARRAY_TASK_ID]}.h5/data" >> $scriptfile
-chmod +x $scriptfile
-sbatch --array=0-$((nblocks-1)) -p devel $scriptfile
+# scriptfile=$datadir/EM_ilastik_script.sh
+# echo '#!/bin/bash' > $scriptfile
+# echo "#SBATCH --nodes=1" >> $scriptfile
+# echo "#SBATCH --ntasks-per-node=16" >> $scriptfile
+# echo "#SBATCH --mem-per-cpu=60000" >> $scriptfile
+# echo "#SBATCH --time=00:10:00" >> $scriptfile
+# echo "#SBATCH --job-name=EM_ilastik" >> $scriptfile
+# echo "export datastems=( "${datastems[@]}" )" >> $scriptfile
+# echo "export LAZYFLOW_THREADS=16; export LAZYFLOW_TOTAL_RAM_MB=60000;" >> $scriptfile
+# echo "$ilastik --headless \
+# --preconvert_stacks \
+# --project=$datadir/$pixprob_trainingset.ilp \
+# --output_axis_order=zyxc \
+# --output_format='compressed hdf5' \
+# --output_filename_format=$datadir/blocks/\${datastems[\$SLURM_ARRAY_TASK_ID]}_probs.h5 \
+# --output_internal_path=volume/predictions \
+# $datadir/blocks/\${datastems[\$SLURM_ARRAY_TASK_ID]}.h5/data" >> $scriptfile
+# chmod +x $scriptfile
+# sbatch --array=0-$((nblocks-1)) -p devel $scriptfile
 
-# on the full stack
-export template='single' additions='' CONDA_ENV=''
-export njobs=1 nodes=1 tasks=16 memcpu=125000 wtime="23:00:00" q=""
-export jobname="ilastikfull"
-export cmd="export LAZYFLOW_THREADS=16; export LAZYFLOW_TOTAL_RAM_MB=110000;\
-$ilastik --headless \
---preconvert_stacks \
---project=$datadir/$pixprob_trainingset.ilp \
---output_axis_order=zyxc \
---output_format='compressed hdf5' \
---output_filename_format=$datadir/${dataset}_probs.h5 \
---output_internal_path=volume/predictions \
-$datadir/$dataset.h5/data"
-source $scriptdir/pipelines/template_job_$template.sh
 
-# TODO: correct element_size_um attribute
+
+
 
 ###=========================================================================###
-### split _probs in blocks_500
+### maskDS, maskMM, maskMM-0.02, maskMB
 ###=========================================================================###
-# need parallel hdf5 reads here?
-# module load hdf5-parallel/1.8.14_mvapich2_gcc
-# without parallel: adapt script: hold the job submission q='h'
-mkdir -p $datadir/blocks_500
-source datastems_blocks_500.sh
-nblocks=`echo "${datastems[@]}" | wc -w`  # 289
+# module load mpich2/1.5.3__gcc
+# module load hdf5-parallel/1.8.17_mvapich2_gcc
+
+export bs='0500' && source datastems_blocks_${bs}.sh
+# source find_missing_datastems.sh '_masks' 'h5' ${datadir}/blocks_${bs}/
+export nstems=${#datastems[@]} && echo $nstems
+
 export template='array' additions='conda' CONDA_ENV='root'
-export njobs=33 nodes=1 tasks=9 memcpu=6000 wtime='00:10:00' q='h'
-export jobname='split'
-export cmd="python $scriptdir/wmem/stack2stack.py \
-${basepath}_probs.h5/volume/predictions $datadir/blocks_500/datastem_probs.h5/volume/predictions -p datastem"
-source $scriptdir/pipelines/template_job_$template.sh
-
-
-for i in `seq 0 32`; do
-sed -i -e 's/node=9/node=1/g' EM_split_$i.sh
-sed -i -e 's/ &//g' EM_split_$i.sh
-sed -i -e 's/wait//g' EM_split_$i.sh
-# sbatch -p devel EM_split_$i.sh
-done
-
-sbatch -p devel EM_split_0.sh
-for i in `seq 1 32`; do
-sbatch EM_split_$i.sh
-done
-
-###=========================================================================###
-### EED
-###=========================================================================###
-# rem_host='ndcn0180@arcus-b.arc.ox.ac.uk'
-# rem_datadir='/data/ndcn-fmrib-water-brain/ndcn0180/EM/Myrf_01/SET-B/B-NT-S9-2a'
-# loc_datadir='/Users/michielk/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S9-2a'
-# fname='blocks/B-NT-S9-2a_00000-01050_00000-01050_00000-00479_probs.h5'
-# rsync -Pazv $rem_host:$rem_datadir/$fname $loc_datadir/blocks
-
-module load hdf5-parallel/1.8.17_mvapich2_gcc
-module load matlab/R2015a
-
-mkdir -p $datadir/bin && cd $datadir/bin
-mcc -v -R -nojvm -R -singleCompThread -f ./mbuildopts.sh -m $scriptdir/wmem/EM_eed_simple.m -a $HOME/oxscripts/matlab/toolboxes/coherencefilter_version5b
-cd $datadir
-
-# on blocks_500 (from blocks_probs)
-# export template='array' additions=''
-# export njobs=18 nodes=1 tasks=16 memcpu=50000 wtime='01:10:00' q=''
-# export jobname='eed00'
-# export cmd="$datadir/bin/EM_eed_simple \
-# '$datadir/blocks_500' 'datastem_probs' '/volume/predictions' '/probs_eed' \
-# '2' '50' '1' '1' > $datadir/blocks_500/datastem_probs_$jobname.log"
-# source $scriptdir/pipelines/template_job_$template.sh
-
-source datastems_blocks_500.sh
-source find_missing_datastems.sh '_probs0_eed2' 'h5' ${datadir}/blocks_500/
-nstems=${#datastems[@]}
 export tasks=16
 export njobs=$(( ($nstems + tasks-1) / $tasks))
-export template='array' additions=''
-export nodes=1 memcpu=50000 wtime='01:10:00' q=''
-export jobname='eed0'
-export cmd="$datadir/bin/EM_eed_simple \
-'$datadir/blocks_500' 'datastem_probs' '/volume/predictions' '/probs_eed' \
-'1' '50' '1' '1' > $datadir/blocks_500/datastem_probs0_$jobname.log"
-source $scriptdir/pipelines/template_job_$template.sh
-source datastems_blocks_500.sh
+export nodes=1 memcpu=6000 wtime='00:10:00' q='d'
 
-source datastems_blocks_500.sh
-source find_missing_datastems.sh '_probs1_eed2' 'h5' ${datadir}/blocks_500/
-nstems=${#datastems[@]}
-export tasks=16
-export njobs=$(( ($nstems + tasks-1) / $tasks))
-export template='array' additions=''
-export nodes=1 memcpu=50000 wtime='01:10:00' q=''
-export jobname='eed1'
-export cmd="$datadir/bin/EM_eed_simple \
-'$datadir/blocks_500' 'datastem_probs' '/volume/predictions' '/probs_eed' \
-'2' '50' '1' '1' > $datadir/blocks_500/datastem_probs_$jobname.log"
+export jobname='maskDS'
+export cmd="python $scriptdir/wmem/prob2mask.py ${datadir}/blocks_${bs}/datastem.h5/data ${datadir}/blocks_${bs}/datastem_masks.h5/maskDS -l 0 -u 10000000"
 source $scriptdir/pipelines/template_job_$template.sh
-source datastems_blocks_500.sh
 
-source datastems_blocks_500.sh
-source find_missing_datastems.sh '_probs2_eed2' 'h5' ${datadir}/blocks_500/
-nstems=${#datastems[@]}
-export tasks=16
-export njobs=$(( ($nstems + tasks-1) / $tasks))
-export template='array' additions=''
-export nodes=1 memcpu=50000 wtime='01:10:00' q=''
-export jobname='eed2'
-export cmd="$datadir/bin/EM_eed_simple \
-'$datadir/blocks_500' 'datastem_probs' '/volume/predictions' '/probs_eed' \
-'3' '50' '1' '1' > $datadir/blocks_500/datastem_probs_$jobname.log"
+export jobname='maskMM'
+export cmd="python $scriptdir/wmem/prob2mask.py ${datadir}/blocks_${bs}/datastem_probs0_eed2.h5/probs_eed ${datadir}/blocks_${bs}/datastem_masks.h5/maskMM -l 0.2"
 source $scriptdir/pipelines/template_job_$template.sh
-source datastems_blocks_500.sh
 
-# TODO: correct element_size_um and DIMENSION_LABELS attributes
+export jobname='maskMA'
+export cmd="python $scriptdir/wmem/prob2mask.py ${datadir}/blocks_${bs}/datastem_probs1_eed2.h5/probs_eed ${datadir}/blocks_${bs}/datastem_masks.h5/maskMA -l 0.2"
+source $scriptdir/pipelines/template_job_$template.sh
+
 
 ###=========================================================================###
 ### merge blocks
 ###=========================================================================###
 export template='single' additions='conda' CONDA_ENV='root'
-export njobs=1 nodes=1 tasks=1 memcpu=25000 wtime='03:10:00' q=''
-export jobname="merge${pf}"
+export njobs=1 nodes=1 tasks=1 memcpu=25000 wtime='00:10:00' q='d'
 
+export jobname="mergeprobs"
 infiles=()
-for file in `ls $datadir/blocks_500/*00184_probs2_eed2.h5`; do
+for file in `ls $datadir/blocks_${bs}/*00184_probs2_eed2.h5`; do
     infiles+=("${file}/probs_eed")
 done
 export cmd="python $scriptdir/wmem/mergeblocks.py \
@@ -504,34 +184,10 @@ export cmd="python $scriptdir/wmem/mergeblocks.py \
 source $scriptdir/pipelines/template_job_$template.sh
 
 
-###=========================================================================###
-### maskDS, maskMM, maskMM-0.02, maskMB
-###=========================================================================###
-module load mpich2/1.5.3__gcc
-# module load hdf5-parallel/1.8.17_mvapich2_gcc
-
-source datastems_blocks_500.sh
-nstems=`echo "${datastems[@]}" | wc -w`  # 289
-export template='array' additions='conda' CONDA_ENV='root'
-export tasks=16
-export njobs=$(( ($nstems + tasks-1) / $tasks))
-export nodes=1 memcpu=6000 wtime='00:10:00' q='d'
-export jobname='maskDS'
-export cmd="python $scriptdir/wmem/prob2mask.py ${datadir}/blocks_500/datastem.h5/data ${datadir}/blocks_500/datastem_masks.h5/maskDS -l 0 -u 10000000"
-source $scriptdir/pipelines/template_job_$template.sh
-export jobname='maskMM'
-export cmd="python $scriptdir/wmem/prob2mask.py ${datadir}/blocks_500/datastem_probs0_eed2.h5/probs_eed ${datadir}/blocks_500/datastem_masks.h5/maskMM -l 0.2"
-source $scriptdir/pipelines/template_job_$template.sh
-
-###=========================================================================###
-### merge blocks
-###=========================================================================###
-export template='single' additions='conda' CONDA_ENV='root'
-export njobs=1 nodes=1 tasks=1 memcpu=25000 wtime='00:10:00' q='d'
 
 export jobname="mergeDS"
 infiles=()
-for file in `ls ${datadir}/blocks_500/*_masks.h5`; do
+for file in `ls ${datadir}/blocks_${bs}/*_masks.h5`; do
     infiles+=("${file}/maskDS")
 done
 export cmd="python $scriptdir/wmem/mergeblocks.py \
@@ -541,7 +197,7 @@ source $scriptdir/pipelines/template_job_$template.sh
 
 export jobname="mergeMM"
 infiles=()
-for file in `ls ${datadir}/blocks_500/*_masks.h5`; do
+for file in `ls ${datadir}/blocks_${bs}/*_masks.h5`; do
     infiles+=("${file}/maskMM")
 done
 export cmd="python $scriptdir/wmem/mergeblocks.py \
@@ -549,48 +205,47 @@ export cmd="python $scriptdir/wmem/mergeblocks.py \
 -b $zo $yo $xo -p $zs $ys $xs -q $zm $ym $xm -s $zmax $ymax $xmax"
 source $scriptdir/pipelines/template_job_$template.sh
 
-
-###=========================================================================###
-### blockreduce
-###=========================================================================###
-
-dspf='ds'; ds=7;
-export template='single' additions='conda' CONDA_ENV='root'
-export njobs=1 nodes=1 tasks=1 memcpu=60000 wtime="00:10:00" q="d"
-export jobname="rb_${dspf}${pf}"
-for pf in 'maskDS' 'maskMM'; do
-    export jobname="rb_${dspf}${pf}"
-    export cmd="python $scriptdir/wmem/downsample_blockwise.py \
-    $datadir/${dataset}_masks.h5/$pf $datadir/${dataset}${dspf}${ds}_masks.h5/$pf \
-    -B 1 ${ds} ${ds} -f 'np.amax'"
-    source $scriptdir/pipelines/template_job_$template.sh
+export jobname="mergeMA"
+infiles=()
+for file in `ls ${datadir}/blocks_${bs}/*_masks.h5`; do
+    infiles+=("${file}/maskMA")
 done
-
-dspf='ds'; ds=7;
-export template='single' additions='conda' CONDA_ENV='root'
-export njobs=1 nodes=1 tasks=1 memcpu=60000 wtime="10:10:00" q=""
-export jobname="rb_${dspf}${pf}"
-export cmd="python $scriptdir/wmem/downsample_blockwise.py \
-$datadir/${dataset}.h5/data $datadir/${dataset}${dspf}${ds}.h5/data \
--B 1 ${ds} ${ds} -f 'np.amax'"  # np.mean # memory error
+export cmd="python $scriptdir/wmem/mergeblocks.py \
+"${infiles[@]}" $datadir/${dataset}_masks.h5/maskMA \
+-b $zo $yo $xo -p $zs $ys $xs -q $zm $ym $xm -s $zmax $ymax $xmax"
 source $scriptdir/pipelines/template_job_$template.sh
 
-###=========================================================================###
-### 2D connected components in maskMM
-###=========================================================================###
-# module load mpich2/1.5.3__gcc
 
-dspf='ds'; ds=7;
+###=========================================================================###
+### downsample
+###=========================================================================###
+# export template='single' additions=''
+# export njobs=1 nodes=1 tasks=1 memcpu=10000 wtime="10:40:00" q=""
+# export jobname="ds"
+# scriptfile=$datadir/EM_ds_script.sh
+# echo '#!/bin/bash' > $scriptfile
+# echo "PATH=$CONDA_PATH:\$PATH" >> $scriptfile
+# echo "source activate root" >> $scriptfile
+# echo "PYTHONPATH=$PYTHONPATH" >> $scriptfile
+# echo "python $scriptdir/wmem/downsample_slices.py \
+# $datadir/${dataset}_probs0_eed2.h5/probs_eed \
+# $datadir/${dataset}ds7_probs0_eed2.h5/probs_eed \
+# -f 7" >> $scriptfile
+# export cmd="$scriptfile"
+# chmod +x $scriptfile
+# source $scriptdir/pipelines/template_job_$template.sh
 
-### basic 2D labeling
-export template='single' additions='conda' CONDA_ENV="root"
-export njobs=1 nodes=1 tasks=1 memcpu=60000 wtime="00:10:00" q="d"
-export jobname="cc2D"
-export cmd="python $scriptdir/wmem/connected_components.py \
-$datadir/${dataset}${dspf}${ds}_masks.h5/maskMM $datadir/${dataset}${dspf}${ds}_labels.h5/labelMA_core2D \
--m '2D' -d 0"
-source $scriptdir/pipelines/template_job_$template.sh
-# FIXME: need to use maskDS here to get the borderaxons
+
+
+
+
+
+
+
+
+
+
+
 
 ### apply criteria to create forward mappings
 export template='single' additions='conda' CONDA_ENV="root"
