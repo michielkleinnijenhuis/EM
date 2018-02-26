@@ -24,6 +24,7 @@ from math import ceil
 
 import numpy as np
 from skimage import io
+
 try:
     from mpi4py import MPI
 except ImportError:
