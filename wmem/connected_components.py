@@ -237,7 +237,7 @@ def CC_2D(
         elif slicedim == 2:
             ds_out[:, :, i] = labels
 
-    # save the maximum labelvalue in the datset
+    # save the maximum labelvalue in the dataset
     if usempi & (rank == size - 1):
         root = h5path_out.split('.h5')[0]
         fpath = root + '.npy'
@@ -344,7 +344,7 @@ def CC_2Dfilter(
         slcMB = ds_mb[slc, :, :] if h5path_int else None
         datatypes = get_prop_datatypes(slcMM, map_propnames, slcMB)
         for i, propname in enumerate(map_propnames):
-            root = os.path.splitext(outputfile)[0]
+            root = outputfile.split('.h5')[0]
             nppath = '{}_{}.npy'.format(root, propname)
             outarray = np.array(fws_reduced[:, i], dtype=datatypes[i])
             np.save(nppath, outarray)
