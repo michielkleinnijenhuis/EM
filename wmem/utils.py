@@ -9,6 +9,7 @@ import sys
 import importlib
 import errno
 import pickle
+import re
 
 import numpy as np
 
@@ -58,7 +59,7 @@ def split_filename(filename, blockoffset=[0, 0, 0]):
 
     datadir, tail = os.path.split(filename)
     fname = os.path.splitext(tail)[0]
-    parts = fname.split("_")
+    parts = re.findall('([0-9]{5}-[0-9]{5})', fname)
     x = int(parts[-3].split("-")[0]) - blockoffset[0]
     X = int(parts[-3].split("-")[1]) - blockoffset[0]
     y = int(parts[-2].split("-")[0]) - blockoffset[1]
@@ -485,8 +486,8 @@ def h5_write(data, shape, dtype,
 
     if h5path_full:
 
+        basepath, h5path_dset = h5path_full.split('.h5')
         if not isinstance(h5file, h5py.File):
-            basepath, h5path_dset = h5path_full.split('.h5')
             h5path_file = basepath + '.h5'
             if usempi:
                 h5file = h5py.File(h5path_file, 'a',
@@ -705,7 +706,7 @@ def classify_label_list(MAlist, labelset):
     return MAlist
 
 
-def forward_map0(fw, labels, MAlist):
+def forward_map_list(fw, labels, MAlist):
     """Map all labelsets in MAlist to axons."""
 
     for MA in MAlist:
