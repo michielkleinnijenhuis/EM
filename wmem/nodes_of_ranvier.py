@@ -33,7 +33,7 @@ def main(argv):
         args.min_labelsize,
         args.remove_small_labels,
         args.boundarymask,
-        args.merge_method,
+        args.merge_methods,
         args.overlap_threshold,
         args.data,
         args.maskMM,
