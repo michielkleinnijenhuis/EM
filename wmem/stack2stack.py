@@ -8,9 +8,6 @@ import sys
 import argparse
 import os
 
-from skimage import img_as_ubyte
-from skimage.transform import downscale_local_mean
-
 from wmem import parse, utils
 
 
@@ -159,11 +156,14 @@ def stack2stack(
     if outlayout != inlayout:
         data = data.transpose(in2out)
     if downscale:
+        from skimage.transform import downscale_local_mean
         data = downscale_local_mean(data, tuple(downscale))
         # FIXME: big stack will encounter memory limitations here
         if elsize is not None:
             elsize = [el * downscale[i] for i, el in enumerate(elsize)]
     if uint8conv:
+        from skimage import img_as_ubyte
+        data = utils.normalize_data(data)[0]
         data = img_as_ubyte(data)
     elif datatype != data.dtype:
         data = data.astype(datatype, copy=False)
