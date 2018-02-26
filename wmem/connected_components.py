@@ -540,10 +540,10 @@ def get_maxlabel(root, ds):
     try:
         maxlabel = np.load(root + '.npy')
         maxlabel = maxlabel[0]
-        print("read maxlabel from file")
+        print("read maxlabel from file: {}".format(maxlabel))
     except IOError:
         maxlabel = np.amax(ds[:, :, :])
-        print("retrieved maxlabel from dataset")
+        print("retrieved maxlabel from dataset: {}".format(maxlabel))
 
     return maxlabel
 
