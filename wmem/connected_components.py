@@ -354,7 +354,8 @@ def CC_2Dfilter(
     if h5path_int:
         h5file_mb.close()
 
-    return outarray
+    if rank == 0:
+        return outarray
 
 
 def CC_2Dprops(
