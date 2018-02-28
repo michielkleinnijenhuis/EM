@@ -337,6 +337,9 @@ def load(dspath, load_data=False,
          inlayout=None, outlayout=None):
     """Load a dataset."""
 
+    if not dspath:
+        return None, None, None, None
+
     try:
         _, _ = dspath.split('.h5')
     except ValueError:
@@ -395,7 +398,7 @@ def imf_load(dspath, load_data=True,
     data, elsize, axlab, slices = load_dataset(
         ds_in, elsize, axlab, outlayout, dtype, dataslices)
 
-    return data, elsize, axlab
+    return data, elsize, axlab, slices
 
 
 def imf_write(dspath, data):
@@ -422,7 +425,7 @@ def nii_load(dspath, load_data=False,
         data, elsize, axlab, slices = load_dataset(
             ds_in, elsize, axlab, outlayout, dtype, dataslices)
 
-        return data, elsize, axlab
+        return data, elsize, axlab, slices
 
     else:
 
@@ -459,13 +462,14 @@ def h5_load(dspath, load_data=False,
             ds_in, elsize, axlab, outlayout, dtype, dataslices)
         file_in.close()
 
-        return data, elsize, axlab
+        return data, elsize, axlab, slices
 
     return file_in, ds_in, elsize, axlab
 
 
-def load_dataset(ds, elsize, axlab,
-                 outlayout, dtype, dataslices=None, uint8conv=False):
+def load_dataset(ds, elsize=[], axlab='',
+                 outlayout='', dtype='',
+                 dataslices=None, uint8conv=False):
     """Load data from a proxy and select/transpose/convert/...."""
 
     slices = get_slice_objects(dataslices, ds.shape)
@@ -673,6 +677,11 @@ def write_to_img(basepath, data, outlayout, nzfills=5, ext='.png', slcoffset=0):
 
     if ext != '.tif':
         data = normalize_data(data)[0]
+
+    if data.ndim == 2:
+        slcno = slcoffset
+        filepath = os.path.join(basepath, fstring.format(slcno) + ext)
+        imsave(filepath, data)
 
     for slc in range(0, data.shape[outlayout.index('z')]):
         slcno = slc + slcoffset
@@ -912,7 +921,7 @@ def nii2h5(niipath, h5path_out,
             return
 
     # load nifti data
-    data, elsize, axlab = nii_load(
+    data, elsize, axlab, _ = nii_load(
         niipath, load_data=True,
         inlayout=inlayout, outlayout=outlayout
         )
