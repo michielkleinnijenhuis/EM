@@ -227,6 +227,12 @@ def parse_prob2mask(parser):
         help='perform a mask dilation with a disk/ball-shaped selem of this size'
         )
 
+    parser.add_argument(
+        '-g', '--go2D',
+        action='store_true',
+        help='process as 2D slices'
+        )
+
     return parser
 
 
