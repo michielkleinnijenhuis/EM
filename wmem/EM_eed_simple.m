@@ -24,15 +24,14 @@ ndim = length(stackinfo.Dataspace.Size);
 es_idx = find(strcmp({stackinfo.Attributes.Name}, 'element_size_um')==1);
 es = stackinfo.Attributes(es_idx).Value;
 al_idx = find(strcmp({stackinfo.Attributes.Name}, 'DIMENSION_LABELS')==1);
-al = char(stackinfo.Attributes(al_idx).Value)';
+al = stackinfo.Attributes(al_idx).Value;
 cs = stackinfo.ChunkSize;
 
 
 if ndim == 4
 
     % find the volume dimension index
-    axlab = stackinfo.Attributes(al_idx).Value;
-    cdim_idx = find(strcmp( cellfun( @(sas) sas, axlab, 'uni', false ), {'c'} ));
+    cdim_idx = find(strcmp( cellfun( @(sas) sas, al, 'uni', false ), {'c'} ));
     cdim_idx_data = 5 - cdim_idx;
 
     % set vol_idxs to the full range
@@ -52,6 +51,8 @@ end
 
 % create the dataset
 h5create(outputfile, outfield, outsize, 'Deflate', 4, 'Chunksize', cs);
+h5writeatt(outputfile, outfield, stackinfo.Attributes(es_idx).Name, es)
+EM_eed_writeattr(inputfile, infield, outputfile, outfield, al)
 
 % read and filter the data % TODO: 2D/5D?
 if ndim == 3
@@ -93,7 +94,35 @@ end
 
 % write the filtered volume(s) and attributes
 h5write(outputfile, outfield, u);
-h5writeatt(outputfile, outfield, stackinfo.Attributes(es_idx).Name, es)
-h5writeatt(outputfile, outfield, stackinfo.Attributes(al_idx).Name, al)
 
 
+function EM_eed_writeattr(inputfile, infield, outputfile, outfield, axlab)
+
+
+fid = H5F.open(inputfile);
+gid = H5G.open(fid, '/');
+did = H5D.open(gid, infield);
+aid = H5A.open(did, 'DIMENSION_LABELS');
+
+tid = H5A.get_type(aid);
+sid = H5A.get_space(aid);
+H5S.set_extent_simple(sid, 1, length(axlab), 5)
+
+H5A.close(aid);
+H5D.close(did);
+H5G.close(gid);
+H5F.close(fid);
+
+
+fid = H5F.open(outputfile, 'H5F_ACC_RDWR', 'H5P_DEFAULT');
+gid = H5G.open(fid, '/');
+did = H5D.open(gid, outfield);
+
+pid = H5P.create('H5P_ATTRIBUTE_CREATE');
+aid = H5A.create(did, 'DIMENSION_LABELS', tid, sid, pid);
+H5A.write(aid, tid, axlab)
+
+H5A.close(aid);
+H5D.close(did);
+H5G.close(gid);
+H5F.close(fid);
