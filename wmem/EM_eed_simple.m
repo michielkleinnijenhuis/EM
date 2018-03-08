@@ -50,9 +50,16 @@ if ndim == 4
 end
 
 % create the dataset
-h5create(outputfile, outfield, outsize, 'Deflate', 4, 'Chunksize', cs);
+try
+    stackinfo = h5info(outputfile, outfield);
+catch
+    h5create(outputfile, outfield, outsize, 'Deflate', 4, 'Chunksize', cs);
+end
 h5writeatt(outputfile, outfield, stackinfo.Attributes(es_idx).Name, es)
-EM_eed_writeattr(inputfile, infield, outputfile, outfield, al)
+try
+    EM_eed_writeattr(inputfile, infield, outputfile, outfield, al)
+catch
+end
 
 % read and filter the data % TODO: 2D/5D?
 if ndim == 3
@@ -93,6 +100,7 @@ elseif ndim == 4
 end
 
 % write the filtered volume(s) and attributes
+% TODO: write as float, not double
 h5write(outputfile, outfield, u);
 
 
