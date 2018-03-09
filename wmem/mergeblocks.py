@@ -101,7 +101,7 @@ def mergeblocks(
     else:  # FIXME: 'zyx(c)' stack assumed
         outsize = np.subtract(fullsize, blockoffset)
         if ndim == 4:
-            outsize = outsize + [ds_in.shape[3]]
+            outsize = list(outsize) + [ds_in.shape[3]]
 
     # open data for writing
     h5file_out, ds_out = utils.h5_write(None, outsize, ds_in.dtype,
