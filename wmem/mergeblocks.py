@@ -100,17 +100,9 @@ def mergeblocks(
         elsize = [e*b for e, b in zip(elsize, blockreduce)]
     else:  # FIXME: 'zyx(c)' stack assumed
         outsize = np.subtract(fullsize, blockoffset)
-        if ndim == 4:
-            outsize = list(outsize) + [ds_in.shape[3]]
 
-    # open data for writing
-    h5file_out, ds_out = utils.h5_write(None, outsize, ds_in.dtype,
-                                        h5path_out,
-                                        chunks=ds_in.chunks or None,
-                                        element_size_um=elsize,
-                                        axislabels=axlab)
-
-    h5file_in.close()
+    if ndim == 4:
+        outsize = list(outsize) + [ds_in.shape[3]]  # TODO: flexible insert
 
     # prepare mpi
     series = np.array(range(0, len(h5paths_in)), dtype=int)
@@ -119,6 +111,18 @@ def mergeblocks(
         series = utils.scatter_series(mpi_info, series)[0]
     else:
         mpi_info = {'comm': None, 'rank': 0, 'size': 1}
+
+    # open data for writing
+    # TODO: option to choose supply datatype from arguments?
+    h5file_out, ds_out = utils.h5_write(None, outsize, ds_in.dtype,
+                                        h5path_out,
+                                        chunks=ds_in.chunks or None,
+                                        element_size_um=elsize,
+                                        axislabels=axlab,
+                                        usempi=usempi, comm=mpi_info['comm'],
+                                        rank=mpi_info['rank'])
+
+    h5file_in.close()
 
     # merge the datasets
     maxlabel = 0

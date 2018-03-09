@@ -521,7 +521,7 @@ def h5_write(data, shape, dtype,
              h5path_full, h5file=None,
              element_size_um=None, axislabels=None,
              chunks=True, compression="gzip",
-             usempi=False, driver=None, comm=None,
+             usempi=False, driver=None, comm=None, rank=0,
              slices=None):
     """Write a h5 dataset."""
 
@@ -545,12 +545,18 @@ def h5_write(data, shape, dtype,
         if h5path_dset in h5file:
             h5ds = h5file[h5path_dset]
         else:
-            h5ds = h5file.create_dataset(h5path_dset,
-                                         shape=shape,
-                                         dtype=dtype,
-                                         chunks=chunks,
-                                         compression=compression)
-            h5_write_attributes(h5ds, element_size_um, axislabels)
+            if usempi:
+                h5ds = h5file.create_dataset(h5path_dset,
+                                             shape=shape,
+                                             dtype=dtype)
+            else:
+                h5ds = h5file.create_dataset(h5path_dset,
+                                             shape=shape,
+                                             dtype=dtype,
+                                             chunks=chunks,
+                                             compression=compression)
+            if rank == 0:
+                h5_write_attributes(h5ds, element_size_um, axislabels)
 
         if data is not None:
 
