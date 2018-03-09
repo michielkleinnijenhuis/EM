@@ -52,6 +52,7 @@ def main(argv):
         args.save_fwmap,
         args.blockreduce,
         args.func,
+        args.datatype,
         args.usempi & ('mpi4py' in sys.modules),
         args.outputfile,
         args.save_steps,
@@ -71,6 +72,7 @@ def mergeblocks(
         save_fwmap=False,
         blockreduce=[],
         func='np.amax',
+        datatype='',
         usempi=False,
         h5path_out='',
         save_steps=False,
@@ -112,9 +114,11 @@ def mergeblocks(
     else:
         mpi_info = {'comm': None, 'rank': 0, 'size': 1}
 
+    datatype = datatype or ds_in.dtype
+
     # open data for writing
     # TODO: option to choose supply datatype from arguments?
-    h5file_out, ds_out = utils.h5_write(None, outsize, ds_in.dtype,
+    h5file_out, ds_out = utils.h5_write(None, outsize, datatype,  #
                                         h5path_out,
                                         chunks=ds_in.chunks or None,
                                         element_size_um=elsize,

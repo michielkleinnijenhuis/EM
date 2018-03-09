@@ -314,6 +314,12 @@ def parse_mergeblocks(parser):
         help='function used for downsampling'
         )
 
+    parser.add_argument(
+        '-d', '--datatype',
+        default='',
+        help='the numpy-style output datatype'
+        )
+
     return parser
 
 
