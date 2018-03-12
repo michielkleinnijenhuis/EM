@@ -161,7 +161,10 @@ def process_slice(data, lt, ut, size=0, dilation=0,
 
     mask_raw, mask_mito, mask_dil = None, None, None
 
-    mask = np.logical_and(data > lt, data <= ut)
+    if lt or ut:
+        mask = np.logical_and(data > lt, data <= ut)
+    else:
+        mask = data
     mask_raw = mask.copy()
 
     if dilation:
