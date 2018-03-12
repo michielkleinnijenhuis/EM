@@ -79,6 +79,12 @@ def prob2mask(
     if status == "CANCELLED":
         return
 
+    root, ds_main = outpaths['out'].split('.h5')
+    grpname = ds_main + "_steps"
+    for dsname, outpath in outpaths.items():
+        if ((dsname != 'out') and save_steps and (not outpath)):
+            outpaths[dsname] = os.path.join(root + '.h5' + grpname, dsname)
+
     # Load the (sliced) data.
     h5file_in, ds_in, es, al = utils.load(h5path_in)
     data, _, _, slices_out = utils.load_dataset(ds_in, dataslices=dataslices)
