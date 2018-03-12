@@ -97,7 +97,7 @@ def mergeblocks(
     # get the size of the outputfile # TODO: option to derive fullsize from dset_names?
     if blockreduce:
         datasize = np.subtract(fullsize, blockoffset)
-        outsize = [int(np.ceil(d/b))
+        outsize = [int(np.ceil(d/np.float(b)))
                    for d, b in zip(datasize, blockreduce)]
         elsize = [e*b for e, b in zip(elsize, blockreduce)]
     else:  # FIXME: 'zyx(c)' stack assumed
