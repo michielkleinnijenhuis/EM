@@ -127,6 +127,19 @@ def parse_stack2stack(parser):
         )
 
     parser.add_argument(
+        '-p', '--dset_name',
+        default='',
+        help='the identifier of the datablock'
+        )
+    parser.add_argument(
+        '-b', '--blockoffset',
+        type=int,
+        default=[0, 0, 0],
+        nargs='*',
+        help='...'
+        )
+
+    parser.add_argument(
         '-s', '--chunksize',
         type=int,
         nargs='*',

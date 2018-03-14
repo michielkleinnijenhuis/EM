@@ -25,6 +25,8 @@ def main(argv):
     stack2stack(
         args.inputfile,
         args.outputfile,
+        args.dset_name,
+        args.blockoffset,
         args.datatype,
         args.uint8conv,
         args.inlayout,
@@ -42,6 +44,8 @@ def main(argv):
 def stack2stack(
         inputfile,
         outputfile,
+        dset_name='',
+        blockoffset=[],
         datatype='',
         uint8conv=False,
         inlayout='',
@@ -95,6 +99,15 @@ def stack2stack(
 
     # datatype
     datatype = datatype or ds_in.dtype
+
+    if dset_name:
+        _, x, X, y, Y, z, Z = utils.split_filename(dset_name, blockoffset)
+        slices = {'x': [x, X, 1], 'y': [y, Y, 1], 'z': [z, Z, 1]}
+        if ndim > 3:
+            C = ds_in.shape[inlayout.index('c')]
+            slices['c'] = [0, C, 1]
+        sliceslist = [slices[dim] for dim in inlayout]
+        dataslices = [item for sl in sliceslist for item in sl]
 
     # get the selected and transformed data
     # TODO: most memory-efficient solution
