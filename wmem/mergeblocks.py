@@ -269,9 +269,9 @@ def blockreduce_datablocks(ds_in, ixyz, oxyz, blockreduce, func):
     aY = int(np.ceil(iY / blockreduce[1]) * blockreduce[1])
     aX = int(np.ceil(iX / blockreduce[2]) * blockreduce[2])
 
-    data = reduceblocks.block_reduce(ds_in[iz:aZ, iy:aY, ix:aX],
-                                     block_size=tuple(blockreduce),
-                                     func=eval(func))
+    data = downsample_blockwise.block_reduce(ds_in[iz:aZ, iy:aY, ix:aX],
+                                             block_size=tuple(blockreduce),
+                                             func=eval(func))
     if data.ndim == 4:
         data = np.squeeze(data, axis=3)
 
