@@ -434,14 +434,18 @@ def nii_load(dspath, load_data=False,
 
 def h5_load(dspath, load_data=False,
             dtype='', dataslices=None,
-            inlayout=None, outlayout=None):
+            inlayout=None, outlayout=None,
+            usempi=False, comm=None):
     """Load a h5 dataset."""
 
     basepath, h5path_dset = dspath.split('.h5')
     h5path_file = basepath + '.h5'
-    file_in = h5py.File(h5path_file, 'r+')
+    if usempi:
+        h5file = h5py.File(h5path_file, 'r+', driver='mpio', comm=comm)
+    else:
+        h5file = h5py.File(h5path_file, 'r+')
 
-    ds_in = file_in[h5path_dset]  # proxy
+    ds_in = h5file[h5path_dset]  # proxy
 
     try:
         ndim = ds_in.ndim
@@ -460,11 +464,11 @@ def h5_load(dspath, load_data=False,
         outlayout = outlayout or axlab
         data, elsize, axlab, slices = load_dataset(
             ds_in, elsize, axlab, outlayout, dtype, dataslices)
-        file_in.close()
+        h5file.close()
 
         return data, elsize, axlab, slices
 
-    return file_in, ds_in, elsize, axlab
+    return h5file, ds_in, elsize, axlab
 
 
 def load_dataset(ds, elsize=[], axlab='',

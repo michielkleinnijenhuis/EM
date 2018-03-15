@@ -80,6 +80,14 @@ def mergeblocks(
         ):
     """Merge blocks of data into a single hdf5 file."""
 
+    # prepare mpi
+    series = np.array(range(0, len(h5paths_in)), dtype=int)
+    if usempi:
+        mpi_info = utils.get_mpi_info()
+        series = utils.scatter_series(mpi_info, series)[0]
+    else:
+        mpi_info = {'comm': None, 'rank': 0, 'size': 1}
+
     # TODO: save_steps
     # check output paths
     outpaths = {'out': h5path_out}
@@ -88,13 +96,16 @@ def mergeblocks(
         return
 
     # open data for reading
-    h5file_in, ds_in, elsize, axlab = utils.h5_load(h5paths_in[0])
+    h5file_in, ds_in, elsize, axlab = utils.h5_load(h5paths_in[0],
+                                                    usempi=usempi,
+                                                    comm=mpi_info['comm'])
     try:
         ndim = ds_in.ndim
     except AttributeError:
         ndim = len(ds_in.dims)
 
-    # get the size of the outputfile # TODO: option to derive fullsize from dset_names?
+    # get the size of the outputfile
+    # TODO: option to derive fullsize from dset_names?
     if blockreduce:
         datasize = np.subtract(fullsize, blockoffset)
         outsize = [int(np.ceil(d/np.float(b)))
@@ -106,18 +117,9 @@ def mergeblocks(
     if ndim == 4:
         outsize = list(outsize) + [ds_in.shape[3]]  # TODO: flexible insert
 
-    # prepare mpi
-    series = np.array(range(0, len(h5paths_in)), dtype=int)
-    if usempi:
-        mpi_info = utils.get_mpi_info()
-        series = utils.scatter_series(mpi_info, series)[0]
-    else:
-        mpi_info = {'comm': None, 'rank': 0, 'size': 1}
-
     datatype = datatype or ds_in.dtype
 
     # open data for writing
-    # TODO: option to choose supply datatype from arguments?
     h5file_out, ds_out = utils.h5_write(None, outsize, datatype,  #
                                         h5path_out,
                                         chunks=ds_in.chunks or None,
