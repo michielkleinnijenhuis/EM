@@ -53,7 +53,8 @@ end
 try
     stackinfo = h5info(outputfile, outfield);
 catch
-    h5create(outputfile, outfield, outsize, 'Deflate', 4, 'Chunksize', cs);
+    h5create(outputfile, outfield, outsize, ...
+        'Deflate', 4, 'Chunksize', cs, 'Datatype', 'single');
 end
 h5writeatt(outputfile, outfield, stackinfo.Attributes(es_idx).Name, es)
 try
