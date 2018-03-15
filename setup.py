@@ -7,5 +7,5 @@ setup(name='EM',
       author='Michiel Kleinnijenhuis',
       author_email='',
       license='',
-      packages=['convert', 'mesh'],
+      packages=['wmem'],
       zip_safe=False)
