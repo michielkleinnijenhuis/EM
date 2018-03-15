@@ -120,6 +120,8 @@ def stack2stack(
     for ext in outexts:
 
         if '.nii' in ext:
+            if data.dtype == 'float16':
+                data = data.astype('float')
             utils.write_to_nifti(root + '.nii.gz', data, elsize)
 
         if '.h5' in ext:
