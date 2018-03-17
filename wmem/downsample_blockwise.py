@@ -31,6 +31,7 @@ def main(argv):
         args.func,
         args.dataslices,
         args.outputfile,
+        args.save_steps,
         args.protective,
         )
 
@@ -41,28 +42,26 @@ def downsample_blockwise(
         func='np.amax',
         dataslices=None,
         h5path_out='',
+        save_steps=False,
         protective=False,
         ):
     """Downsample volume by blockwise reduction."""
 
-    if '.h5' in h5path_out:
-        status, info = utils.h5_check(h5path_out, protective)
-        print(info)
-        if status == "CANCELLED":
-            return
+    # Check if any output paths already exist.
+    outpaths = {'out': h5path_out}
+    status = utils.output_check(outpaths, save_steps, protective)
+    if status == "CANCELLED":
+        return
 
     # TODO: option to get the input data passed
     h5file_in, ds_in, elsize, axlab = utils.h5_load(h5path_in)
 
     outsize, elsize = get_new_sizes(func, blockreduce, ds_in.shape, elsize)
 
-    if h5path_out:
-        h5file_out, ds_out = utils.h5_write(None, outsize, ds_in.dtype,
-                                            h5path_out,
-                                            element_size_um=elsize,
-                                            axislabels=axlab)
-    else:
-        h5file_out, ds_out = None, np.empty(outsize, dtype=ds_in.dtype)
+    h5file_out, ds_out = utils.h5_write(None, outsize, ds_in.dtype,
+                                        h5path_out,
+                                        element_size_um=elsize,
+                                        axislabels=axlab)
 
     # Get the slice objects for the input data.
     slices = utils.get_slice_objects_prc(dataslices, ds_in.shape)
@@ -187,7 +186,7 @@ def block_reduce(image, block_size, func=np.sum, cval=0):
     return out
 
 
-def mode(array, axis=None):
+def mode(array, axis=None):  # axis argument needed for block_reduce
     """Calculate the blockwise mode."""
 
     smode = np.zeros_like(array[:, :, :, 0])
