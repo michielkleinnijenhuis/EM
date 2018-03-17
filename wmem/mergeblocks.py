@@ -118,103 +118,123 @@ def mergeblocks(
         outsize = list(outsize) + [ds_in.shape[3]]  # TODO: flexible insert
 
     datatype = datatype or ds_in.dtype
-
-    # open data for writing
-    h5file_out, ds_out = utils.h5_write(None, outsize, datatype,  #
-                                        h5path_out,
-                                        chunks=ds_in.chunks or None,
-                                        element_size_um=elsize,
-                                        axislabels=axlab,
-                                        usempi=usempi, comm=mpi_info['comm'],
-                                        rank=mpi_info['rank'])
+    chunks = ds_in.chunks or None
 
     h5file_in.close()
+
+    # open data for writing
+    h5file_out, ds_out = utils.h5_write(None, outsize, datatype,
+                                        h5path_out,
+                                        chunks=chunks,
+                                        element_size_um=elsize,
+                                        axislabels=axlab,
+                                        usempi=usempi,
+                                        comm=mpi_info['comm'],
+                                        rank=mpi_info['rank'])
 
     # merge the datasets
     maxlabel = 0
     for i in series:
-        print('processing block {:03d}: {}'.format(i, h5paths_in[i]))
-
-        # open data for reading
-        h5file_in, ds_in, elsize, axlab = utils.h5_load(h5paths_in[i])
-
-        # get the indices into the input and output datasets
-        # TODO: get indices from attributes
-        """NOTE:
-        # x, X, y, Y, z, Z are indices into the full dataset
-        # ix, iX, iy, iY, iz, iZ are indices into the input dataset
-        # ox, oX, oy, oY, oz, oZ are indices into the output dataset
-        """
-        _, x, X, y, Y, z, Z = utils.split_filename(h5file_in.filename,
-                                                   [blockoffset[2],
-                                                    blockoffset[1],
-                                                    blockoffset[0]])
-        (oz, oZ), (iz, iZ) = margins(z, Z, blocksize[0],
-                                     margin[0], fullsize[0])
-        (oy, oY), (iy, iY) = margins(y, Y, blocksize[1],
-                                     margin[1], fullsize[1])
-        (ox, oX), (ix, iX) = margins(x, X, blocksize[2],
-                                     margin[2], fullsize[2])
-        ixyz = ix, iX, iy, iY, iz, iZ
-        oxyz = ox, oX, oy, oY, oz, oZ
-
-        # simply copy the data from input to output
-        """NOTE:
-        it is assumed that the inputs are not 4D labelimages
-        """
-        if ndim == 4:
-            ds_out[oz:oZ, oy:oY, ox:oX, :] = ds_in[iz:iZ, iy:iY, ix:iX, :]
-            h5file_in.close()
-            continue
-        if ((not is_labelimage) or
-                ((not relabel) and
-                 (not neighbourmerge) and
-                 (not blockreduce))):
-            ds_out[oz:oZ, oy:oY, ox:oX] = ds_in[iz:iZ, iy:iY, ix:iX]
-            h5file_in.close()
-            continue
-
-        # forward map to relabel the blocks in the output
-        if relabel:
-            fw, maxlabel = relabel_block(ds_in, maxlabel, usempi, mpi_info)
-            if save_fwmap:
-                root = os.path.splitext(h5file_in.filename)[0]
-                fpath = '{}_{}.npy'.format(root, ds_in.name[1:])
-                np.save(fpath, fw)
-            if (not neighbourmerge) and (not blockreduce):
-                ds_out[oz:oZ, oy:oY, ox:oX] = fw[ds_in[iz:iZ, iy:iY, ix:iX]]
-                h5file_in.close()
-                continue
-        else:
-            ulabels = np.unique(ds_in[:])
-            fw = [l for l in range(0, np.amax(ulabels) + 1)]
-            fw = np.array(fw)
-
-        # blockwise reduction of input datasets
-        if blockreduce is not None:
-            data, ixyz, oxyz = blockreduce_datablocks(ds_in, ds_out,
-                                                      ixyz, oxyz,
-                                                      blockreduce, func)
-            ix, iX, iy, iY, iz, iZ = ixyz
-            ox, oX, oy, oY, oz, oZ = oxyz
-            margin = (int(margin[i]/blockreduce[i]) for i in range(0, 3))
-            if (not neighbourmerge):
-                ds_out[oz:oZ, oy:oY, ox:oX] = fw[data]
-                h5file_in.close()
-                continue
-        else:
-            data = ds_in[iz:iZ, iy:iY, ix:iX]
-
-        # merge overlapping labels
-        fw = merge_overlap(fw, data, ds_out, oxyz, ixyz, margin)
-        ds_out[oz:oZ, oy:oY, ox:oX] = fw[data]
-        h5file_in.close()
+        h5path_in = h5paths_in[i]
+        try:
+            maxlabel = process_block(h5path_in, ndim, blockreduce, func,
+                                     blockoffset, blocksize, margin, fullsize,
+                                     ds_out,
+                                     is_labelimage, relabel,
+                                     neighbourmerge, save_fwmap,
+                                     maxlabel, usempi, mpi_info)
+            print('processed block {:03d}: {}'.format(i, h5path_in))
+        except:
+            print('failed block {:03d}: {}'.format(i, h5path_in))
 
     # close and return
     try:
         h5file_out.close()
     except (ValueError, AttributeError):
         return ds_out
+
+
+def process_block(h5path_in, ndim, blockreduce, func,
+                  blockoffset, blocksize, margin, fullsize,
+                  ds_out,
+                  is_labelimage, relabel, neighbourmerge, save_fwmap,
+                  maxlabel, usempi, mpi_info):
+    """Write a block of data into a hdf5 file."""
+
+    # open data for reading
+    h5file_in, ds_in, _, _ = utils.h5_load(h5path_in)
+
+    # get the indices into the input and output datasets
+    # TODO: get indices from attributes
+    """NOTE:
+    # x, X, y, Y, z, Z are indices into the full dataset
+    # ix, iX, iy, iY, iz, iZ are indices into the input dataset
+    # ox, oX, oy, oY, oz, oZ are indices into the output dataset
+    """
+    _, x, X, y, Y, z, Z = utils.split_filename(h5file_in.filename,
+                                               [blockoffset[2],
+                                                blockoffset[1],
+                                                blockoffset[0]])
+    (oz, oZ), (iz, iZ) = margins(z, Z, blocksize[0],
+                                 margin[0], fullsize[0])
+    (oy, oY), (iy, iY) = margins(y, Y, blocksize[1],
+                                 margin[1], fullsize[1])
+    (ox, oX), (ix, iX) = margins(x, X, blocksize[2],
+                                 margin[2], fullsize[2])
+    ixyz = ix, iX, iy, iY, iz, iZ
+    oxyz = ox, oX, oy, oY, oz, oZ
+
+    # simply copy the data from input to output
+    """NOTE:
+    it is assumed that the inputs are not 4D labelimages
+    """
+    if ndim == 4:
+        ds_out[oz:oZ, oy:oY, ox:oX, :] = ds_in[iz:iZ, iy:iY, ix:iX, :]
+        h5file_in.close()
+        return
+    if ((not is_labelimage) or
+            ((not relabel) and
+             (not neighbourmerge) and
+             (not blockreduce))):
+        ds_out[oz:oZ, oy:oY, ox:oX] = ds_in[iz:iZ, iy:iY, ix:iX]
+        h5file_in.close()
+        return
+
+    # forward map to relabel the blocks in the output
+    if relabel:
+        fw, maxlabel = relabel_block(ds_in, maxlabel, usempi, mpi_info)
+        if save_fwmap:
+            root = os.path.splitext(h5file_in.filename)[0]
+            fpath = '{}_{}.npy'.format(root, ds_in.name[1:])
+            np.save(fpath, fw)
+        if (not neighbourmerge) and (not blockreduce):
+            ds_out[oz:oZ, oy:oY, ox:oX] = fw[ds_in[iz:iZ, iy:iY, ix:iX]]
+            h5file_in.close()
+            return
+    else:
+        ulabels = np.unique(ds_in[:])
+        fw = [l for l in range(0, np.amax(ulabels) + 1)]
+        fw = np.array(fw)
+
+    # blockwise reduction of input datasets
+    if blockreduce is not None:
+        data, ixyz, oxyz = blockreduce_datablocks(ds_in, ds_out,
+                                                  ixyz, oxyz,
+                                                  blockreduce, func)
+        ix, iX, iy, iY, iz, iZ = ixyz
+        ox, oX, oy, oY, oz, oZ = oxyz
+        margin = (int(margin[i]/blockreduce[i]) for i in range(0, 3))
+        if (not neighbourmerge):
+            ds_out[oz:oZ, oy:oY, ox:oX] = fw[data]
+            h5file_in.close()
+            return
+    else:
+        data = ds_in[iz:iZ, iy:iY, ix:iX]
+
+    # merge overlapping labels
+    fw = merge_overlap(fw, data, ds_out, oxyz, ixyz, margin)
+    ds_out[oz:oZ, oy:oY, ox:oX] = fw[data]
+    h5file_in.close()
 
 
 def relabel_block(ds_in, maxlabel, usempi=False, mpi_info=None):
