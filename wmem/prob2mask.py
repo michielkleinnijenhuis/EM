@@ -123,6 +123,7 @@ def prob2mask(
         # process slicewise
         mask = np.zeros_like(data)
         for i, slc in enumerate(data):
+            print('processing slice: {}'.format(i))
             smf, sdss = process_slice(slc,
                                       lower_threshold, upper_threshold,
                                       size, dilation, disk, save_steps)
@@ -174,18 +175,32 @@ def process_slice(data, lt, ut, size=0, dilation=0,
     mask_raw = mask.copy()
 
     if dilation:
-        mask = binary_dilation(mask, selem=se(dilation))
+        mask = dilate_mask(mask, dilation, se)
         mask_dil = mask.copy()
 
     if size:
-        mask_filter = remove_small_objects(mask, min_size=size)
-        mask_mito = np.logical_xor(mask, mask_filter)
+        mask_filter, mask_mito = sizefilter_mask(mask, size)
         mask = mask_filter
 
     if save_steps:
         return mask, (mask_raw, mask_mito, mask_dil)
     else:
         return mask, []
+
+
+def dilate_mask(mask, dilation=0, se=disk):
+
+    mask = binary_dilation(mask, selem=se(dilation))
+
+    return mask
+
+
+def sizefilter_mask(mask, size=0):
+
+    mask_filter = remove_small_objects(mask, min_size=size)
+    mask_mito = np.logical_xor(mask, mask_filter)
+
+    return mask_filter, mask_mito
 
 
 def frange(x, y, jump):
