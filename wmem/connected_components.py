@@ -298,7 +298,7 @@ def CC_2Dfilter(
         rank = mpi_info['rank']
 
         if rank == 0:
-            fws_reduced = np.zeros((maxlabel, len(map_propnames)),
+            fws_reduced = np.zeros((maxlabel + 1, len(map_propnames)),
                                    dtype='float')
         else:
             fws_reduced = None
