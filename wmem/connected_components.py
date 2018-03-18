@@ -238,7 +238,8 @@ def CC_2D(
             ds_out[:, :, i] = labels
 
     # save the maximum labelvalue in the dataset
-    if usempi & (rank == size - 1):
+    print("found %d labels" % (maxlabel))
+    if rank == size - 1:
         root = h5path_out.split('.h5')[0]
         fpath = root + '.npy'
         np.save(fpath, np.array([maxlabel]))
