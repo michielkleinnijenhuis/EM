@@ -57,7 +57,7 @@ def downsample_slices(
         regex='*.tif',
         ds_factor=4,
         dataslices=None,
-        use_mpi=False,
+        usempi=False,
         protective=False,
         ):
     """Downsample a series of 2D images."""
@@ -109,11 +109,11 @@ def downsample_slices(
     # Get the slice objects for the input data.
     slices = utils.get_slice_objects_prc(dataslices, zyxdims)
     # Prepare for processing with MPI.
+    mpi_info = utils.get_mpi_info(usempi)
     series = np.array(range(slices[0].start,
                             slices[0].stop,
                             slices[0].step), dtype=int)
-    if use_mpi:
-        mpi_info = utils.get_mpi_info()
+    if mpi_info['enabled']:
         series = utils.scatter_series(mpi_info, series)[0]
 
     # Downsample and save the images.

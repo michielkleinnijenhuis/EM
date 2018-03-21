@@ -124,13 +124,10 @@ def series2stack(
                   for sliceset_prc in slices_out_prc]
 
     # Prepare for processing with MPI.
+    mpi_info = utils.get_mpi_info(usempi)
     series = np.array(range(0, len(files_blocks)), dtype=int)
-    if usempi:
-        mpi_info = utils.get_mpi_info()
+    if mpi_info['enabled']:
         series = utils.scatter_series(mpi_info, series)[0]
-        comm = mpi_info['comm']
-    else:
-        comm = None
 
     # Open the outputfile for writing and create the dataset or output array.
     if '.h5' in outputformats:
@@ -139,7 +136,7 @@ def series2stack(
                                             element_size_um=element_size_um,
                                             axislabels=outlayout,
                                             chunks=tuple(chunksize),
-                                            usempi=usempi, comm=comm)
+                                            usempi=usempi, comm=mpi_info['comm'])
         outdir = os.path.dirname(outputpath.split('.h5')[0])
     else:
         ds_out = None

@@ -71,16 +71,11 @@ def evaluate_overlaps(
     h5file_in, ds_in, _, _ = utils.h5_load(h5path_in)
 
     # prepare mpi  # TODO: could allow selection of slices/subset here
+    mpi_info = utils.get_mpi_info(usempi)
     n_slices = ds_in.shape[slicedim] - offsets
     series = np.array(range(0, n_slices), dtype=int)
-    if usempi:
-        mpi_info = utils.get_mpi_info()
+    if mpi_info['enabled']:
         series = utils.scatter_series(mpi_info, series)[0]
-        comm = mpi_info['comm']
-        rank = mpi_info['rank']
-    else:
-        comm = None
-        rank = 0
 
     # merge overlapping neighbours
     MAlist = []
@@ -99,16 +94,17 @@ def evaluate_overlaps(
 
     # dump the list of overlapping neighbours in a pickle
     root = outputfile.split('.h5')[0]
-    mname = "_host-{}_rank-{:02d}.pickle".format(socket.gethostname(), rank)
+    mname = "_host-{}_rank-{:02d}.pickle".format(socket.gethostname(),
+                                                 mpi_info['rank'])
     with open(root + mname, "wb") as f:
         pickle.dump(MAlist, f)
 
     # wait for all processes to finish
-    if usempi:
-        comm.Barrier()
+    if mpi_info['enabled']:
+        mpi_info['comm'].Barrier()
 
     # let one process combine the overlaps found in the separate processes
-    if rank == 0:
+    if mpi_info['rank'] == 0:
         match = root + "_host*_rank*.pickle"
         infiles = glob.glob(match)
         for ppath in infiles:

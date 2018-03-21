@@ -165,19 +165,32 @@ def xyz_datashape(al, xyz):
     return datalayout
 
 
-def get_mpi_info(mpi_dtype=''):
+def get_mpi_info(usempi=False, mpi_dtype=''):
     """Get an MPI communicator."""
 
-    if not mpi_dtype:
-        mpi_dtype = MPI.SIGNED_LONG_LONG
-    comm = MPI.COMM_WORLD
+    if usempi:
 
-    mpi_info = {
-        'comm': comm,
-        'rank': comm.Get_rank(),
-        'size': comm.Get_size(),
-        'dtype': mpi_dtype
-        }
+        if not mpi_dtype:
+            mpi_dtype = MPI.SIGNED_LONG_LONG
+        comm = MPI.COMM_WORLD
+
+        mpi_info = {
+            'enabled': True,
+            'comm': comm,
+            'rank': comm.Get_rank(),
+            'size': comm.Get_size(),
+            'dtype': mpi_dtype
+            }
+
+    else:
+
+        mpi_info = {
+            'enabled': False,
+            'comm': None,
+            'rank': 0,
+            'size': 1,
+            'dtype': None,
+            }
 
     return mpi_info
 
@@ -435,12 +448,12 @@ def nii_load(dspath, load_data=False,
 def h5_load(dspath, load_data=False,
             dtype='', dataslices=None,
             inlayout=None, outlayout=None,
-            usempi=False, comm=None):
+            comm=None):
     """Load a h5 dataset."""
 
     basepath, h5path_dset = dspath.split('.h5')
     h5path_file = basepath + '.h5'
-    if usempi:
+    if comm is not None:
         h5file = h5py.File(h5path_file, 'r+', driver='mpio', comm=comm)
     else:
         h5file = h5py.File(h5path_file, 'r+')
@@ -525,31 +538,29 @@ def h5_write(data, shape, dtype,
              h5path_full, h5file=None,
              element_size_um=None, axislabels=None,
              chunks=True, compression="gzip",
-             usempi=False, driver=None, comm=None, rank=0,
+             comm=None, rank=0,
              slices=None):
     """Write a h5 dataset."""
 
-    if usempi:
+    if comm is not None:
         chunks = None
         compression = None
-        driver = 'mpio'
-        comm = comm
 
     if h5path_full:
 
         basepath, h5path_dset = h5path_full.split('.h5')
         if not isinstance(h5file, h5py.File):
             h5path_file = basepath + '.h5'
-            if usempi:
+            if comm is not None:
                 h5file = h5py.File(h5path_file, 'a',
-                                   driver=driver, comm=comm)
+                                   driver='mpio', comm=comm)
             else:
                 h5file = h5py.File(h5path_file, 'a')
 
         if h5path_dset in h5file:
             h5ds = h5file[h5path_dset]
         else:
-            if usempi:
+            if comm is not None:
                 h5ds = h5file.create_dataset(h5path_dset,
                                              shape=shape,
                                              dtype=dtype)

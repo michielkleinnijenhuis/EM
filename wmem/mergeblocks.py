@@ -81,12 +81,10 @@ def mergeblocks(
     """Merge blocks of data into a single hdf5 file."""
 
     # prepare mpi
+    mpi_info = utils.get_mpi_info(usempi)
     series = np.array(range(0, len(h5paths_in)), dtype=int)
-    if usempi:
-        mpi_info = utils.get_mpi_info()
+    if mpi_info['enabled']:
         series = utils.scatter_series(mpi_info, series)[0]
-    else:
-        mpi_info = {'comm': None, 'rank': 0, 'size': 1}
 
     # TODO: save_steps
     # check output paths
@@ -97,7 +95,6 @@ def mergeblocks(
 
     # open data for reading
     h5file_in, ds_in, elsize, axlab = utils.h5_load(h5paths_in[0],
-                                                    usempi=usempi,
                                                     comm=mpi_info['comm'])
     try:
         ndim = ds_in.ndim
@@ -202,7 +199,7 @@ def process_block(h5path_in, ndim, blockreduce, func,
 
     # forward map to relabel the blocks in the output
     if relabel:
-        fw, maxlabel = relabel_block(ds_in, maxlabel, usempi, mpi_info)
+        fw, maxlabel = relabel_block(ds_in, maxlabel, mpi_info)
         if save_fwmap:
             root = os.path.splitext(h5file_in.filename)[0]
             fpath = '{}_{}.npy'.format(root, ds_in.name[1:])
@@ -237,7 +234,7 @@ def process_block(h5path_in, ndim, blockreduce, func,
     h5file_in.close()
 
 
-def relabel_block(ds_in, maxlabel, usempi=False, mpi_info=None):
+def relabel_block(ds_in, maxlabel, mpi_info=None):
     """Relabel the labelvolume with consecutive labels."""
 
     """NOTE:
@@ -245,7 +242,7 @@ def relabel_block(ds_in, maxlabel, usempi=False, mpi_info=None):
     """
     fw = relabel_sequential(ds_in[:])[1]
 
-    if usempi:
+    if mpi_info['enabled']:
         # FIXME: only terminates properly when: nblocks % size = 0
         comm = mpi_info['comm']
         rank = mpi_info['rank']

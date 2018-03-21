@@ -189,25 +189,18 @@ def CC_2D(
         h5file_md, ds_md, _, _ = utils.h5_load(h5path_mask)
 
     # prepare mpi  # TODO: could allow selection of slices/subset here
+    mpi_info = utils.get_mpi_info(usempi)
     n_slices = ds_mm.shape[slicedim]
     series = np.array(range(0, n_slices), dtype=int)
-    if usempi:
-        mpi_info = utils.get_mpi_info()
+    if mpi_info['enabled']:
         series = utils.scatter_series(mpi_info, series)[0]
-        comm = mpi_info['comm']
-        rank = mpi_info['rank']
-        size = mpi_info['size']
-    else:
-        comm = None
-        rank = 0
-        size = 1
 
     # open data for writing
     h5file_out, ds_out = utils.h5_write(None, ds_mm.shape, 'uint32',
                                         h5path_out,
                                         element_size_um=elsize,
                                         axislabels=axlab,
-                                        usempi=usempi, comm=comm)
+                                        comm=mpi_info['comm'])
 
     # slicewise labeling
     maxlabel = 0
@@ -221,7 +214,7 @@ def CC_2D(
             labels, num = label(~slcMM, return_num=True)
         print("found %d labels in slice %d" % (num, i))
 
-        if usempi:
+        if mpi_info['enabled']:
             # NOTE: assumed max number of labels in slice is 10000
             labels[~slcMM] += 10000 * i
             if i == n_slices - 1:
@@ -239,7 +232,7 @@ def CC_2D(
 
     # save the maximum labelvalue in the dataset
     print("found %d labels" % (maxlabel))
-    if rank == size - 1:
+    if mpi_info['rank'] == mpi_info['size'] - 1:
         root = h5path_out.split('.h5')[0]
         fpath = root + '.npy'
         np.save(fpath, np.array([maxlabel]))
@@ -274,12 +267,15 @@ def CC_2Dfilter(
      min_euler_number,
      min_extent) = criteria
 
+    # prepare mpi
+    mpi_info = utils.get_mpi_info(usempi)
+
     # TODO: check output path
 
     # open data for reading
-    h5file_mm, ds_mm, _, _ = utils.h5_load(h5path_labels)
+    h5file_mm, ds_mm, _, _ = utils.h5_load(h5path_labels, comm=mpi_info['comm'])
     if h5path_int:
-        h5file_mb, ds_mb, _, _ = utils.h5_load(h5path_int)
+        h5file_mb, ds_mb, _, _ = utils.h5_load(h5path_int, comm=mpi_info['comm'])
     else:
         ds_mb = None
     # mask used as intensity image in mean_intensity criterium
@@ -291,20 +287,13 @@ def CC_2Dfilter(
     # prepare mpi
     n_slices = ds_mm.shape[slicedim]
     series = np.array(range(0, n_slices), dtype=int)
-    if usempi:
-        mpi_info = utils.get_mpi_info()
+    if mpi_info['enabled']:
         series = utils.scatter_series(mpi_info, series)[0]
-        comm = mpi_info['comm']
-        rank = mpi_info['rank']
-
-        if rank == 0:
+        if mpi_info['rank'] == 0:
             fws_reduced = np.zeros((maxlabel + 1, len(map_propnames)),
                                    dtype='float')
         else:
             fws_reduced = None
-    else:
-        comm = None
-        rank = 0
 
     fws = np.zeros((maxlabel + 1, len(map_propnames)),
                    dtype='float')
@@ -326,20 +315,20 @@ def CC_2Dfilter(
                 slcMB = None
             fws = check_constraints(slcMM, fws, map_propnames,
                                     criteria, slcMB, mapall)
-        if usempi:  # FIXME
-            comm.Reduce(fws, fws_reduced, op=MPI.MAX, root=0)
+        if mpi_info['enabled']:
+            mpi_info['comm'].Reduce(fws, fws_reduced, op=MPI.MAX, root=0)
         else:
             fws_reduced = fws
 
     else:
 
-        if rank == 0:
+        if mpi_info['rank'] == 0:
             fws = check_constraints(ds_mm, fws, map_propnames,
                                     criteria, ds_mb, mapall)
             fws_reduced = fws
 
     # write the forward maps to a numpy vector
-    if rank == 0:
+    if mpi_info['rank'] == 0:
         slc = int(n_slices/2)
         slcMM = ds_mm[slc, :, :]
         slcMB = ds_mb[slc, :, :] if h5path_int else None
@@ -355,7 +344,7 @@ def CC_2Dfilter(
     if h5path_int:
         h5file_mb.close()
 
-    if rank == 0:
+    if mpi_info['rank'] == 0:
         return outarray
 
 
@@ -384,12 +373,9 @@ def CC_2Dprops(
     # prepare mpi
     n_props = len(map_propnames)
     series = np.array(range(0, n_props), dtype=int)
-    if usempi:
-        mpi_info = utils.get_mpi_info()
+    mpi_info = utils.get_mpi_info(usempi)
+    if mpi_info['enabled']:
         series = utils.scatter_series(mpi_info, series)[0]
-        comm = mpi_info['comm']
-    else:
-        comm = None
 
     fws = {}
     for i in series:
@@ -406,7 +392,7 @@ def CC_2Dprops(
                                               h5path_prop,
                                               element_size_um=elsize,
                                               axislabels=axlab,
-                                              usempi=usempi, comm=comm)
+                                              comm=mpi_info['comm'])
 
         ds_prop[:, :, :] = fws[propname][ds_in[:, :, :]]
 
