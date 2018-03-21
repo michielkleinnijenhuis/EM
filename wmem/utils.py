@@ -144,6 +144,11 @@ def get_slice_objects_prc(dataslices, zyxdims):
     return slices
 
 
+def slices2sizes(slices):
+
+    return (len(range(*slc.indices(slc.stop))) for slc in slices)
+
+
 def xyz_datashape(al, xyz):
     """Get datashape from axislabels and bounds."""
 
