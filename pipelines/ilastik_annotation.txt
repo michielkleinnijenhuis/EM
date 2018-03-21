@@ -1,13 +1,22 @@
-myelin
-myelin_inner
-myelin_outer
-mitobound
-mito
-ICS_MA
-membrane
-ICS_UA
+Features: (n=11)
+- Gaussian smoothing: sigma=1.0; sigma=5.0;
+- Gaussian gradient magnitude: sigma=3.5; sigma=10.0;
+- Structure tensor eigenvalues: sigma=1.0; sigma=1.6; sigma=3.5; sigma=5.0; sigma=10.0;
+- Hessian of Gaussian eigenvalues sigma=1.6; sigma=3.5; 
 
-min 3 full slices (115, 215, 315)
- @ 25 min per slice 500x500
-min 6 additional slices for mitobound+mito (140, 165, 190, 240, 265, 290)
- @ 2 min per slice 500x500
+Labels:
+- myelin (centre of myelin sheaths)
+- ICS (intracellular space of myelinated axons)
+- mito (mitochondria centre)
+- membrane (membranes of unmyelinated axons)
+- myelinbound (innner boundary of myelin sheaths)
+- mitobound (mitochondria outer boundary)
+- ICS_UA (intracellular space of unmyelinated axons)
+- myelin_outer (outer boundary of myelin sheaths)
+Drawing order: myelin - myelinbound - myelin_outer - mito - mitobound - ICS - membrane - ICS-UA
+
+Annotations:
+- min 3 full slices (115, 215, 315)
+   @ 25 min per slice 500x500
+- min 6 additional slices for mitobound+mito (140, 165, 190, 240, 265, 290)
+   @ 2 min per slice 500x500
