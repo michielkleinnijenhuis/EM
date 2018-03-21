@@ -34,6 +34,7 @@ def main(argv):
         args.dset_name,
         args.blocksize,
         args.margin,
+        args.blockrange,
         args.usempi & ('mpi4py' in sys.modules),
         args.outputdir,
         args.save_steps,
@@ -46,6 +47,7 @@ def splitblocks(
         dset_name,
         blocksize=[500, 500, 500],
         margin=[20, 20, 20],
+        blockrange=[],
         usempi=False,
         outputdir='',
         save_steps=False,
@@ -73,6 +75,8 @@ def splitblocks(
 
     # Divide the data into a series of blocks.
     blocks = get_blocks(ds_in.shape, blocksize, margin, h5path_tpl)
+    if blockrange:
+        blocks = blocks[blockrange[0]:blockrange[1]]
     series = np.array(range(0, len(blocks)), dtype=int)
     if mpi_info['enabled']:
         series = utils.scatter_series(mpi_info, series)[0]

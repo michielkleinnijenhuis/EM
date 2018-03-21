@@ -274,6 +274,13 @@ def parse_splitblocks(parser):
         default=[20, 20, 20],
         help='the datablock overlap used'
         )
+    parser.add_argument(
+        '-r', '--blockrange',
+        nargs=2,
+        type=int,
+        default=[],
+        help='a range of blocks to process'
+        )
 
     parser.add_argument(
         '-o', '--outputdir',
