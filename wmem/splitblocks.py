@@ -67,12 +67,12 @@ def splitblocks(
     fname = '{}_{}{}.h5'.format(dset_name, '{}', postfix)
     h5path_tpl = os.path.join(outputdir, fname, h5path_dset)
 
-    # open data for reading
-    h5file_in, ds_in, elsize, axlab = utils.h5_load(h5path_in,
-                                                    comm=mpi_info['comm'])
+    # Open data for reading.
+    h5_info = utils.h5_load(h5path_in, comm=mpi_info['comm'])
+    h5file_in, ds_in, elsize, axlab = h5_info
 
+    # Divide the data into a series of blocks.
     blocks = get_blocks(ds_in.shape, blocksize, margin, h5path_tpl)
-
     series = np.array(range(0, len(blocks)), dtype=int)
     if mpi_info['enabled']:
         series = utils.scatter_series(mpi_info, series)[0]
@@ -80,7 +80,7 @@ def splitblocks(
     # Write blocks to the outputfile(s).
     for blocknr in series:
         block = blocks[blocknr]
-        write_block(ds_in, elsize, axlab, usempi, mpi_info, block)
+        write_block(ds_in, elsize, axlab, mpi_info, block)
 
     # Close the h5 files or return the output array.
     try:
