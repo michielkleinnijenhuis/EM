@@ -120,14 +120,16 @@ def mergeblocks(
     h5file_in.close()
 
     # open data for writing
-    h5file_out, ds_out = utils.h5_write(None, outsize, datatype,
-                                        h5path_out,
-                                        chunks=chunks,
-                                        element_size_um=elsize,
-                                        axislabels=axlab,
-                                        usempi=usempi,
-                                        comm=mpi_info['comm'],
-                                        rank=mpi_info['rank'])
+    h5file_out, ds_out = utils.h5_write(
+        data=None,
+        shape=outsize,
+        dtype=datatype,
+        h5path_full=h5path_out,
+        chunks=chunks,
+        element_size_um=elsize,
+        axislabels=axlab,
+        comm=mpi_info['comm']
+        )
 
     # merge the datasets
     maxlabel = 0
