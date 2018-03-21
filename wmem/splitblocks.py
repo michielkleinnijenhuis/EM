@@ -80,7 +80,7 @@ def splitblocks(
     # Write blocks to the outputfile(s).
     for blocknr in series:
         block = blocks[blocknr]
-        write_block(ds_in, elsize, axlab, mpi_info, block)
+        write_block(ds_in, elsize, axlab, block)
 
     # Close the h5 files or return the output array.
     try:
@@ -132,25 +132,32 @@ def get_blockbounds(shape, blocksize, margin):
     return zip(starts, stops)
 
 
-def write_block(ds_in, elsize, axlab, mpi_info, block):
+def write_block(ds_in, elsize, axlab, block):
     """Write the block to file."""
+
+    shape = list(block['size'])
+    if ds_in.ndim == 4:
+        shape += [ds_in.shape[3]]
+
+    chunks = ds_in.chunks
+    if any(np.array(chunks) > np.array(shape)):
+        chunks = True
 
     h5file_out, ds_out = utils.h5_write(
         data=None,
-        shape=block['size'],
+        shape=shape,
         dtype=ds_in.dtype,
         h5path_full=block['h5path'],
-        chunks=ds_in.chunks,
+        chunks=chunks,
         element_size_um=elsize,
         axislabels=axlab,
-        comm=mpi_info['comm'],
         )
 
     slcs = block['slc']
     if ds_in.ndim == 3:
-        ds_out = ds_in[slcs[0], slcs[1], slcs[2]]
+        ds_out[:] = ds_in[slcs[0], slcs[1], slcs[2]]
     elif ds_in.ndim == 4:
-        ds_out = ds_in[slcs[0], slcs[1], slcs[2], :]
+        ds_out[:] = ds_in[slcs[0], slcs[1], slcs[2], :]
 
     h5file_out.close()
 
