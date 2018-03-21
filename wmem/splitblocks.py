@@ -143,9 +143,7 @@ def write_block(ds_in, elsize, axlab, mpi_info, block):
         chunks=ds_in.chunks,
         element_size_um=elsize,
         axislabels=axlab,
-        usempi=mpi_info['enabled'],
         comm=mpi_info['comm'],
-        rank=mpi_info['rank']
         )
 
     slcs = block['slc']
