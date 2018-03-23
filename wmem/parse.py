@@ -508,6 +508,66 @@ def parse_connected_components(parser):
     return parser
 
 
+def parse_connected_components_clf(parser):
+
+    parser.add_argument(
+        'classifierpath',
+        help='the path to the classifier'
+        )
+    parser.add_argument(
+        'scalerpath',
+        help='the path to the scaler'
+        )
+    parser.add_argument(
+        '-m', '--mode',
+        default='test',
+        help='...'
+        )
+
+    parser.add_argument(
+        '-i', '--inputfile',
+        default='',
+        help='the path to the input dataset'
+        )
+    parser.add_argument(
+        '-o', '--outputfile',
+        default='',
+        help='the path to the output dataset'
+        )
+    parser.add_argument(
+        '-a', '--maskfile',
+        default='',
+        help='the path to the output dataset'
+        )
+
+    parser.add_argument(
+        '-A', '--max_area',
+        type=int,
+        default=None,
+        help='...'
+        )
+    parser.add_argument(
+        '-I', '--max_intensity_mb',
+        type=float,
+        default=None,
+        help='...'
+        )
+
+    parser.add_argument(
+        '-b', '--basename',
+        default='',
+        help='...'
+        )
+
+    parser.add_argument(
+        '-p', '--map_propnames',
+        nargs='*',
+        help='...'
+        )
+
+    return parser
+
+
 def parse_merge_slicelabels(parser):
 
     parser.add_argument(
