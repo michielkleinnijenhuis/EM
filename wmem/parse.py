@@ -1189,3 +1189,47 @@ def parse_combine_vols(parser):
 
     return parser
 
+
+def parse_slicvoxels(parser):
+
+    parser.add_argument(
+        'inputfile',
+        help="""path to hdf5 dataset <filepath>.h5/<...>/<dataset>:
+                """
+        )
+    parser.add_argument(
+        'outputfile',
+        default='',
+        help="""path to hdf5 dataset <filepath>.h5/<...>/<dataset>:
+                """
+        )
+
+    parser.add_argument(
+        '-l', '--slicvoxelsize',
+        type=int,
+        default=500,
+        help="""target size of the slicvoxels""",
+        )
+
+    parser.add_argument(
+        '-c', '--compactness',
+        type=float,
+        default=0.2,
+        help="""compactness of the slicvoxels""",
+        )
+
+    parser.add_argument(
+        '-s', '--sigma',
+        type=float,
+        default=1,
+        help='Gaussian smoothing sigma for preprocessing',
+        )
+
+    parser.add_argument(
+        '-e', '--enforce_connectivity',
+        action='store_true',
+        help='enforce connectivity of the slicvoxels',
+        )
+
+    return parser
+
