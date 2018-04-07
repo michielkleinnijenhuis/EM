@@ -150,7 +150,7 @@ def delete_labelsets(labels, delete_labels=[], delete_files=[],
               for l in range(0, np.amax(ulabels) + 1)]
         labels[:] = np.array(fw)[labels[:]]
 
-    return labels, fw
+        return labels, fw
 
 
 def split_labelsets(labels, split_labels=[], split_files=[],
@@ -234,7 +234,7 @@ def merge_labelsets(labels, merge_labels=[], merge_files=[]):
 
         labels[:] = np.array(fw)[labels[:]]
 
-    return labels, fw
+        return labels, fw
 
 
 def filter_segments(labels, min_segmentsize=0, keep_only_largest=False):
