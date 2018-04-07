@@ -110,6 +110,7 @@ done
 ###=========================================================================###
 pf='_masks'
 rsync -Pazv $host:$datadir_rem/$dataset_ds$pf.h5 $datadir
+
 pf='maskMM'
 python $scriptdir/wmem/stack2stack.py \
 $datadir/${dataset_ds}_masks.h5/$pf \
@@ -119,9 +120,11 @@ pf='maskMA'
 python $scriptdir/wmem/prob2mask.py \
 ${datadir}/${dataset_ds}_probs1_eed2.h5/probs_eed \
 ${datadir}/${dataset_ds}_masks.h5/$pf -l 0.2
+
 python $scriptdir/wmem/stack2stack.py \
 $datadir/${dataset_ds}_masks.h5/$pf \
 $datadir/${dataset_ds}_masks_$pf.nii.gz
+
 python $scriptdir/wmem/connected_components.py \
 $datadir/${dataset_ds}_masks.h5/maskMA \
 $datadir/${dataset_ds}_labels.h5/labelMA_core3D \

@@ -37,12 +37,12 @@ datadir=$basedir/${dataset} && mkdir -p $datadir && cd $datadir
 bs=0500 && mkdir -p $datadir/blocks_${bs} && source datastems_blocks_${bs}.sh
 
 for tif in 'tif_ds'; do  # 'tif'
-mkdir $datadir/$tif/artefacts
-for i in `seq 4 9`; do
-mv $datadir/$tif/002$i?.tif $datadir/$tif/artefacts
-done
-mv $datadir/$tif/003??.tif $datadir/$tif/artefacts
-mv $datadir/$tif/004??.tif $datadir/$tif/artefacts
+    mkdir $datadir/$tif/artefacts
+    for i in `seq 4 9`; do
+        mv $datadir/$tif/002$i?.tif $datadir/$tif/artefacts
+    done
+    mv $datadir/$tif/003??.tif $datadir/$tif/artefacts
+    mv $datadir/$tif/004??.tif $datadir/$tif/artefacts
 done
 
 
@@ -191,7 +191,7 @@ export template='single' additions='' CONDA_ENV=''
 export njobs=1 nodes=1 tasks=1 memcpu=6000 wtime='00:10:00' q='d'
 export jobname='train'
 export cmd="python $scriptdir/wmem/stack2stack.py \
-${basepath}.h5/data $datadir/blocks/datastem.h5/data -p datastem"
+    ${basepath}.h5/data $datadir/blocks/datastem.h5/data -p datastem"
 source $scriptdir/pipelines/template_job_$template.sh
 
 # sync the training data to LOCAL
@@ -234,14 +234,14 @@ export template='single' additions='' CONDA_ENV=''
 export njobs=1 nodes=1 tasks=16 memcpu=125000 wtime='23:00:00' q=''
 export jobname='ilastik'
 export cmd="export LAZYFLOW_THREADS=16; export LAZYFLOW_TOTAL_RAM_MB=110000;\
-$ilastik --headless \
---preconvert_stacks \
---project=$datadir/$pixprob_trainingset.ilp \
---output_axis_order=zyxc \
---output_format='compressed hdf5' \
---output_filename_format=$datadir/${dataset}_probs.h5 \
---output_internal_path=volume/predictions \
-$datadir/$dataset.h5/data"
+    $ilastik --headless \
+    --preconvert_stacks \
+    --project=$datadir/$pixprob_trainingset.ilp \
+    --output_axis_order=zyxc \
+    --output_format='compressed hdf5' \
+    --output_filename_format=$datadir/${dataset}_probs.h5 \
+    --output_internal_path=volume/predictions \
+    $datadir/$dataset.h5/data"
 source $scriptdir/pipelines/template_job_$template.sh
 
 # correct element_size_um attribute  # TODO: make into function/module
@@ -258,7 +258,7 @@ echo "h5dset_out = dataset + '_probs.h5/volume/predictions'" >> $pyfile
 echo "h5path_out = os.path.join(datadir, h5dset_out)" >> $pyfile
 echo "h5_out, ds_out, _, _ = utils.h5_load(h5path_out)" >> $pyfile
 echo "es = np.append(ds_in.attrs['element_size_um'], 1)" >> $pyfile
-echo "h5_write_attributes(ds_out, element_size_um=es)" >> $pyfile
+echo "utils.h5_write_attributes(ds_out, element_size_um=es)" >> $pyfile
 echo "h5_in.close()" >> $pyfile
 echo "h5_out.close()" >> $pyfile
 
@@ -290,17 +290,17 @@ export njobs=$(( ($nstems + tasks-1) / $tasks))
 export nodes=1 memcpu=6000 wtime='00:10:00' q='h'
 export jobname='split'
 export cmd="python $scriptdir/wmem/stack2stack.py \
-$datadir/${dataset}_probs.h5/volume/predictions \
-$datadir/blocks_${bs}/datastem_probs.h5/volume/predictions \
--p datastem"
+    $datadir/${dataset}_probs.h5/volume/predictions \
+    $datadir/blocks_${bs}/datastem_probs.h5/volume/predictions \
+    -p datastem"
 source $scriptdir/pipelines/template_job_$template.sh
 
 for i in `seq 0 $((njobs-1))`; do
-sed -i -e "s/node=$tasks/node=1/g" EM_${jobname}_$i.sh
-sed -i -e "s/ &//g" EM_${jobname}_$i.sh
-sed -i -e "s/wait//g" EM_${jobname}_$i.sh
-# sbatch EM_${jobname}_$i.sh
-sbatch -p devel EM_${jobname}_$i.sh
+    sed -i -e "s/node=$tasks/node=1/g" EM_${jobname}_$i.sh
+    sed -i -e "s/ &//g" EM_${jobname}_$i.sh
+    sed -i -e "s/wait//g" EM_${jobname}_$i.sh
+    # sbatch EM_${jobname}_$i.sh
+    sbatch -p devel EM_${jobname}_$i.sh
 done
 
 
@@ -318,9 +318,9 @@ export njobs=$(( ($nstems + tasks-1) / $tasks))
 export nodes=1 memcpu=6000 wtime='00:10:00' q='d'
 export jobname='sumvols0247'
 export cmd="python $scriptdir/wmem/combine_vols.py \
-$datadir/blocks_${bs}/datastem_probs.h5/volume/predictions \
-$datadir/blocks_${bs}/datastem_probs.h5/sum0247 \
--i 0 2 4 7"
+    $datadir/blocks_${bs}/datastem_probs.h5/volume/predictions \
+    $datadir/blocks_${bs}/datastem_probs.h5/sum0247 \
+    -i 0 2 4 7"
 source $scriptdir/pipelines/template_job_$template.sh
 
 # ICS compartment [1:myelinated_axons, 6:unmyelinated_axons]
@@ -332,14 +332,14 @@ export njobs=$(( ($nstems + tasks-1) / $tasks))
 export nodes=1 memcpu=6000 wtime='00:10:00' q=''
 export jobname='sumvols16'
 export cmd="python $scriptdir/wmem/combine_vols.py \
-$datadir/blocks_${bs}/datastem_probs.h5/volume/predictions \
-$datadir/blocks_${bs}/datastem_probs.h5/sum16 \
--i 1 6"
+    $datadir/blocks_${bs}/datastem_probs.h5/volume/predictions \
+    $datadir/blocks_${bs}/datastem_probs.h5/sum16 \
+    -i 1 6"
 source $scriptdir/pipelines/template_job_$template.sh
 
 
 ###=========================================================================###
-### EED
+### edge enhancing diffusion filter
 ###=========================================================================###
 module load hdf5-parallel/1.8.17_mvapich2_gcc
 module load matlab/R2015a
@@ -350,53 +350,24 @@ mcc -v -R -nojvm -R -singleCompThread -f ./mbuildopts.sh \
 -a $HOME/oxscripts/matlab/toolboxes/coherencefilter_version5b
 cd $datadir
 
-for layer in `seq 0 2`; do
-export bs='0500' && source datastems_blocks_${bs}.sh
-postfix="_probs${layer}_eed2"
-source find_missing_datastems.sh $postfix 'h5' ${datadir}/blocks_${bs}/
-export nstems=${#datastems[@]} && echo $nstems
-export tasks=16
-export njobs=$(( ($nstems + tasks-1) / $tasks))
-export template='array' additions='' CONDA_ENV=''
-export nodes=1 memcpu=50000 wtime='01:10:00' q=''
-export jobname="eed$layer"
-export cmd="$datadir/bin/EM_eed_simple \
-'$datadir/blocks_${bs}' 'datastem_probs' '/volume/predictions' '/probs_eed' \
-'$((layer+1))' '50' '1' '1' \
-> $datadir/blocks_${bs}/datastem_probs_$jobname.log"
-source $scriptdir/pipelines/template_job_$template.sh
-source datastems_blocks_${bs}.sh
-done
+# for each of these:
+h5_in='probs'; dset_in='volume/predictions'; h5_out='probs_eed'; dset_out='probs_eed'; wtime='10:10:00';
+h5_in='probs'; dset_in='sum0247'; h5_out='probs_eed'; dset_out='sum0247_eed'; wtime='01:10:00';
+h5_in='probs'; dset_in='sum16'; h5_out='probs_eed'; dset_out='sum16_eed'; wtime='01:10:00';
 
 export bs='0500' && source datastems_blocks_${bs}.sh
-postfix='_probs0247_eed2'
-source find_missing_datastems.sh $postfix 'h5' ${datadir}/blocks_${bs}/
+source find_missing_h5.sh "${datadir}/blocks_${bs}/" "_$h5_out" "/$dset_out"
 export nstems=${#datastems[@]} && echo $nstems
 export tasks=16
 export njobs=$(( ($nstems + tasks-1) / $tasks))
 export template='array' additions='' CONDA_ENV=''
-export nodes=1 memcpu=50000 wtime='01:10:00' q=''
-export jobname='eed0247'
+export nodes=1 memcpu=50000 q=''
+export jobname="$h5_out.$dset_out"
 export cmd="$datadir/bin/EM_eed_simple \
-'$datadir/blocks_${bs}' 'datastem_probs' '/sum0247' '/probs_eed' \
-'0' '50' '1' '1' \
-> $datadir/blocks_${bs}/datastem_probs_$jobname.log"
-source $scriptdir/pipelines/template_job_$template.sh
-source datastems_blocks_${bs}.sh
-
-export bs='0500' && source datastems_blocks_${bs}.sh
-postfix='_probs16_eed2'
-source find_missing_datastems.sh $postfix 'h5' ${datadir}/blocks_${bs}/
-export nstems=${#datastems[@]} && echo $nstems
-export tasks=16
-export njobs=$(( ($nstems + tasks-1) / $tasks))
-export template='array' additions='' CONDA_ENV=''
-export nodes=1 memcpu=50000 wtime='01:10:00' q=''
-export jobname='eed16'
-export cmd="$datadir/bin/EM_eed_simple \
-'$datadir/blocks_${bs}' 'datastem_probs' '/sum16' '/probs_eed' \
-'0' '50' '1' '1' \
-> $datadir/blocks_${bs}/datastem_probs_$jobname.log"
+    '$datadir/blocks_${bs}' \
+    'datastem_${h5_in}' '/$dset_in' 'datastem_${h5_out}' '/$dset_out' \
+    '0' '50' '1' '1' \
+    > $datadir/blocks_${bs}/datastem_$jobname.log"
 source $scriptdir/pipelines/template_job_$template.sh
 source datastems_blocks_${bs}.sh
 
@@ -405,96 +376,166 @@ source datastems_blocks_${bs}.sh
 ### merge blocks
 ###=========================================================================###
 
-export template='single' additions='conda' CONDA_ENV='root'
-export njobs=1 nodes=1 tasks=1 memcpu=25000 wtime='00:10:00' q='d'
-
-for pf in '_probs0_eed2' '_probs1_eed2' '_probs2_eed2' \
-'_probs0247_eed2' '_probs16_eed2'; do
-export jobname="mEED${pf}"
-infiles=()
-for file in `ls $datadir/blocks_${bs}/*00184${pf}.h5`; do
-    infiles+=("${file}/probs_eed")
-done
-export cmd="python $scriptdir/wmem/mergeblocks.py \
-"${infiles[@]}" $datadir/${dataset}${pf}.h5/probs_eed \
--b $zo $yo $xo -p $zs $ys $xs -q $zm $ym $xm -s $zmax $ymax $xmax"
-source $scriptdir/pipelines/template_job_$template.sh
-done
-
-
-###=========================================================================###
-### maskDS, maskMM, maskMA, maskICS
-###=========================================================================###
-# on full vol (without parallel, but not memory-intensive)
-
-mpf='maskDS'; pf=; arg='-l 0 -u 10000000'; blocksize=20;  # TODO: dilate?
-mpf='maskMA'; pf='_probs1_eed2'; arg='-l 0.2'; blocksize=20;
-mpf='maskMM'; pf='_probs0247_eed2'; arg='-l 0.5 -s 2000 -d 1 -S'; blocksize=20;
-mpf='maskICS'; pf='_probs16_eed2'; arg='-l 0.2'; blocksize=20;
-# for blocksize: h5dump -pH $datadir/${dataset}${pf}.h5 | grep CHUNKED
+function get_cmd_mergeblocks {
+    get_infiles
+    echo python $scriptdir/wmem/mergeblocks.py \
+        "${infiles[@]}" $datadir/$dataset$ipf.h5/$ids \
+        -b $zo $yo $xo -p $zs $ys $xs -q $zm $ym $xm -s $zmax $ymax $xmax
+}
 
 export template='single' additions='conda' CONDA_ENV='root'
-export njobs=1 nodes=1 tasks=1 memcpu=60000 wtime='02:00:00' q=''
-export jobname=$mpf
-cmd=
-for z in `seq 0 $blocksize $zs`; do
-Z=$((z+blocksize)) && Z=$(( Z < zs ? Z : zs ))
-export cmd+="python $scriptdir/wmem/prob2mask.py \
-$datadir/${dataset}${pf}.h5/stack \
-$datadir/${dataset}_masks.h5/$mpf \
-$arg -D $z $Z 1 0 0 1 0 0 1; "
+export njobs=1 nodes=1 tasks=1 memcpu=25000 wtime='01:10:00' q='h'
+for ipf in '_probs'; do
+    for ids in 'probs_eed' 'sum0247_eed' 'sum16_eed'; do
+        export jobname="mEED$ipf.$ids"
+        cmd=$(get_cmd_mergeblocks)
+        source $scriptdir/pipelines/template_job_$template.sh
+    done
 done
-source $scriptdir/pipelines/template_job_$template.sh
+
+###=========================================================================###
+### maskDS, maskMM, maskMA, maskICS  # on full vol (without parallel, but not memory-intensive)
+###=========================================================================###
+
+function get_cmd_prob2mask {
+    for z in `seq 0 $blocksize $zmax`; do
+        get_Z
+        echo python $scriptdir/wmem/prob2mask.py \
+            $datadir/$dataset$ipf.h5/$ids \
+            $datadir/$dataset$opf.h5/$ods \
+            -g $arg -D $z $Z 1 0 0 1 0 0 1 $vol_slice
+    done
+}
+
+# for blocksize: h5dump -pH $datadir/${dataset}${ipf}.h5 | grep CHUNKED
+
+declare -a VARSETS
+VARSETS[0]="ipf=; ids='data'; \
+    opf='_masks'; ods='maskDS'; \
+    arg='-l 0 -u 10000000'; blocksize=20; vol_slice=;"  # TODO: dilate?
+VARSETS[1]="ipf='_probs_eed'; ids='sum0247_eed'; \
+    opf='_masks'; ods='maskMM'; \
+    arg='-l 0.5 -s 2000 -d 1 -S'; blocksize=20; vol_slice=;"
+VARSETS[2]="ipf='_probs_eed'; ids='sum16_eed'; \
+    opf='_masks'; ods='maskICS'; \
+    arg='-l 0.2'; blocksize=20; vol_slice=;"
+VARSETS[3]="ipf='_probs_eed'; ids='probs_eed'; \
+    opf='_masks'; ods='maskMA'; \
+    arg='-l 0.2'; blocksize=10; vol_slice='1 2 1';"  # NOTE: keep blocksize < 10
+
+# submit a job
+export template='single' additions='conda' CONDA_ENV='root'
+export njobs=1 nodes=1 tasks=1 memcpu=60000 wtime='00:10:00' q='d'
+
+for vars in "${VARSETS[@]}"; do
+    # set the variables
+    awkfunction='{ for(i=0;i<=NF;i++) {printf "%s\n", $i} }'
+    eval $( echo "${vars}" | awk -F ';' "$awkfunction" )
+    # submit the job
+    export jobname=$ods
+    unset cmd && read -r -d '' cmd <<- EOM
+    $(get_cmd_prob2mask)
+EOM
+    source $scriptdir/pipelines/template_job_$template.sh
+done
+
+
+# supply jobnamegenerator and function
+function submit_jobs {
+    for vars in "${VARSETS[@]}"; do
+        # set the variables
+        awkfunction='{ for(i=0;i<=NF;i++) {printf "%s\n", $i} }'
+        eval $( echo "${vars}" | awk -F ';' "$awkfunction" )
+        # submit the job
+        export jobname="$2"
+        unset cmd && read -r -d '' cmd <<- EOM
+        $($1)
+EOM
+        source $scriptdir/pipelines/template_job_$template.sh
+done
+}
+export template='single' additions='conda' CONDA_ENV='root'
+export njobs=1 nodes=1 tasks=1 memcpu=60000 wtime='00:10:00' q='d'
+submit_jobs get_cmd_prob2mask '$ods'
 
 
 ###=========================================================================###
 ### blockreduce
 ###=========================================================================###
 
-dspf='ds'; ds=7;
+function get_cmd_downsample_blockwise {
+    for z in `seq 0 $blocksize $zmax`; do
+        get_Z
+        echo python $scriptdir/wmem/downsample_blockwise.py \
+            $datadir/$dataset$ipf.h5/$ids \
+            $datadir/$dataset_ds$opf.h5/$ods \
+            -B 1 $ds $ds $vol_br -f $fun \
+            -D $z $Z 1 0 0 1 0 0 1 $vol_slice
+    done
+}
 
-# downsample data
-pf=; mpf='data'; blockred="1 ${ds} ${ds}"; blocksize=20; dataslices='0 0 1 0 0 1';
-pf='_probs0_eed2'; mpf='probs_eed'; blockred="1 ${ds} ${ds}"; blocksize=20; dataslices='0 0 1 0 0 1';
-pf='_probs1_eed2'; mpf='probs_eed'; blockred="1 ${ds} ${ds}"; blocksize=20; dataslices='0 0 1 0 0 1';
-pf='_probs2_eed2'; mpf='probs_eed'; blockred="1 ${ds} ${ds}"; blocksize=20; dataslices='0 0 1 0 0 1';
-pf='_probs'; mpf='volume/predictions'; blockred="1 ${ds} ${ds} 1"; blocksize=10; dataslices='0 0 1 0 0 1 0 0 1'
+declare -a VARSETS
+# downsample data with 'np.mean': work with datablocks
+VARSETS[0]="ipf=; ids=data; \
+    opf=; ods=data; \
+    fun='np.mean'; vol_br=; \
+    blocksize=20; vol_slice=; \
+    memcpu=60000; wtime=02:00:00; q=;"
+VARSETS[1]="ipf=_probs_eed; ids=sum0247_eed; \
+    opf=_probs_eed; ods=sum0247_eed; \
+    fun='np.mean'; vol_br=; \
+    blocksize=20; vol_slice=; \
+    memcpu=60000; wtime=02:00:00; q=;"
+VARSETS[2]="ipf=_probs_eed; ids=sum16_eed; \
+    opf=_probs_eed; ods=sum16_eed; \
+    fun='np.mean'; vol_br=; \
+    blocksize=20; vol_slice=; \
+    memcpu=60000; wtime=02:00:00; q=;"
+VARSETS[3]="ipf=_probs_eed; ids=probs_eed; \
+    opf=_probs_eed; ods=probs_eed; \
+    fun='np.mean'; vol_br=1; \
+    blocksize=10; vol_slice='0 0 1'; \
+    memcpu=125000; wtime=10:00:00; q=;"
+VARSETS[4]="ipf=_probs; ids=volume/predictions; \
+    opf=_probs; ods=volume/predictions; \
+    fun='np.mean'; vol_br=1; \
+    blocksize=10; vol_slice='0 0 1'; \
+    memcpu=125000; wtime=10:00:00; q=;"
+# # downsample masks with 'np.amax'; can work with the full volume
+VARSETS[5]="ipf=_masks; ids=maskDS; \
+    opf=_masks; ods=maskDS; \
+    fun='np.amax'; vol_br=; \
+    blocksize=$zmax; vol_slice=; \
+    memcpu=60000; wtime=00:10:00; q='d';"
+VARSETS[6]="ipf=_masks; ids=maskMM;
+    opf=_masks; ods=maskMM; \
+    fun='np.amax'; vol_br=; \
+    blocksize=$zmax; vol_slice=; \
+    memcpu=60000; wtime=00:10:00; q='d';"
+VARSETS[7]="ipf=_masks; ids=maskMA; \
+    opf=_masks; ods=maskMA; \
+    fun='np.amax'; vol_br=; \
+    blocksize=$zmax; vol_slice=; \
+    memcpu=60000; wtime=00:10:00; q='d';"
+VARSETS[8]="ipf=_masks; ids=maskICS; \
+    opf=_masks; ods=maskICS; \
+    fun='np.amax'; vol_br=; \
+    blocksize=$zmax; vol_slice=; \
+    memcpu=60000; wtime=00:10:00; q='d';"
 
 export template='single' additions='conda' CONDA_ENV='root'
-export njobs=1 nodes=1 tasks=1 memcpu=125000 wtime='10:00:00' q=''
-# export memcpu=60000 wtime='02:00:00'
-export jobname="rb_${dspf}${ds}${pf}${mpf}"
-cmd=
-for z in `seq 0 $blocksize $zs`; do
-Z=$((z+blocksize))
-Z=$(( Z < zs ? Z : zs ))
-export cmd+="python $scriptdir/wmem/downsample_blockwise.py \
-$datadir/${dataset}${pf}.h5/${mpf} \
-$datadir/${dataset_ds}${pf}.h5/data \
--B $blockred -f 'np.mean' -D $z $Z 1 $dataslices; "
-done
-source $scriptdir/pipelines/template_job_$template.sh
-
-# downsample masks
-pf='_masks'; fun='np.amax';
-export template='single' additions='conda' CONDA_ENV='root'
-export njobs=1 nodes=1 tasks=1 memcpu=60000 wtime='00:10:00' q='d'
-export jobname="rb_${dspf}${pf}"
-for mpf in 'maskDS' 'maskMM' 'maskMA' 'maskICS'; do
-    export jobname="rb_${dspf}${ds}${pf}${mpf}"
-    export cmd="python $scriptdir/wmem/downsample_blockwise.py \
-    $datadir/${dataset}${pf}.h5/$mpf \
-    $datadir/${dataset_ds}${pf}.h5/$mpf \
-    -B 1 ${ds} ${ds} -f '$fun'"
+export njobs=1 nodes=1 tasks=1
+for vars in "${VARSETS[@]}"; do
+    # set the variables
+    awkfunction='{ for(i=0;i<=NF;i++) {printf "%s\n", $i} }'
+    eval $( echo "${vars}" | awk -F ';' "$awkfunction" )
+    # submit the job
+    export jobname="rb_$dspf$ds$ipf$ids"
+    unset cmd && read -r -d '' cmd <<- EOM
+    $(get_cmd_downsample_blockwise)
+EOM
     source $scriptdir/pipelines/template_job_$template.sh
 done
-
-
-
-
-
-
-
 
 
 # ###=========================================================================###

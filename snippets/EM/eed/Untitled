@@ -1,0 +1,28 @@
+#!/bin/bash
+
+#PBS -l nodes=1:ppn=16
+#PBS -l mem=30G
+#PBS -l walltime=00:10:00
+#PBS -N EM_mergeblocks_probs_eed.probs_eed
+#PBS -V
+cd $PBS_O_WORKDIR
+. enable_arcus_mpi.sh
+export PYTHONPATH=/home/ndcn-fmrib-water-brain/ndcn0180/workspace/pyDM3reader:/home/ndcn-fmrib-water-brain/ndcn0180/workspace/EM:/system/software/arcus/lib/python2.7/site-packages:/system/software/linux-x86_64/lib/vtk/5.10.1__python2.7/lib/python2.7/site-packages:/system/software/linux-x86_64/lib/python2.7/site-packages/wx-2.8-gtk2-unicode:/system/software/linux-x86_64/lib/python2.7/site-packages
+
+mpirun $MPI_HOSTS python /home/ndcn-fmrib-water-brain/ndcn0180/workspace/EM/wmem/mergeblocks.py /data/ndcn-fmrib-water-brain/ndcn0180/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00/blocks_0500/B-NT-S10-2f_ROI_00_00000-00520_00000-00520_00000-00184_probs_eed.h5/probs_eed /data/ndcn-fmrib-water-brain/ndcn0180/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00/blocks_0500/B-NT-S10-2f_ROI_00_00000-00520_00480-01020_00000-00184_probs_eed.h5/probs_eed /data/ndcn-fmrib-water-brain/ndcn0180/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00/B-NT-S10-2f_ROI_00_probs_eed_newest.h5/probs_eed -b 0 0 0 -p 184 500 500 -q 0 20 20 -s 184 8316 8423
+
+
+source activate scikit-image-devel_0.13
+export PYTHONPATH=$scriptdir
+mpiexec -n 2 python $scriptdir/wmem/mergeblocks.py \
+$blockdir/B-NT-S10-2f_ROI_00_00000-00520_00000-00520_00000-00184_probs_eed.h5/probs_eed \
+$blockdir/B-NT-S10-2f_ROI_00_00000-00520_00480-01020_00000-00184_probs_eed.h5/probs_eed \
+$datadir/B-NT-S10-2f_ROI_00_probs_eed_newest.h5/probs_eed -b 0 0 0 -p 184 500 500 -q 0 20 20 -s 184 2000 2000 -M
+
+
+source activate scikit-image-devel_0.13
+export PYTHONPATH=$scriptdir
+mpiexec -n 2 python $scriptdir/wmem/mergeblocks.py \
+$blockdir/B-NT-S10-2f_ROI_00_00000-00520_00000-00520_00000-00184_probs_eed.h5/sum0247_eed \
+$blockdir/B-NT-S10-2f_ROI_00_00000-00520_00480-01020_00000-00184_probs_eed.h5/sum0247_eed \
+$datadir/B-NT-S10-2f_ROI_00_probs_eed_sum0247_newest.h5/sum0247_eed -b 0 0 0 -p 184 500 500 -q 0 20 20 -s 184 8316 8423 -M -d 'float16'
