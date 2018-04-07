@@ -82,7 +82,8 @@ def agglo_from_labelmask(
         labelset = np.array(svoxs_in_label)[fwmask]
         labelsets[prop.label] = set(labelset) - set([0])
 
-    utils.write_labelsets(labelsets, root + "_svoxsets",
+    basepath = h5path_in.split('.h5/')[0]
+    utils.write_labelsets(labelsets, basepath + "_svoxsets",
                           filetypes=['pickle'])
 
     ds_out[:] = utils.forward_map(np.array(fwmap), ds_in, labelsets)
