@@ -32,6 +32,7 @@ def main(argv):
     splitblocks(
         args.inputfile,
         args.dset_name,
+        args.dataslices,
         args.blocksize,
         args.margin,
         args.blockrange,
@@ -45,6 +46,7 @@ def main(argv):
 def splitblocks(
         h5path_in,
         dset_name,
+        dataslices=None,
         blocksize=[500, 500, 500],
         margin=[20, 20, 20],
         blockrange=[],
@@ -74,7 +76,7 @@ def splitblocks(
     h5file_in, ds_in, elsize, axlab = h5_info
 
     # Divide the data into a series of blocks.
-    blocks = get_blocks(ds_in.shape, blocksize, margin, h5path_tpl)
+    blocks = get_blocks(ds_in.shape, blocksize, margin, h5path_tpl, dataslices)
     if blockrange:
         blocks = blocks[blockrange[0]:blockrange[1]]
     series = np.array(range(0, len(blocks)), dtype=int)
@@ -95,12 +97,16 @@ def splitblocks(
         pass
 
 
-def get_blocks(shape, blocksize, margin, h5path_tpl):
+def get_blocks(shape, blocksize, margin, h5path_tpl, dataslices):
     """Create a list of dictionaries with data block info."""
+
+    slices_init = utils.get_slice_objects(dataslices, shape)
+    shape = list(utils.slices2sizes(slices_init))
 
     blockbounds, blocks = {}, []
     for i, dim in enumerate('zyx'):
-        blockbounds[dim] = get_blockbounds(shape[i],
+        blockbounds[dim] = get_blockbounds(slices_init[i].start,
+                                           shape[i],
                                            blocksize[i],
                                            margin[i])
 
@@ -118,11 +124,11 @@ def get_blocks(shape, blocksize, margin, h5path_tpl):
     return blocks
 
 
-def get_blockbounds(shape, blocksize, margin):
+def get_blockbounds(offset, shape, blocksize, margin):
     """Get the block range for a dimension."""
 
     # blocks
-    starts = range(0, shape, blocksize)
+    starts = range(offset, shape + offset, blocksize)
     stops = np.array(starts) + blocksize
 
     # blocks with margin
@@ -130,8 +136,8 @@ def get_blockbounds(shape, blocksize, margin):
     stops = np.array(stops) + margin
 
     # blocks with margin reduced on boundary blocks
-    starts[starts < 0] = 0
-    stops[stops > shape] = shape
+    starts[starts < offset] = offset
+    stops[stops > shape + offset] = shape + offset
 
     return zip(starts, stops)
 
