@@ -920,7 +920,7 @@ def parse_remap_labels(parser):
         )
 
     parser.add_argument(
-        '-D', '--delete_labels',
+        '-B', '--delete_labels',
         nargs='*',
         type=int,
         default=[],
