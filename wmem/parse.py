@@ -596,6 +596,11 @@ def parse_merge_slicelabels(parser):
         '-m', '--mode',
         help='...'
         )
+    parser.add_argument(
+        '-p', '--do_map_labels',
+        action='store_true',
+        help='...'
+        )
 
     parser.add_argument(
         '-q', '--offsets',
