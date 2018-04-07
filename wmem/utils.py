@@ -890,30 +890,40 @@ def write_labelsets_to_txt(labelsets, filepath):
             f.write('\n')
 
 
-def filter_on_size(labels, min_labelsize, remove_small_labels=False,
+def filter_on_size(labels, labelset, min_labelsize, remove_small_labels=False,
                    save_steps=True, root='', ds_name='',
                    outpaths=[], element_size_um=None, axislabels=None):
     """Filter small labels from a volume; write the set to file."""
 
     if not min_labelsize:
-        return labels, set([])
+        return labels, set([]), set([])
 
     areas = np.bincount(labels.ravel())
     fwmask = areas < min_labelsize
     ls_small = set([l for sl in np.argwhere(fwmask) for l in sl])
+    ls_small &= labelset
+    print('number of small labels: {}'.format(len(ls_small)))
+
+    smalllabelmask = np.array(fwmask, dtype='bool')[labels]
+
     if save_steps:
         filestem = '{}_{}_smalllabels'.format(root, ds_name)
-        write_labelsets({0: ls_small}, filestem,
-                        filetypes=['txt', 'pickle'])
+        write_labelsets({0: ls_small}, filestem, ['txt', 'pickle'])
+        save_step(outpaths, 'smalllabelmask', smalllabelmask,
+                  element_size_um, axislabels)
 
     if remove_small_labels:
-        smalllabelmask = np.array(fwmask, dtype='bool')[labels]
+        labelset -= ls_small
+
         labels[smalllabelmask] = 0
+
         if save_steps:
+            filestem = '{}_{}_largelabels'.format(root, ds_name)
+            write_labelsets({0: labelset}, filestem, ['txt', 'pickle'])
             save_step(outpaths, 'largelabels', labels,
                       element_size_um, axislabels)
 
-    return labels, ls_small
+    return labels, labelset, ls_small
 
 
 def load_config(filepath, run_from='', run_upto='', run_only=''):
