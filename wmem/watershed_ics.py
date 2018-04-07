@@ -4,12 +4,14 @@
 
 """
 
+import os
 import sys
 import argparse
 
 import numpy as np
 from scipy.ndimage import label
 from skimage.morphology import watershed, remove_small_objects
+from skimage.segmentation import relabel_sequential
 
 from wmem import parse, utils
 
@@ -32,6 +34,7 @@ def main(argv):
         args.seed_size,
         args.lower_threshold,
         args.upper_threshold,
+        args.invert,
         args.outputfile,
         args.save_steps,
         args.protective,
@@ -45,6 +48,7 @@ def watershed_ics(
         seed_size=64,
         lower_threshold=None,
         upper_threshold=None,
+        invert=False,
         h5path_out='',
         save_steps=False,
         protective=False,
@@ -53,6 +57,10 @@ def watershed_ics(
 
     # check output paths
     outpaths = {'out': h5path_out, 'seeds': h5path_seeds, 'mask': ''}
+    root, ds_main = outpaths['out'].split('.h5')
+    for dsname, _ in outpaths.items():
+        grpname = ds_main + "_steps"
+        outpaths[dsname] = os.path.join(root + '.h5' + grpname, dsname)
     status = utils.output_check(outpaths, save_steps, protective)
     if status == "CANCELLED":
         return
@@ -102,7 +110,10 @@ def watershed_ics(
 #     ds_mask[:] = utils.string_masks(masks, ds_mask[:])
 
     # perform the watershed
-    ds_out[:] = watershed(-ds_in[:], ds_sds[:], mask=ds_mask[:])
+    if invert:
+        ds_out[:] = watershed(-ds_in[:], ds_sds[:], mask=ds_mask[:])
+    else:
+        ds_out[:] = watershed(ds_in[:], ds_sds[:], mask=ds_mask[:])
 
     # close and return
     h5file_in.close()
