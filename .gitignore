@@ -1,6 +1,5 @@
 /bin
 *.pyc
 /EM.egg-info/
-/convert/
 /.settings/
 /.DS_Store
