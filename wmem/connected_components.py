@@ -125,22 +125,30 @@ def CC_3D(
         h5file_md, ds_md, _, _ = utils.h5_load(h5path_mask)
 
     # open data for writing
-    h5file_out, ds_out = utils.h5_write(None, ds_mm.shape, 'int32',
+    h5file_out, ds_out = utils.h5_write(None, ds_mm.shape, 'uint32',
                                         h5path_out,
                                         element_size_um=elsize,
                                         axislabels=axlab)
 
     # 3D labeling with label size constraints
     # NOTE: could save memory here by applying the constraints to input before
-    if h5path_mask:
-        mask = np.logical_or(binary_dilation(ds_mm[:]), ~ds_md[:])
-    else:
-        mask = binary_dilation(ds_mm[:])
+#     if h5path_mask:
+#         mask = np.logical_or(binary_dilation(ds_mm[:]), ~ds_md[:])
+#     else:
+#         mask = binary_dilation(ds_mm[:])
 
     if min_size_maskMM:
+        mask = label(ds_mm[:], return_num=False, connectivity=None)
         remove_small_objects(mask, min_size_maskMM, in_place=True)
+        mask = ~mask.astype('bool')
+    else:
+        mask = ~ds_mm[:]
 
-    labels = label(~mask, return_num=False, connectivity=None)
+    labels = label(mask, return_num=False, connectivity=None)
+#     shuffle_labels = True
+#     if shuffle_labels:
+#         fw = utils.shuffle_labels(labels)
+#         labels = fw[labels]
 
     if min_area:
         remove_small_objects(labels, min_area, in_place=True)
@@ -153,6 +161,7 @@ def CC_3D(
     labels[labels == llab] = 0
 
     labels = relabel_sequential(labels)[0]
+    print('maxlabel: {}'.format(np.amax(labels)))
 
     ds_out[:] = labels
 
@@ -394,7 +403,7 @@ def CC_2Dprops(
                                               axislabels=axlab,
                                               comm=mpi_info['comm'])
 
-        ds_prop[:, :, :] = fws[propname][ds_in[:, :, :]]
+        ds_prop[:] = fws[propname][ds_in[:]]
 
         h5file_prop.close()
 
