@@ -664,6 +664,7 @@ def string_masks(masks, mask):
                'OR': 'np.logical_or',
                'XOR': 'np.logical_xor'}
 
+    op = eval('np.logical_and')
     for m in masks:
 
         if m in aliases.keys():
@@ -674,7 +675,7 @@ def string_masks(masks, mask):
             op = eval(m)  # SyntaxError if it does not evaluate
         except ValueError:
             op = eval(m)
-            do = False if m == 'np.logical_not' else True
+            do = False  # if m == 'np.logical_not' else True
         except SyntaxError:
             newmask = h5_load(m, load_data=True, dtype='bool')[0]
             do = True if m == 'np.logical_not' else False
