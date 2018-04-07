@@ -62,8 +62,15 @@ def nodes_of_ranvier(
 
     # check output paths
     outpaths = {'out': h5path_out,
-                'filled': '', 'largelabels': '',
-                'boundarymask': '', 'labels_NoR': ''}
+                'largelabels': '', 'smalllabelmask': '',
+                'boundarymask': '',
+                'labels_nt': '', 'labels_tv': '',
+                'filled': '',
+                }
+    root, ds_main = outpaths['out'].split('.h5')
+    for dsname, outpath in outpaths.items():
+        grpname = ds_main + "_steps"
+        outpaths[dsname] = os.path.join(root + '.h5' + grpname, dsname)
     status = utils.output_check(outpaths, save_steps, protective)
     if status == "CANCELLED":
         return
@@ -78,27 +85,16 @@ def nodes_of_ranvier(
                                         element_size_um=elsize,
                                         axislabels=axlab)
 
-    # filter labels on size
-    root = os.path.splitext(h5file_out.filename)[0]
-    labels = utils.filter_on_size(labels, min_labelsize,
-                                  remove_small_labels,
-                                  save_steps, root, ds_out.name[1:],
-                                  outpaths, elsize, axlab)[0]
-
-    # start with the set of all labels (larger than min_labelsize)
+    # start with the set of all labels
     ulabels = np.unique(labels)
     maxlabel = np.amax(ulabels)
-    print("number of labels in labelvolume: %d" % maxlabel)
     labelset = set(ulabels)
-
-    # get a mask of the sides of the dataset
-    sidesmask = get_boundarymask(h5path_boundarymask, save_steps)
-    if save_steps and (not h5path_boundarymask):
-        utils.save_step(outpaths, 'boundarymask', labels, elsize, axlab)
+    print("number of labels in labelvolume: {}".format(len(labelset)))
 
     # get the labelsets that touch the borders
-    ls_bot = set(np.unique(labels[0, :, :]))
-    ls_top = set(np.unique(labels[-1, :, :]))
+    sidesmask = get_boundarymask(h5path_boundarymask, 'invdil')
+    ls_bot = set(np.unique(labels[:4, :, :]))
+    ls_top = set(np.unique(labels[-4:, :, :]))
     ls_sides = set(np.unique(labels[sidesmask]))
     ls_border = ls_bot | ls_top | ls_sides
     ls_centre = labelset - ls_border
@@ -106,46 +102,64 @@ def nodes_of_ranvier(
     ls_bts = (ls_bot ^ ls_top) ^ ls_sides
     ls_tbs = (ls_top ^ ls_bot) ^ ls_sides
     ls_sbt = (ls_sides ^ ls_bot) ^ ls_top
-    # get the labels that do not pass through the volume
     ls_nt = ls_centre | ls_bts | ls_tbs | ls_sbt
 
-    # map the labels that do not traverse the volume
-    fw = np.zeros(maxlabel + 1, dtype='i')
-    for l in ls_nt:
-        fw[l] = l
-    labels_nt = fw[labels]
-
-    # see if we need to do merging of labels
-    if set(merge_methods) & set(['neighbours', 'conncomp', 'watershed']):
-        if save_steps:
-            utils.save_step(outpaths, 'labels_NoR', labels_nt, elsize, axlab)
-    else:
-        ds_out[:] = labels_nt
-        return
-
-    # find connection candidates
-    for merge_method in merge_methods:
-        if merge_method == 'neighbours':
-            labelsets = merge_neighbours(labels, labels_nt, overlap_threshold)
-
-        elif merge_method == 'conncomp':
-            labelsets = merge_conncomp(labels_nt)
-
-        elif merge_method == 'watershed':
-            labelsets, filled = merge_watershed(labels, labels_nt,
-                                                h5path_data, h5path_mmm,
-                                                min_labelsize, searchradius)
-            if save_steps:
-                data = utils.forward_map(np.array(fw), filled, labelsets)
-                utils.save_step(outpaths, 'filled', data, elsize, axlab)
-
-        # TODO merge labelsets of iterations
-
+    # filter labels on size
     root = os.path.splitext(h5file_out.filename)[0]
-    filestem = '{}_{}_automerged'.format(root, ds_out.name[1:])
-    utils.write_labelsets(labelsets, filestem, filetypes=['txt', 'pickle'])
+    ls_small = utils.filter_on_size(labels, labelset, min_labelsize,
+                                    remove_small_labels,
+                                    save_steps, root, ds_out.name[1:],
+                                    outpaths, elsize, axlab)[2]
+    labelset -= ls_small
+    ls_nt -= ls_small
+    ls_short = filter_on_heigth(labels, 5)
+    labelset -= ls_short
+    ls_nt -= ls_short
+    ls_tv = labelset - ls_nt
 
+    print('number of large, long labels: {}'.format(len(labelset)))
+    print('number of large, long in-volume labels: {}'.format(len(ls_nt)))
+    print('number of large, long through-volume labels: {}'.format(len(ls_tv)))
+
+
+    # map the large labels that don't traverse the volume
+    fw_nt = np.zeros(maxlabel + 1, dtype='i')
+    for l in ls_nt:
+        fw_nt[l] = l
+    labels_nt = fw_nt[labels]
+
+    # automated label merge
+    labelsets = {}
+    min_labelsize = 10
+    labelsets, filled = merge_labels(labels_nt, labelsets, merge_methods,
+                                     overlap_threshold,
+                                     h5path_data, h5path_mmm,
+                                     min_labelsize,
+                                     searchradius)
+
+    fw = np.zeros(maxlabel + 1, dtype='i')
     ds_out[:] = utils.forward_map(np.array(fw), labels, labelsets)
+
+    if save_steps:
+
+        utils.save_step(outpaths, 'boundarymask', sidesmask, elsize, axlab)
+
+        utils.save_step(outpaths, 'labels_nt', labels_nt, elsize, axlab)
+
+        fw_tv = np.zeros(maxlabel + 1, dtype='i')
+        for l in ls_tv:
+            fw_tv[l] = l
+        labels_tv = fw_tv[labels]
+        utils.save_step(outpaths, 'labels_tv', labels_tv, elsize, axlab)
+
+        if filled is not None:
+            fw = np.zeros(maxlabel + 1, dtype='i')
+            filled = utils.forward_map(np.array(fw), filled, labelsets)
+            utils.save_step(outpaths, 'filled', filled, elsize, axlab)
+
+        filestem = '{}_{}_automerged'.format(root, ds_out.name[1:])
+        utils.write_labelsets(labelsets, filestem,
+                              filetypes=['txt', 'pickle'])
 
     # close and return
     h5file_in.close()
@@ -162,9 +176,9 @@ def get_boundarymask(h5path_mask, masktype='invdil'):
     if masktype == 'ero':
         mask = binary_erosion(mask, ball(3))
     elif masktype == 'invdil':
-        mask = scipy_binary_dilation(~mask, iterations=1, border_value=0)
-        mask[:4, :, :] = 0
-        mask[-4:, :, :] = 0
+        mask = scipy_binary_dilation(~mask, iterations=7, border_value=0)
+        mask[:4, :, :] = False
+        mask[-4:, :, :] = False
 
     return mask
 
@@ -208,12 +222,36 @@ def find_region_coordinates(direction, labels, prop, searchradius):
     return (x, X, y, Y, z, Z)
 
 
-def merge_neighbours(labels, labels_nt, overlap_thr=20):
+def merge_labels(labels, labelsets={}, merge_methods=[],
+                 overlap_threshold=20,
+                 h5path_data='', h5path_mmm='',
+                 min_labelsize=10, searchradius=[100, 30, 30]):
+    """Find candidate labelsets."""
+
+    # find connection candidates
+    for merge_method in merge_methods:
+
+        if merge_method == 'neighbours':
+            labelsets = merge_neighbours(labels, labelsets,
+                                         overlap_threshold)
+            filled = None
+
+        elif merge_method == 'conncomp':
+            labelsets = merge_conncomp(labels, labelsets)
+            filled = None
+
+        elif merge_method == 'watershed':
+            labelsets, filled = merge_watershed(labels, labelsets,
+                                                h5path_data, h5path_mmm,
+                                                min_labelsize, searchradius)
+
+    return labelsets, filled
+
+
+def merge_neighbours(labels, labelsets={}, overlap_thr=20):
     """Find candidates for label merge based on overlapping faces."""
 
-    labelsets = {}
-
-    rp_nt = regionprops(labels_nt)
+    rp_nt = regionprops(labels)
 
     for prop in rp_nt:
 
@@ -222,11 +260,12 @@ def merge_neighbours(labels, labels_nt, overlap_thr=20):
         x, X, y, Y, z, Z = C
 
         # get a mask of voxels adjacent to the label (boundary)
-        imregion = labels_nt[z:Z, y:Y, x:X]
+        imregion = labels[z:Z, y:Y, x:X]
         labelmask = imregion == prop.label
         boundary = binary_dilation(labelmask) - labelmask
 
         # evaluate which labels overlap sufficiently with this mask
+        # TODO: dice-like overlap?
         counts = np.bincount(imregion[boundary])
         label_neighbours = np.argwhere(counts > overlap_thr)
         label_neighbours = [l for ln in label_neighbours for l in ln]
@@ -238,18 +277,16 @@ def merge_neighbours(labels, labels_nt, overlap_thr=20):
     return labelsets
 
 
-def merge_conncomp(labels_nt):
+def merge_conncomp(labels, labelsets={}):
     """Find candidates for label merge based on connected components."""
 
-    labelsets = {}
-
     # binarize labelvolume and relabel for connected components
-    labelmask = labels_nt != 0
+    labelmask = labels != 0
     labels_connected = label(labelmask, connectivity=1)
 
     # find the original labels contained in each connected component
     # TODO: detection of non-contiguous components in the original?
-    rp = regionprops(labels_connected, labels_nt)
+    rp = regionprops(labels_connected, labels)
     for prop in rp:
         counts = np.bincount(prop.intensity_image[prop.image])
         labelset = set(list(np.flatnonzero(counts)))
@@ -260,22 +297,24 @@ def merge_conncomp(labels_nt):
     return labelsets
 
 
-def merge_watershed(labels, labels_nt,
-                    h5path_data, h5path_mmm,
-                    min_labelsize=0, searchradius=[100, 30, 30]):
+def merge_watershed(labels, labelsets={},
+                    h5path_data='', h5path_mmm='',
+                    min_labelsize=10, searchradius=[100, 30, 30]):
     """Find candidates for label merge based on watershed."""
 
-    labelsets = {}
-
-    rp_nt = regionprops(labels_nt)
-    labels_filled = np.copy(labels_nt)
+    rp_nt = regionprops(labels)
+    labels_filled = np.copy(labels)
 
     ds_data = utils.h5_load(h5path_data, load_data=True)[0]
-    ds_mask = utils.h5_load(h5path_mmm, load_data=True, dtype='bool')[0]
+    if h5path_mmm:
+        ds_mask = utils.h5_load(h5path_mmm, load_data=True, dtype='bool')[0]
+    else:
+        ds_mask = np.zeros_like(ds_data, dtype='bool')
 
     for prop in rp_nt:
         # investigate image region above and below bbox
         for direction in ['down', 'up']:
+            print('processing {}, direction {}'.format(prop.label, direction))
 
             C = find_region_coordinates(direction, labels,
                                         prop, searchradius)
@@ -283,11 +322,14 @@ def merge_watershed(labels, labels_nt,
             if ((z == 0) or (z == labels.shape[0] - 1)):
                 continue
 
-            imregion = labels_nt[z:Z, y:Y, x:X]
+            # TODO: improve searchregion by projecting along axon direction
+            # TODO: improve searchregion by not taking the groundplane of the whole label region
+            imregion = labels[z:Z, y:Y, x:X]
             labels_in_region = np.unique(imregion)
-            # label 0 and prop.label assumed to be always there
+            print(labels_in_region)
+
             if len(labels_in_region) < 2:
-                continue
+                continue  # label 0 and prop.label assumed to be there
 
             labelsets, wsout = find_candidate_ws(direction, labelsets, prop,
                                                  imregion,
@@ -302,48 +344,59 @@ def merge_watershed(labels, labels_nt,
 
 
 def find_candidate_ws(direction, labelsets, prop, imregion,
-                      data, maskMM, min_labelsize):
+                      data, maskMM, min_labelsize=10):
     """Find a merge candidate by watershed overlap."""
 
     wsout = None
 
-    """NOTE:
-    seeds are in the borderslice,
-    with the current label as prop.label (watershedded to fill the full axon),
-    the maskMM as background, and the surround as negative label
-    """
-    if direction == 'down':
-        idx = -1
-    elif direction == 'up':
-        idx = 0
-    seeds = np.zeros_like(imregion)
-    # TODO: don't use -data; make it more general
-    # TODO: implement string_mask?
-    # fill the seedslice (outside of the myelin compartment)
-    seeds[idx, :, :] = watershed(-data[idx, :, :],
-                                 imregion[idx, :, :],
-                                 mask=~maskMM[idx, :, :])
-    # set all non-prop.label voxels to -1
-    seeds[idx, :, :][seeds[idx, :, :] != prop.label] = -1
-    # set the myelin voxels to 0
-    seeds[idx, :, :][maskMM[idx, :, :]] = 0
+    idx = {'down': -1, 'up': 0}[direction]
 
-    # do the watershed
-    ws = watershed(-data, seeds, mask=~maskMM)
+#     # do the watershed
+    mask = np.ones_like(imregion, dtype='bool')
+    mask[data < 0.25] = False
+    seeds = np.zeros_like(imregion, dtype='int')
+    seeds[idx, :, :][imregion[idx, :, :] == prop.label] = prop.label
+    seeds[idx, :, :][imregion[idx, :, :] != prop.label] = -1
+    ws = watershed(-data, seeds, mask=mask)
+
+#     """NOTE:
+#     seeds are in the borderslice,
+#     with the current label as prop.label
+#     (watershedded to fill the full axon),
+#     the maskMM as background, and the surround as negative label
+#     """
+#     # TODO: don't use -data; make it more general
+#     # TODO: implement string_mask?
+#     # fill the seedslice (outside of the myelin compartment)
+#     seeds = np.zeros_like(imregion, dtype='int')
+#     seeds[idx, :, :] = watershed(-data[idx, :, :],
+#                                  imregion[idx, :, :],
+#                                  mask=~maskMM[idx, :, :])
+#     # set all non-prop.label voxels to -1
+#     seeds[idx, :, :][seeds[idx, :, :] != prop.label] = -1
+#     # set the myelin voxels to 0
+#     seeds[idx, :, :][maskMM[idx, :, :]] = 0
+#     # do the watershed
+#     ws = watershed(-data, seeds, mask=~maskMM)
 
     rp_ws = regionprops(ws, imregion)  # no 0 in rp
     labels_ws = [prop_ws.label for prop_ws in rp_ws]
     try:
+        # select the watershed-object of the current label
         idx = labels_ws.index(prop.label)
     except ValueError:
         pass
     else:
+        # get the overlap (voxel count) of labels within the watershed object
         counts = np.bincount(imregion[rp_ws[idx].image])
         if len(counts) > 1:
             # select the largest candidate overlapping the watershed
+            # TODO: improve criteria for accepting candidate
             candidate = np.argmax(counts[1:]) + 1
-            # only select it if it a proper region
-            if counts[candidate] > min_labelsize:
+            # only select it if the overlap is larger than min_labelsize
+            if ((counts[candidate] > min_labelsize) and
+                    (candidate != prop.label)):
+                print('merging {} and {}'.format(prop.label, candidate))
                 labelset = set([prop.label, candidate])
                 labelsets = utils.classify_label_set(labelsets, labelset,
                                                      prop.label)
@@ -352,6 +405,17 @@ def find_candidate_ws(direction, labelsets, prop, imregion,
                 wsout[mask] = imregion[mask]
 
     return labelsets, wsout
+
+
+def filter_on_heigth(labels, min_height, ls_short=set([])):
+
+    rp_nt = regionprops(labels)
+    for prop in rp_nt:
+        if prop.bbox[3]-prop.bbox[0] <= min_height:
+            ls_short |= set([prop.label])
+    print('number of short labels: {}'.format(len(ls_short)))
+
+    return ls_short
 
 
 if __name__ == "__main__":
