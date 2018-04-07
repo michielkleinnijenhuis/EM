@@ -808,7 +808,7 @@ def forward_map_list(fw, labels, MAlist):
 
 
 def forward_map(fw, labels, labelsets, delete_labelsets=False):
-    """Map all labelset in value to key."""
+    """Map all labels in value to key."""
 
     for lsk, lsv in labelsets.items():
         lsv = sorted(list(lsv))
