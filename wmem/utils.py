@@ -543,7 +543,7 @@ def h5_write(data, shape, dtype,
              h5path_full, h5file=None,
              element_size_um=None, axislabels=None,
              chunks=True, compression="gzip",
-             comm=None, rank=0,
+             comm=None,
              slices=None):
     """Write a h5 dataset."""
 
@@ -575,8 +575,7 @@ def h5_write(data, shape, dtype,
                                              dtype=dtype,
                                              chunks=chunks,
                                              compression=compression)
-            if rank == 0:
-                h5_write_attributes(h5ds, element_size_um, axislabels)
+            h5_write_attributes(h5ds, element_size_um, axislabels)
 
         if data is not None:
 
@@ -629,6 +628,16 @@ def h5_load_attributes(h5ds):
 
     if 'DIMENSION_LABELS' in h5ds.attrs.keys():
         axislabels = h5ds.attrs['DIMENSION_LABELS']
+    # FIXME: if this fails it empties the file!?
+#     IOError: Unable to read attribute (Address of object past end of allocation)
+    # GOOD
+#     Attribute: DIMENSION_LABELS {3}
+#         Type:      variable-length null-terminated ASCII string
+#         Data:  "z", "y", "x"
+    # BAD (matlab)
+#     Attribute: DIMENSION_LABELS scalar
+#         Type:      3-byte null-terminated ASCII string
+#         Data:  "zyx"
 
     return element_size_um, axislabels
 
