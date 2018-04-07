@@ -873,6 +873,12 @@ def parse_watershed_ics(parser):
         help='the minimal size of a seed label'
         )
 
+    parser.add_argument(
+        '-i', '--invert',
+        action='store_true',
+        help='invert the input volume'
+        )
+
     return parser
 
 
