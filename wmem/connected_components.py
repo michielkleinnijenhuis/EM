@@ -435,7 +435,9 @@ def CC_2Dto3D(
                                         axislabels=axlab)
 
     # NOTE: scipy has much lower memory consumption than scikit-image
-    ds_out[:] = scipy_label(ds_in[:, :, :] != 0)[0]
+    # TODO: input mask directly, not labelimage?
+    ds_out[:] = label(ds_in[:, :, :] != 0)
+#     ds_out[:] = scipy_label(ds_in[:, :, :] != 0)[0]
 
     # close and return
     try:
