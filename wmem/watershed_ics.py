@@ -89,6 +89,7 @@ def watershed_ics(
                                    ds_in[:] <= upper_threshold)
         ds_sds[:], _ = label(ds_sds[:])
         ds_sds[:] = remove_small_objects(ds_sds[:], min_size=seed_size)
+        ds_sds[:] = relabel_sequential(ds_sds[:])[0]
         """ NOTE:
         numpy/scipy/skimage inplace is not written when using hdf5
         Therefore, we cannot use:
