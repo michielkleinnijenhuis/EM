@@ -143,8 +143,9 @@ def mergeblocks(
                                      neighbourmerge, save_fwmap,
                                      maxlabel, usempi, mpi_info)
             print('processed block {:03d}: {}'.format(i, h5path_in))
-        except:
+        except Exception as e:
             print('failed block {:03d}: {}'.format(i, h5path_in))
+            print(e)
 
     # close and return
     try:
