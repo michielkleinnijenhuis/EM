@@ -6,6 +6,7 @@
 
 import sys
 import argparse
+import os
 
 import numpy as np
 from scipy.ndimage.morphology import grey_dilation, binary_dilation, binary_erosion
@@ -62,10 +63,17 @@ def separate_sheaths(
     """Separate the myelin compartment into individual myelin sheaths."""
 
     # check output paths
-    outpaths = {'out': h5path_out}
-    info = (h5path_wsmask, MAdilation,
-            h5path_dist, h5path_lmm, sigmoidweighting)
-    outpaths = add_h5paths_out(outpaths, info)
+    outpaths = {'out': h5path_out,
+                'wsmask': '',
+                'madil{:02d}'.format(MAdilation): '',
+                'distance_simple': '',
+                'sheaths_simple': '',
+                'distance_sigmod': '',
+                }
+    root, ds_main = outpaths['out'].split('.h5')
+    for dsname, outpath in outpaths.items():
+        grpname = ds_main + "_steps"
+        outpaths[dsname] = os.path.join(root + '.h5' + grpname, dsname)
     status = utils.output_check(outpaths, save_steps, protective)
     if status == "CANCELLED":
         return
@@ -130,6 +138,11 @@ def add_h5paths_out(outpaths, info):
 
     (h5path_wsmask, MAdilation,
      h5path_dist, h5path_lmm, sigmoidweighting) = info
+
+    root, ds_main = outpaths['out'].split('.h5')
+    for dsname, outpath in outpaths.items():
+        grpname = ds_main + "_steps"
+        outpaths[dsname] = os.path.join(root + '.h5' + grpname, dsname)
 
     if not h5path_wsmask:
         outpaths['wsmask'] = ''
