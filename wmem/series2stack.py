@@ -6,7 +6,7 @@ Downsampled images are written to the output directory
 with the same filename as the input images.
 - A subset of the data can be selected with python slicing:
 providing <start stop step> in (plane, row, col) order
-e.g. setting the flag -D <20 44 1 100 200 0 0 1>
+e.g. setting the flag -D <20 44 1 100 200 1 0 0 1>
 selects the images 20 through 43 yielded by the regular expression
 and makes a cutout of rows 100 through 199
 and with the columns set to the full dimension.
