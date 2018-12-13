@@ -629,8 +629,9 @@ def parse_merge_slicelabels(parser):
         help='...'
         )
     parser.add_argument(
-        '-r', '--relabel',
-        action='store_true',
+        '-r', '--relabel_from',
+        type=int,
+        default=0,
         help='...'
         )
 

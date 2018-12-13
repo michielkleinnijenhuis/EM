@@ -44,7 +44,7 @@ def main(argv):
             args.maskMM,
             args.min_labelsize,
             args.close,
-            args.relabel,
+            args.relabel_from,
             args.usempi & ('mpi4py' in sys.modules),
             args.outputfile,
             args.save_steps,
@@ -55,10 +55,19 @@ def main(argv):
 
         map_labels(
             args.inputfile,
+            args.outputfile,
+            args.save_steps,
+            args.protective,
+            )
+
+    elif args.mode == "MAfilter":
+
+        filter_labels(
+            args.inputfile,
             args.maskMM,
             args.min_labelsize,
             args.close,
-            args.relabel,
+            args.relabel_from,
             args.outputfile,
             args.save_steps,
             args.protective,
@@ -74,7 +83,7 @@ def evaluate_overlaps(
         h5path_mm='',
         min_labelsize=0,
         close=None,
-        relabel=False,
+        relabel_from=0,
         usempi=False,
         h5path_out='',
         save_steps=False,
@@ -134,16 +143,12 @@ def evaluate_overlaps(
 
         if do_map_labels:
             map_labels(h5path_in, h5path_mm,
-                       min_labelsize, close, relabel,
+                       min_labelsize, close, relabel_from,
                        h5path_out, save_steps, protective)
 
 
 def map_labels(
         h5path_in,
-        h5path_mm='',
-        min_labelsize=0,
-        close=None,
-        relabel=False,
         h5path_out='',
         save_steps=False,
         protective=False,
@@ -186,27 +191,72 @@ def map_labels(
         MAlabels = utils.forward_map(np.array(fw), ds_in[:], labelsets)
         utils.save_step(outpaths, 'stitched', MAlabels, elsize, axlab)
 
+    ds_out[:, :, :] = labels
+
+    # close and return
+    try:
+        h5file_in.close()
+        h5file_out.close()
+    except (ValueError, AttributeError):
+        return ds_out
+
+
+def filter_labels(
+        h5path_in,
+        h5path_mm='',
+        min_labelsize=0,
+        close=None,
+        relabel_from=0,
+        h5path_out='',
+        save_steps=False,
+        protective=False,
+        ):
+    """Map groups of labels to a single label."""
+
+    # check output path
+    outpaths = {'out': h5path_out, 'closed': ''}
+    root, ds_main = outpaths['out'].split('.h5')
+    for dsname, outpath in outpaths.items():
+        grpname = ds_main + "_steps"
+        outpaths[dsname] = os.path.join(root + '.h5' + grpname, dsname)
+    status = utils.output_check(outpaths, save_steps, protective)
+    if status == "CANCELLED":
+        return
+
+    # open data for reading
+    h5file_in, ds_in, elsize, axlab = utils.h5_load(h5path_in)
+
+    # open data for writing
+    h5file_out, ds_out = utils.h5_write(None, ds_in.shape, ds_in.dtype,
+                                        h5path_out,
+                                        element_size_um=elsize,
+                                        axislabels=axlab)
+
+    labels = ds_in[:]
+
 #     if min_labelsize:
 #         remove_small_objects(labels, min_size=min_labelsize, in_place=True)
 
     if close is not None:
-        if len(close) == 1:
-            selem = ball(close)
-        elif len(close) == 3:
-            selem = generate_anisotropic_selem(close)
-        labels = closing(labels, selem)
-    if h5path_mm:
-        h5file_mm, ds_mm, _, _ = utils.h5_load(h5path_mm)
-        labels[ds_mm[:].astype('bool')] = 0
-        h5file_mm.close()
+        labels = close_labels(labels, close)
+        if h5path_mm:
+            print('removing voxels in mask')
+            h5file_mm, ds_mm, _, _ = utils.h5_load(h5path_mm)
+            labels[ds_mm[:].astype('bool')] = 0
+            h5file_mm.close()
+        if save_steps:
+            utils.save_step(outpaths, 'closed', labels, elsize, axlab)
 
     if min_labelsize:
+        print('removing small labels')
         remove_small_objects(labels, min_size=min_labelsize, in_place=True)
 #         if save_steps:
 #             utils.save_step(outpaths, 'small', smalllabels, elsize, axlab)
 
-    if relabel:
-        labels = relabel_sequential(labels)[0]
+    if relabel_from > 1:
+        print('relabeling from {}'.format(relabel_from))
+        labels = relabel_sequential(labels, relabel_from)[0]
+        # TODO: save mapping?
 
     ds_out[:, :, :] = labels
 
@@ -216,6 +266,19 @@ def map_labels(
         h5file_out.close()
     except (ValueError, AttributeError):
         return ds_out
+
+
+def close_labels(labels, close):
+    """Apply forward map."""
+
+    print('closing labels')
+    if len(close) == 1:
+        selem = ball(close)
+    elif len(close) == 3:
+        selem = generate_anisotropic_selem(close)
+    labels = closing(labels, selem)
+
+    return labels
 
 
 def generate_anisotropic_selem(close):
