@@ -53,11 +53,14 @@ def downsample_blockwise(
     if status == "CANCELLED":
         return
 
+    # Open the inputfile for reading.
     # TODO: option to get the input data passed
     h5file_in, ds_in, elsize, axlab = utils.h5_load(h5path_in)
 
+    # Get the matrix size and resolution of the outputdata.
     outsize, elsize = get_new_sizes(func, blockreduce, ds_in.shape, elsize)
 
+    # Open the outputfile for writing and create the dataset or output array.
     h5file_out, ds_out = utils.h5_write(None, outsize, ds_in.dtype,
                                         h5path_out,
                                         element_size_um=elsize,
@@ -66,11 +69,12 @@ def downsample_blockwise(
     # Get the slice objects for the input data.
     slices = utils.get_slice_objects_prc(dataslices, ds_in.shape)
 
+    # Reformat the data to the outputsize.
     if func == 'expand':
-        out = ds_in[:]
+        out = ds_in[slices[0], ...]
         for axis in range(0, ds_out.ndim):
             out = np.repeat(out, blockreduce[axis], axis=axis)
-        ds_out[:] = out
+        ds_out[slices[0], ...] = out
     else:
         """ TODO: flexible mapping from in to out
         now:
@@ -81,6 +85,7 @@ def downsample_blockwise(
                                               block_size=tuple(blockreduce),
                                               func=eval(func))
 
+    # Close the h5 files or return the output array.
     try:
         h5file_in.close()
         h5file_out.close()

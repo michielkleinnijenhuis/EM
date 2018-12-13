@@ -1118,7 +1118,12 @@ function blockreduce {
 
     nblocks=$(( (zmax + blocksize - 1) / blocksize ))
 
-    local fun=get_cmd_downsample_blockwise
+    if [[ "$brfun" == "expand" ]]; then
+        local fun=get_cmd_downsample_blockwise_expand
+    else
+        local fun=get_cmd_downsample_blockwise
+    fi
+
     get_command_array_dataslices 0 $zmax $blocksize $fun
 
     if [[ "$compute_env" == *"ARC"* ]]; then

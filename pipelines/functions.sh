@@ -598,6 +598,18 @@ function get_cmd_downsample_blockwise {
 }
 
 
+function get_cmd_downsample_blockwise_expand {
+    # Get the command for downsampling of h5 datasets.
+
+    echo python -W ignore $scriptdir/wmem/downsample_blockwise.py \
+        $datadir/$dataset_ds$ipf.h5/$ids \
+        $datadir/$dataset$opf.h5/$ods \
+        -B 1 $ds $ds $brvol -f $brfun \
+        -D $z $Z 1 0 0 1 0 0 1 $vol_slice
+
+}
+
+
 function get_cmd_watershed {
     # Get the command for performing watershed on blocks.
 
