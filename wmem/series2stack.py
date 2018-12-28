@@ -136,7 +136,7 @@ def series2stack(
                                             element_size_um=element_size_um,
                                             axislabels=outlayout,
                                             chunks=tuple(chunksize),
-                                            usempi=usempi, comm=mpi_info['comm'])
+                                            comm=mpi_info['comm'])
         outdir = os.path.dirname(outputpath.split('.h5')[0])
     else:
         ds_out = None
