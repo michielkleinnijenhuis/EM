@@ -9,7 +9,7 @@ import argparse
 
 import numpy as np
 
-from wmem import parse, utils
+from wmem import parse, utils, Image
 
 
 def main(argv):
@@ -25,6 +25,7 @@ def main(argv):
 
     combine_vols(
         args.inputfile,
+        args.dataslices,
         args.volidxs,
         args.outputfile,
         args.protective,
@@ -32,39 +33,47 @@ def main(argv):
 
 
 def combine_vols(
-        h5path_in,
-        vol_idxs=[0, 2, 4, 7],
-        h5path_out='',
+        image_in,
+        dataslices=None,
+        vol_idxs=[],
+        outputpath='',
         protective=False,
         ):
     """Combine volumes by addition."""
 
-    if bool(h5path_out) and ('.h5' in h5path_out):
-        status, info = utils.h5_check(h5path_out, protective)
-        print(info)
-        if status == "CANCELLED":
-            return
+    # Open data for reading.
+    im = utils.get_image(image_in, dataslices=dataslices)
+    c_axis = im.axlab.index('c')
+    squeezed = im.squeeze_channel(c_axis)
+    dims = im.slices2shape()  # FIXME
 
-    # open data for reading
-    h5file_in, ds_in, es, al = utils.load(h5path_in)
+    # Open the outputfile for writing and create the dataset or output array.
+    mo = Image(outputpath,
+               shape=dims,
+               dtype=im.dtype,
+               elsize=squeezed['es'],
+               axlab=squeezed['al'],
+               chunks=squeezed['chunks'],
+               dataslices=squeezed['dslcs'],
+               protective=protective)
+    mo.create()
 
-    # open data for writing
-    h5file_out, ds_out = utils.h5_write(None, ds_in.shape[:3], ds_in.dtype,
-                                        h5path_out,
-                                        element_size_um=es[:3],
-                                        axislabels=al[:3])
+    out = np.zeros(mo.dims, dtype=mo.dtype)
+    if vol_idxs:
+        for volnr in vol_idxs:
+            im.dataslices[c_axis*3] = volnr
+            im.dataslices[c_axis*3+1] = volnr + 1
+            im.dataslices[c_axis*3+2] = 1
+            out += im.slice_dataset()
+    else:
+        out = np.sum(im.slice_dataset(), axis=c_axis)
 
-    out = np.zeros(ds_out.shape, dtype=ds_out.dtype)
-    for volnr in vol_idxs:
-        out += ds_in[:, :, :, volnr]
-    ds_out[:] = out
+    mo.write(data=out)
 
-    # close and return
-    h5file_in.close()
-    try:
-        h5file_out.close()
-    except (ValueError, AttributeError):
-        return ds_out
+    im.close()
+    mo.close()
+
+    return mo
 
 
 if __name__ == "__main__":

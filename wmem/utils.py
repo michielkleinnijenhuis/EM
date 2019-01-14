@@ -28,6 +28,8 @@ except ImportError:
 
 import h5py
 
+from wmem import Image
+
 
 def mkdir_p(filepath):
     try:
@@ -74,6 +76,22 @@ def split_filename(filename, blockoffset=[0, 0, 0]):
                  'x': x, 'X': X, 'y': y, 'Y': Y, 'z': z, 'Z': Z}
 
     return dset_info, x, X, y, Y, z, Z
+
+
+def dataset_name2dataslices(dset_name, blockoffset, axlab='xyz', shape=[]):
+    """Get slices from data indices in a filename."""
+
+    _, x, X, y, Y, z, Z = split_filename(dset_name, blockoffset)
+    slices = {'x': [x, X, 1], 'y': [y, Y, 1], 'z': [z, Z, 1]}
+    for dim in ['c', 't']:
+        if dim in axlab:
+            upper = shape[axlab.index(dim)]
+            slices[dim] = [0, upper, 1]
+
+    sliceslist = [slices[dim] for dim in axlab]
+    dataslices = [item for sl in sliceslist for item in sl]
+
+    return dataslices
 
 
 def xyz_datarange(xyz, files):
@@ -200,8 +218,13 @@ def get_mpi_info(usempi=False, mpi_dtype=''):
     return mpi_info
 
 
-def scatter_series(mpi_info, series):
+def scatter_series(mpi_info, nblocks):
     """Scatter a series of jobnrs over processes."""
+
+    series = np.array(range(0, nblocks), dtype=int)
+
+    if not mpi_info['enabled']:
+        return series, None, None
 
     comm = mpi_info['comm']
     rank = mpi_info['rank']
@@ -1079,3 +1102,132 @@ def shuffle_labels(labels):
     fw[mask] = fw_nz
 
     return fw
+
+
+def gen_steps(outpaths, save_steps=True):
+    """Generate paths for steps output."""
+
+    fileformat = get_format(outpaths['out'])
+
+    if fileformat == '.h5':
+        ext = '.h5'
+        root, ds_main = outpaths['out'].split(ext)  # ds_main includes filesep
+    else:
+        if fileformat == '.nii':
+            ext = '.nii.gz'
+            root, _ = outpaths['out'].split(ext)
+        elif fileformat == '.tif':
+            ext = '.tif'
+            root, _ = outpaths['out'].split(ext)
+        else:  # FIXME: generalize
+            ext = ''
+            root = outpaths['out']
+        comps = root.split('_')
+        root = '_'.join(comps[:-1])
+        ds_main = comps[-1]
+
+    groupname = ds_main + "_steps"
+
+    for dsname, outpath in outpaths.items():
+        if (dsname == 'out'):
+            continue
+        if save_steps:
+            if not outpath:
+                outpaths[dsname] = get_outpath(root, groupname, dsname, ext)
+        else:
+            del outpaths[dsname]
+
+    return outpaths
+
+
+def get_outpath(root, groupname, dsname, ext='.h5'):
+    """Generate paths for steps output."""
+
+    if ext == '.h5':
+        outpath = os.path.join(root + ext + groupname, dsname)
+    else:
+        outpath = root + '_' + groupname + '_' + dsname + ext
+
+    return outpath
+
+
+def get_format(filepath):
+
+    fileformat = '.tifs'
+    for ext in ['.h5', '.nii', '.tif']:
+        if ext in filepath:
+            fileformat = ext
+            return fileformat
+
+
+def get_blocks(shape, blocksize, margin, dataslices, path_tpl=''):
+    """Create a list of dictionaries with data block info."""
+
+    slices_init = get_slice_objects(dataslices, shape)
+    shape = list(slices2sizes(slices_init))
+
+    blockbounds, blocks = {}, []
+    for i, dim in enumerate('zyx'):
+        blockbounds[dim] = get_blockbounds(slices_init[i].start,
+                                           shape[i],
+                                           blocksize[i],
+                                           margin[i])
+
+    for x, X in blockbounds['x']:
+        for y, Y in blockbounds['y']:
+            for z, Z in blockbounds['z']:
+                block = {}
+                idstring = '{:05d}-{:05d}_{:05d}-{:05d}_{:05d}-{:05d}'
+                block['id'] = idstring.format(x, X, y, Y, z, Z)
+                block['slc'] = [slice(z, Z), slice(y, Y), slice(x, X)]
+                block['size'] = slices2sizes(block['slc'])
+                block['dataslices'] = slices2dataslices(block['slc'])
+                block['path'] = path_tpl.format(block['id'])
+                blocks.append(block)
+
+    return blocks
+
+
+def slices2dataslices(slcs):
+
+    dataslices = []
+    for slc in slcs:
+        dataslices += [slc.start, slc.stop, slc.step]
+
+    return dataslices
+
+
+def get_blockbounds(offset, shape, blocksize, margin):
+    """Get the block range for a dimension."""
+
+    # blocks
+    starts = range(offset, shape + offset, blocksize)
+    stops = np.array(starts) + blocksize
+
+    # blocks with margin
+    starts = np.array(starts) - margin
+    stops = np.array(stops) + margin
+
+    # blocks with margin reduced on boundary blocks
+    starts[starts < offset] = offset
+    stops[stops > shape + offset] = shape + offset
+
+    return zip(starts, stops)
+
+
+def get_image(image_in, **kwargs):
+
+    comm = kwargs.pop('comm', None)
+    load_data = kwargs.pop('load_data', True)
+
+    if isinstance(image_in, Image):
+        im = image_in
+        if 'dataslices' in kwargs.keys():
+            im.dataslices = kwargs['dataslices']
+        if im.format == '.h5':
+            im.h5_load(comm, load_data)
+    else:
+        im = Image(image_in, **kwargs)
+        im.load(comm, load_data)
+
+    return im

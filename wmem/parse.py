@@ -68,7 +68,7 @@ def parse_downsample_slices(parser):
 def parse_series2stack(parser):
 
     parser.add_argument(
-        'inputdir',
+        'inputpath',
         help='a directory with images'
         )
     parser.add_argument(
@@ -77,38 +77,32 @@ def parse_series2stack(parser):
         )
 
     parser.add_argument(
-        '-r', '--regex',
-        default='*.tif',
-        help='regular expression to select files with'
-        )
-    parser.add_argument(
         '-d', '--datatype',
-        default='',
+        default=None,
         help='the numpy-style output datatype'
         )
     parser.add_argument(
-        '-o', '--outlayout',
-        default='zyx',
-        help='axis labels: any permutation of "zyx"'
+        '-i', '--inlayout',
+        default=None,
+        help='the data layout of the input'
         )
     parser.add_argument(
-        '-O', '--outputformats',
-        nargs='*',
-        default=['.h5'],
-        help='output formats'
+        '-o', '--outlayout',
+        default=None,
+        help='the data layout for output'
         )
     parser.add_argument(
         '-e', '--element_size_um',
         nargs=3,
         type=float,
-        default=[None, None, None],
+        default=[],
         help='dataset element sizes in the order of outlayout'
         )
     parser.add_argument(
         '-s', '--chunksize',
         type=int,
         nargs=3,
-        default=[20, 20, 20],
+        default=[],
         help='hdf5 chunk sizes in the order of outlayout'
         )
 
@@ -118,11 +112,11 @@ def parse_series2stack(parser):
 def parse_stack2stack(parser):
 
     parser.add_argument(
-        'inputfile',
+        'inputpath',
         help='the inputfile'
         )
     parser.add_argument(
-        'outputfile',
+        'outputpath',
         help='the outputfile'
         )
 
@@ -154,31 +148,18 @@ def parse_stack2stack(parser):
 
     parser.add_argument(
         '-i', '--inlayout',
-        default='',
+        default=None,
         help='the data layout of the input'
         )
     parser.add_argument(
         '-o', '--outlayout',
-        default='',
+        default=None,
         help='the data layout for output'
         )
 
     parser.add_argument(
-        '-a', '--additional_outputs',
-        nargs='*',
-        default=[],
-        help='output the stack in jpg, png, tif, nii, h5'
-        )
-    parser.add_argument(
-        '-n', '--nzfills',
-        type=int,
-        default=5,
-        help='number of characters at the end that define z'
-        )
-
-    parser.add_argument(
         '-d', '--datatype',
-        default='',
+        default=None,
         help='the numpy-style output datatype'
         )
     parser.add_argument(
@@ -193,21 +174,21 @@ def parse_stack2stack(parser):
 def parse_prob2mask(parser):
 
     parser.add_argument(
-        'inputfile',
+        'inputpath',
         help='the path to the input dataset'
         )
     parser.add_argument(
-        'outputfile',
+        'outputpath',
         default='',
         help='the path to the output dataset'
         )
 
-    parser.add_argument(
-        '-i', '--inputmask',
-        nargs=2,
-        default=None,
-        help='additional mask to apply to the output'
-        )
+#     parser.add_argument(
+#         '-i', '--inputmask',
+#         nargs=2,
+#         default=None,
+#         help='additional mask to apply to the output'
+#         )
 
     parser.add_argument(
         '-l', '--lower_threshold',
@@ -252,11 +233,12 @@ def parse_prob2mask(parser):
 def parse_splitblocks(parser):
 
     parser.add_argument(
-        'inputfile',
+        'inputpath',
         help='the path to the input dataset'
         )
     parser.add_argument(
-        'dset_name',
+        '-d', '--dset_name',
+        default='',
         help='the name of the input dataset'
         )
 
@@ -283,9 +265,9 @@ def parse_splitblocks(parser):
         )
 
     parser.add_argument(
-        '-o', '--outputdir',
+        '-o', '--outputpath',
         default='',
-        help="""path to directory"""
+        help="""path to the output directory"""
         )
 
     return parser
@@ -381,11 +363,11 @@ def parse_mergeblocks(parser):
 def parse_downsample_blockwise(parser):
 
     parser.add_argument(
-        'inputfile',
+        'inputpath',
         help='the path to the input dataset'
         )
     parser.add_argument(
-        'outputfile',
+        'outputpath',
         help='the path to the output dataset'
         )
 
@@ -1195,7 +1177,7 @@ def parse_combine_vols(parser):
         '-i', '--volidxs',
         nargs='*',
         type=int,
-        default=[0, 2, 4, 7],
+        default=[],
         help="""indices to the volumes"""
         )
 

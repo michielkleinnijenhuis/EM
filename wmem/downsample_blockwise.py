@@ -11,7 +11,7 @@ import numpy as np
 from skimage.util import view_as_blocks
 from scipy.stats import mode as scipy_mode
 
-from wmem import parse, utils
+from wmem import parse, utils, Image
 
 
 def main(argv):
@@ -26,71 +26,67 @@ def main(argv):
     args = parser.parse_args()
 
     downsample_blockwise(
-        args.inputfile,
+        args.inputpath,
+        args.dataslices,
         args.blockreduce,
         args.func,
-        args.dataslices,
-        args.outputfile,
+        args.outputpath,
         args.save_steps,
         args.protective,
         )
 
 
 def downsample_blockwise(
-        h5path_in,
+        image_in,
+        dataslices=None,
         blockreduce=[3, 3, 3],
         func='np.amax',
-        dataslices=None,
-        h5path_out='',
+        outputpath='',
         save_steps=False,
         protective=False,
         ):
     """Downsample volume by blockwise reduction."""
 
-    # Check if any output paths already exist.
-    outpaths = {'out': h5path_out}
-    status = utils.output_check(outpaths, save_steps, protective)
-    if status == "CANCELLED":
-        return
-
     # Open the inputfile for reading.
-    # TODO: option to get the input data passed
-    h5file_in, ds_in, elsize, axlab = utils.h5_load(h5path_in)
+    im = utils.get_image(image_in, dataslices=dataslices)
 
     # Get the matrix size and resolution of the outputdata.
-    outsize, elsize = get_new_sizes(func, blockreduce, ds_in.shape, elsize)
+    outsize, elsize = get_new_sizes(func, blockreduce, im.dims, im.elsize)
 
     # Open the outputfile for writing and create the dataset or output array.
-    h5file_out, ds_out = utils.h5_write(None, outsize, ds_in.dtype,
-                                        h5path_out,
-                                        element_size_um=elsize,
-                                        axislabels=axlab)
+    mo = Image(outputpath,
+               elsize=elsize,
+               axlab=im.axlab,
+               shape=outsize,
+               dtype=im.dtype,
+               protective=protective)
+    mo.create()
 
     # Get the slice objects for the input data.
-    slices = utils.get_slice_objects_prc(dataslices, ds_in.shape)
+    slices = im.get_slice_objects()
 
     # Reformat the data to the outputsize.
     if func == 'expand':
-        out = ds_in[slices[0], ...]
-        for axis in range(0, ds_out.ndim):
+        out = im.ds[slices[0], ...]
+        for axis in range(0, mo.get_ndim()):
             out = np.repeat(out, blockreduce[axis], axis=axis)
-        ds_out[slices[0], ...] = out
+        mo.ds[slices[0], ...] = out
     else:
         """ TODO: flexible mapping from in to out
         now:
         the reduction factor of the first axis must be 1;
         the extent of the remaining axes must be full
         """
-        ds_out[slices[0], ...] = block_reduce(ds_in[slices[0], ...],
-                                              block_size=tuple(blockreduce),
-                                              func=eval(func))
+        mo.ds[slices[0], ...] = block_reduce(im.ds[slices[0], ...],
+                                             block_size=tuple(blockreduce),
+                                             func=eval(func))
 
-    # Close the h5 files or return the output array.
-    try:
-        h5file_in.close()
-        h5file_out.close()
-    except (ValueError, AttributeError):
-        return ds_out
+    mo.write()
+
+    im.close()
+    mo.close()
+
+    return mo
 
 
 def get_new_sizes(func, blockreduce, dssize, elsize):
@@ -202,6 +198,20 @@ def mode(array, axis=None):  # axis argument needed for block_reduce
                 smode[i, j, k] = np.argmax(np.bincount(block))
 
     return smode
+
+
+def get_image(image_in, comm=None, dataslices=None):
+
+    if isinstance(image_in, Image):
+        im = image_in
+        im.dataslices = dataslices
+        if im.format == '.h5':
+            im.h5_load()
+    else:
+        im = Image(image_in, dataslices=dataslices)
+        im.load(comm=comm)
+
+    return im
 
 
 if __name__ == "__main__":

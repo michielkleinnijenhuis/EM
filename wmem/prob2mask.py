@@ -6,14 +6,18 @@
 
 import sys
 import argparse
-import os
 
 import numpy as np
+
+try:
+    from mpi4py import MPI
+except ImportError:
+    print("mpi4py could not be loaded")
 
 from skimage.morphology import remove_small_objects
 from skimage.morphology import binary_dilation, ball, disk
 
-from wmem import parse, utils
+from wmem import parse, utils, Image, MaskImage
 
 
 def main(argv):
@@ -36,136 +40,100 @@ def main(argv):
                 args.upper_threshold,
                 args.size,
                 args.dilation,
-                args.inputmask,
                 args.go2D,
+                args.usempi & ('mpi4py' in sys.modules),
                 args.outputfile.format(thr),
                 args.save_steps,
                 args.protective,
                 )
     else:
         prob2mask(
-            args.inputfile,
+            args.inputpath,
             args.dataslices,
             args.lower_threshold,
             args.upper_threshold,
             args.size,
             args.dilation,
-            args.inputmask,
             args.go2D,
-            args.outputfile,
+            args.outputpath,
             args.save_steps,
             args.protective,
+            args.usempi & ('mpi4py' in sys.modules),
             )
 
 
 def prob2mask(
-        h5path_in,
+        image_in,
         dataslices=None,
         lower_threshold=0,
         upper_threshold=1,
         size=0,
         dilation=0,
-        h5path_mask=None,
         go2D=False,
-        h5path_out='',
+        outputpath='',
         save_steps=False,
         protective=False,
+        usempi=False,
         ):
     """Create thresholded hard segmentation."""
 
-    # Check if any output paths already exist.
-    outpaths = {'out': h5path_out, 'raw': '', 'mito': '', 'dil': ''}
-    status = utils.output_check(outpaths, save_steps, protective)
-    if status == "CANCELLED":
-        return
+    mpi_info = utils.get_mpi_info(usempi)
 
-    root, ds_main = outpaths['out'].split('.h5')
-    grpname = ds_main + "_steps"
-    for dsname, outpath in outpaths.items():
-        if ((dsname != 'out') and save_steps and (not outpath)):
-            outpaths[dsname] = os.path.join(root + '.h5' + grpname, dsname)
+    # Open the inputfile for reading.
+    im = utils.get_image(image_in, comm=mpi_info['comm'],
+                         dataslices=dataslices)
+    squeezed = im.squeeze_channel(dim=3)
+    dims = im.slices2shape()
 
-    # Load the (sliced) data.
-    h5file_in, ds_in, es, al = utils.load(h5path_in)
-    data, _, _, slices_out = utils.load_dataset(ds_in, dataslices=dataslices)
-    inmask = utils.load(h5path_mask, load_data=True, dtype='bool',
-                        dataslices=dataslices)[0]
+    # Open the outputfile for writing and create the dataset or output array.
+    outpaths = get_outpaths(outputpath, save_steps, dilation, size)
+    mos = {}
+    for stepname, outpath in outpaths.items():
+        mos[stepname] = MaskImage(outpath,
+                                  elsize=squeezed['es'],
+                                  axlab=squeezed['al'],
+                                  shape=dims,
+                                  dtype='bool',
+                                  protective=protective)
+        mos[stepname].create(comm=mpi_info['comm'])  # FIXME: load if exist
 
-    if data.ndim == 4:  # FIXME: generalize
-#         data = np.squeeze(data)
-        data = data[:, :, :, 0]
-        outshape = ds_in.shape[:3]
-        es = es[:3]
-        al = al[:3]
-        slices_out = slices_out[:3]
+    # Prepare for processing with MPI.
+    blocksize = [dim for dim in im.dims]
+    if go2D:
+        blocksize[im.axlab.index('z')] = 1
+        se = disk
     else:
-        outshape = ds_in.shape
-
-    # Open the outputfile(s) for writing
-    # and create the dataset(s) or output array(s).
-    h5file_out, ds_out = utils.h5_write(None, outshape, 'uint8',
-                                        outpaths['out'],
-                                        element_size_um=es,
-                                        axislabels=al)
-    if save_steps:
-        stepnames = ['raw', 'mito', 'dil']
-        steps = [utils.h5_write(None, outshape, 'uint8',
-                                outpaths[out],
-                                element_size_um=es,
-                                axislabels=al)
-                 for out in stepnames]
-        dss = [np.zeros_like(data)] * 3
-    else:
-        stepnames, steps, dss = [], [], []
+        se = ball
+    blocks = utils.get_blocks(im.dims, blocksize, [0, 0, 0], im.dataslices)
+    series = utils.scatter_series(mpi_info, len(blocks))[0]
 
     # Threshold (and dilate and filter) the data.
-    if go2D:
-        # process slicewise
-        mask = np.zeros_like(data)
-        for i, slc in enumerate(data):
-            print('processing slice: {}'.format(i))
-            smf, sdss = process_slice(slc,
-                                      lower_threshold, upper_threshold,
-                                      size, dilation, disk, save_steps)
-            mask[i, :, :] = smf
-            for ds, sds in zip(dss, sdss):
-                ds[i, :, :] = sds
-    else:
-        # process full input
-        mask, dss = process_slice(data,
-                                  lower_threshold, upper_threshold,
-                                  size, dilation, ball, save_steps)
+    for blocknr in series:
+        im.dataslices = blocks[blocknr]['dataslices']
+        im.load()
+        data = im.slice_dataset()
+        masks = process_slice(data,
+                              lower_threshold, upper_threshold,
+                              size, dilation, se, outpaths)
 
-    # Apply additional mask.
-    if inmask is not None:
-        mask[~inmask] = False
+        # FIXME: cannot write nifti/3Dtif in parts
+        for stepname, mask in masks.items():
+            dslcs = squeezed['dslcs']  # FIXME: dslcs_out for go2D
+            slices = mos[stepname].get_slice_objects(dataslices=dslcs)
+            mos[stepname].write(data=mask, slices=slices)
 
-    # Write the mask(s) to file.
-    if '.h5' in h5path_out:
-        utils.write_to_h5ds(ds_out, mask.astype('uint8'), slices_out)
-        for step, ds in zip(steps, dss):
-            utils.write_to_h5ds(step[1], ds.astype('uint8'), slices_out)
-    else:  # write as tif/png/jpg series
-        root, ext = os.path.splitext(outpaths['out'])
-        utils.write_to_img(root, mask.astype('uint8'), al, 5, ext, 0)
-        for stepname, ds in zip(stepnames, dss):
-            root, ext = os.path.splitext(outpaths[stepname])
-            utils.write_to_img(root, ds.astype('uint8'), al, 5, ext, 0)
+    im.close()
+    for _, mo in mos.items():
+        mo.close()
 
-    # Close the h5 file(s) or return the output array(s).
-    try:
-        h5file_in.close()
-        h5file_out.close()
-        for step in steps:
-            step[0].close()
-    except (ValueError, AttributeError):
-        return mask, dss
+    return mos['out']
 
 
 def process_slice(data, lt, ut, size=0, dilation=0,
-                  se=disk, save_steps=False):
+                  se=disk, outpaths=''):
     """Threshold and filter data."""
 
+    masks = {}
     mask_raw, mask_mito, mask_dil = None, None, None
 
     if lt or ut:
@@ -173,19 +141,38 @@ def process_slice(data, lt, ut, size=0, dilation=0,
     else:
         mask = data
     mask_raw = mask.copy()
+    if 'raw' in outpaths.keys():
+        masks['raw'] = mask_raw
 
     if dilation:
         mask = dilate_mask(mask, dilation, se)
         mask_dil = mask.copy()
+        if 'dil' in outpaths.keys():
+            masks['dil'] = mask_dil
 
     if size:
         mask_filter, mask_mito = sizefilter_mask(mask, size)
         mask = mask_filter
+        if 'mito' in outpaths.keys():
+            masks['mito'] = mask_mito
 
+    masks['out'] = mask
+
+    return masks
+
+
+def get_outpaths(h5path_out, save_steps, dilation, size):
+
+    outpaths = {'out': h5path_out}
     if save_steps:
-        return mask, (mask_raw, mask_mito, mask_dil)
-    else:
-        return mask, []
+        outpaths['raw'] = ''
+        if dilation > 0:
+            outpaths['dil'] = ''
+        if size > 0:
+            outpaths['mito'] = ''
+    outpaths = utils.gen_steps(outpaths, save_steps)
+
+    return outpaths
 
 
 def dilate_mask(mask, dilation=0, se=disk):
@@ -209,6 +196,20 @@ def frange(x, y, jump):
     while x < y:
         yield x
         x += jump
+
+
+def get_image(image_in, comm=None, dataslices=None):
+
+    if isinstance(image_in, Image):
+        im = image_in
+        im.dataslices = dataslices
+        if im.format == '.h5':
+            im.h5_load()
+    else:
+        im = Image(image_in, dataslices=dataslices)
+        im.load(comm=comm)
+
+    return im
 
 
 if __name__ == "__main__":

@@ -10,12 +10,13 @@ import os
 
 import numpy as np
 
+import mpi4py
 try:
     from mpi4py import MPI
 except ImportError:
     print("mpi4py could not be loaded")
 
-from wmem import parse, utils
+from wmem import parse, utils, Image
 
 
 def main(argv):
@@ -30,146 +31,111 @@ def main(argv):
     args = parser.parse_args()
 
     splitblocks(
-        args.inputfile,
-        args.dset_name,
+        args.inputpath,
         args.dataslices,
+        args.dset_name,
         args.blocksize,
         args.margin,
         args.blockrange,
-        args.usempi & ('mpi4py' in sys.modules),
-        args.outputdir,
+        args.outputpath,
         args.save_steps,
         args.protective,
+        args.usempi & ('mpi4py' in sys.modules),
         )
 
 
 def splitblocks(
-        h5path_in,
-        dset_name,
+        image_in,
         dataslices=None,
+        dset_name='',
         blocksize=[500, 500, 500],
         margin=[20, 20, 20],
         blockrange=[],
-        usempi=False,
-        outputdir='',
+        outputpath='',
         save_steps=False,
         protective=False,
+        usempi=False,
         ):
     """"Convert a directory of tifs to an hdf5 stack."""
 
     # Prepare for processing with MPI.
     mpi_info = utils.get_mpi_info(usempi)
 
-    # Determine the outputpaths.
-    basepath, h5path_dset = h5path_in.split('.h5/')
-    datadir, fname = os.path.split(basepath)
-    postfix = fname.split(dset_name)[-1]
-    if not outputdir:
-        blockdir = 'blocks_{:04d}'.format(blocksize[0])
-        outputdir = os.path.join(datadir, blockdir)
-    utils.mkdir_p(outputdir)
-    fname = '{}_{}{}.h5'.format(dset_name, '{}', postfix)
-    h5path_tpl = os.path.join(outputdir, fname, h5path_dset)
-
     # Open data for reading.
-    h5_info = utils.h5_load(h5path_in, comm=mpi_info['comm'])
-    h5file_in, ds_in, elsize, axlab = h5_info
+    im = utils.get_image(image_in, comm=mpi_info['comm'],
+                         dataslices=dataslices)
+
+    # Determine the outputpath template string.
+    tpl = get_template_string(im, blocksize, dset_name, outputpath)
 
     # Divide the data into a series of blocks.
-    blocks = get_blocks(ds_in.shape, blocksize, margin, h5path_tpl, dataslices)
+    blocks = utils.get_blocks(im.dims, blocksize, margin, im.dataslices, tpl)
     if blockrange:
         blocks = blocks[blockrange[0]:blockrange[1]]
-    series = np.array(range(0, len(blocks)), dtype=int)
-    if mpi_info['enabled']:
-        series = utils.scatter_series(mpi_info, series)[0]
+    series = utils.scatter_series(mpi_info, len(blocks))[0]
 
     # Write blocks to the outputfile(s).
     for blocknr in series:
-        block = blocks[blocknr]
-        write_block(ds_in, elsize, axlab, block)
+        write_block(im, blocks[blocknr], protective, comm=mpi_info['comm'])
 
-    # Close the h5 files or return the output array.
-    try:
-        h5file_in.close()
-    except (ValueError, AttributeError):
-        pass
-    except UnboundLocalError:
-        pass
+    im.close()
 
 
-def get_blocks(shape, blocksize, margin, h5path_tpl, dataslices):
-    """Create a list of dictionaries with data block info."""
-
-    slices_init = utils.get_slice_objects(dataslices, shape)
-    shape = list(utils.slices2sizes(slices_init))
-
-    blockbounds, blocks = {}, []
-    for i, dim in enumerate('zyx'):
-        blockbounds[dim] = get_blockbounds(slices_init[i].start,
-                                           shape[i],
-                                           blocksize[i],
-                                           margin[i])
-
-    for x, X in blockbounds['x']:
-        for y, Y in blockbounds['y']:
-            for z, Z in blockbounds['z']:
-                block = {}
-                idstring = '{:05d}-{:05d}_{:05d}-{:05d}_{:05d}-{:05d}'
-                block['id'] = idstring.format(x, X, y, Y, z, Z)
-                block['slc'] = [slice(z, Z), slice(y, Y), slice(x, X)]
-                block['size'] = utils.slices2sizes(block['slc'])
-                block['h5path'] = h5path_tpl.format(block['id'])
-                blocks.append(block)
-
-    return blocks
-
-
-def get_blockbounds(offset, shape, blocksize, margin):
-    """Get the block range for a dimension."""
-
-    # blocks
-    starts = range(offset, shape + offset, blocksize)
-    stops = np.array(starts) + blocksize
-
-    # blocks with margin
-    starts = np.array(starts) - margin
-    stops = np.array(stops) + margin
-
-    # blocks with margin reduced on boundary blocks
-    starts[starts < offset] = offset
-    stops[stops > shape + offset] = shape + offset
-
-    return zip(starts, stops)
-
-
-def write_block(ds_in, elsize, axlab, block):
+def write_block(im, block, protective=False, comm=None):
     """Write the block to file."""
 
-    shape = list(block['size'])
-    if ds_in.ndim == 4:
-        shape += [ds_in.shape[3]]
+    im.dataslices = block['dataslices']
+    im.load()
+    data = im.slice_dataset()
 
-    chunks = ds_in.chunks
+    shape = list(block['size'])
+    if im.get_ndim() == 4:
+        shape += [im.ds.shape[3]]
+
+    chunks = im.chunks
     if any(np.array(chunks) > np.array(shape)):
         chunks = True
 
-    h5file_out, ds_out = utils.h5_write(
-        data=None,
-        shape=shape,
-        dtype=ds_in.dtype,
-        h5path_full=block['h5path'],
-        chunks=chunks,
-        element_size_um=elsize,
-        axislabels=axlab,
-        )
+    mo = Image(block['path'],
+               elsize=im.elsize,
+               axlab=im.axlab,
+               shape=shape,
+               chunks=im.chunks,
+               dtype=im.dtype,
+               protective=protective)
+    mo.create(comm)
+    mo.write(data=data)
+    mo.close()
 
-    slcs = block['slc']
-    if ds_in.ndim == 3:
-        ds_out[:] = ds_in[slcs[0], slcs[1], slcs[2]]
-    elif ds_in.ndim == 4:
-        ds_out[:] = ds_in[slcs[0], slcs[1], slcs[2], :]
 
-    h5file_out.close()
+def get_template_string(im, blocksize, dset_name='', outputpath=''):  # FIXME
+
+    comps = im.split_path(outputpath)
+
+    if '{}' in outputpath:  # template provided
+        template_string = outputpath
+        utils.mkdir_p(comps['dir'])
+        return template_string
+
+    if not outputpath:
+        blockdir = 'blocks_{:04d}'.format(blocksize[0])
+        outputdir = os.path.join(comps['dir'], blockdir)
+
+    utils.mkdir_p(outputdir)
+
+    if im.format == '.h5':
+        if dset_name:
+            postfix = comps['fname'].split(dset_name)[-1]
+            fname = '{}_{}{}{}'.format(dset_name, '{}', postfix, comps['ext'])
+        else:
+            fname = '{}_{}{}'.format(comps['fname'], '{}', comps['ext'])
+
+        template_string = os.path.join(outputdir, fname, comps['dset'])
+    else:
+        fname = '{}_{}{}'.format(comps['fname'], '{}', comps['ext'])
+        template_string = os.path.join(outputdir, fname)
+
+    return template_string
 
 
 if __name__ == "__main__":

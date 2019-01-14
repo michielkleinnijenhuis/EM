@@ -6,9 +6,15 @@
 
 import sys
 import argparse
-import os
 
-from wmem import parse, utils
+import numpy as np
+
+try:
+    from mpi4py import MPI
+except ImportError:
+    print("mpi4py could not be loaded")
+
+from wmem import parse, utils, Image
 
 
 def main(argv):
@@ -23,8 +29,8 @@ def main(argv):
     args = parser.parse_args()
 
     stack2stack(
-        args.inputfile,
-        args.outputfile,
+        args.inputpath,
+        args.dataslices,
         args.dset_name,
         args.blockoffset,
         args.datatype,
@@ -33,128 +39,137 @@ def main(argv):
         args.outlayout,
         args.element_size_um,
         args.chunksize,
-        args.additional_outputs,
-        args.nzfills,
-        args.dataslices,
+        args.outputpath,
         args.save_steps,
         args.protective,
+        args.usempi & ('mpi4py' in sys.modules),
         )
 
 
 def stack2stack(
-        inputfile,
-        outputfile,
+        image_in,
+        dataslices=None,
         dset_name='',
         blockoffset=[],
-        datatype='',
+        datatype=None,
         uint8conv=False,
-        inlayout='',
-        outlayout='',
+        inlayout=None,
+        outlayout=None,
         elsize=[],
         chunksize=[],
-        additional_outputs=[],
-        nzfills=5,
-        dataslices=None,
+        outputpath='',
         save_steps=False,
         protective=False,
+        usempi=False,
         ):
     """Convert/select/downscale/transpose/... an hdf5 dataset."""
 
-    # output root and exts
-    root, ext = split_filepath(outputfile)
-    outexts = list(set(additional_outputs + [ext]))
+    mpi_info = utils.get_mpi_info(usempi)
 
-    # Check if any output paths already exist.
-    outpaths = {'out': outputfile, 'addext': (root, additional_outputs)}
-    status = utils.output_check(outpaths, save_steps, protective)
-    if status == "CANCELLED":
-        return
+    # Open the inputfile for reading.
+    im = utils.get_image(image_in, dataslices=dataslices)
 
-    h5file_in, ds_in, h5elsize, h5axlab = utils.h5_load(inputfile)
+    if dset_name:
+        im.dataslices = utils.dataset_name2dataslices(dset_name, blockoffset,
+                                                      axlab=inlayout,
+                                                      shape=im.dims)
 
-    try:
-        ndim = ds_in.ndim
-    except AttributeError:
-        ndim = len(ds_in.dims)
+    # Determine the properties of the output dataset.
+    datatype = datatype or im.dtype
+    outlayout = outlayout or im.axlab
+    chunksize = chunksize or im.chunks
+    elsize = elsize or im.elsize
+    outshape = im.slices2shape()
 
-    # data layout
-        # FIXME: h5axlab not necessarily xyzct!
-        # FIXME: this forces a possibly erroneous outlayout when inlayout is not found
-    inlayout = inlayout or ''.join(h5axlab) or 'zyxct'[0:ndim]
+    in2out = [im.axlab.index(l) for l in outlayout]
+    if chunksize is not None:
+        chunksize = tuple([chunksize[i] for i in in2out])
+    elsize = [im.elsize[i] for i in in2out]
+    outshape = [outshape[i] for i in in2out]
+
+    # Open the outputfile for writing and create the dataset or output array.
+    mo = Image(outputpath,
+               elsize=elsize,
+               axlab=outlayout,
+               shape=outshape,
+               chunks=chunksize,
+               dtype=datatype,
+               protective=protective)
+    mo.create(comm=mpi_info['comm'])
+
+    # Prepare for processing with MPI.
+    blocksize = [dim for dim in im.dims]
+    if mo.chunks is not None:
+        blocksize[im.axlab.index('z')] = mo.chunks[mo.axlab.index('z')]  #TODO
+    blocks = utils.get_blocks(im.dims, blocksize, [0, 0, 0], im.dataslices)
+    series = utils.scatter_series(mpi_info, len(blocks))[0]
+
+    data = im.slice_dataset()
+    data = np.transpose(data, in2out)
+#     mo.transpose(in2out)
+
+    # TODO: proper general writing astype
+    if uint8conv:
+        from skimage import img_as_ubyte
+        data = utils.normalize_data(data)[0]
+        data = img_as_ubyte(data)
+
+    mo.write(data=data)
+
+    im.close()
+    mo.close()
+
+    return mo
+
+
+def get_layouts(im, inlayout, outlayout):
+
+    inlayout = inlayout or ''.join(im.axlab) or 'zyxct'[0:im.get_ndim()]
     outlayout = outlayout or inlayout
     in2out = [inlayout.index(l) for l in outlayout]
 
-    # element size
-    elsize = elsize or (h5elsize[in2out]
-                        if h5elsize is not None else None)
+    return inlayout, outlayout, in2out
 
-    # chunksize
+
+def get_shape(im, in2out, slices):
+
+    outshape = (len(range(*slices[0].indices(slices[0].stop))),
+                len(range(*slices[1].indices(slices[1].stop))),
+                len(range(*slices[2].indices(slices[2].stop))))
+    outshape = [outshape[i] for i in in2out]
+
+    return outshape
+
+
+def get_chunksize(im, in2out, chunksize):
+
     if chunksize is not None:
         chunksize = tuple(chunksize) or (
             True if not any(chunksize)
-            else (tuple([ds_in.chunks[i] for i in in2out])
-                  if ds_in.chunks else None
+            else (tuple([im.ds.chunks[i] for i in in2out])
+                  if im.ds.chunks else None
                   )
             )
 
-    # datatype
-    datatype = datatype or ds_in.dtype
+    # make sure chunksize does not exceed dimensions
+    chunksize = tuple([cs if cs < dim else dim
+                       for cs, dim in zip(list(chunksize), im.dims)])
 
-    if dset_name:
-        _, x, X, y, Y, z, Z = utils.split_filename(dset_name, blockoffset)
-        slices = {'x': [x, X, 1], 'y': [y, Y, 1], 'z': [z, Z, 1]}
-        if ndim > 3:
-            C = ds_in.shape[inlayout.index('c')]
-            slices['c'] = [0, C, 1]
-        sliceslist = [slices[dim] for dim in inlayout]
-        dataslices = [item for sl in sliceslist for item in sl]
-
-    # get the selected and transformed data
-    # TODO: most memory-efficient solution
-    data = utils.load_dataset(ds_in, elsize, inlayout, outlayout,
-                              datatype, dataslices, uint8conv)[0]
-
-    h5file_in.close()
-
-    # write the data
-    for ext in outexts:
-
-        if '.nii' in ext:
-            if data.dtype == 'float16':
-                data = data.astype('float')
-            utils.write_to_nifti(root + '.nii.gz', data, elsize)
-
-        if '.h5' in ext:
-            utils.h5_write(data, data.shape, data.dtype,
-                           outputfile,
-                           element_size_um=elsize,
-                           axislabels=outlayout,
-                           chunks=chunksize)
-
-        if (('.tif' in ext) |
-                ('.png' in ext) |
-                ('.jpg' in ext)) & (data.ndim < 4):
-            if data.ndim == 2:
-                data = data.atleast_3d()
-                outlayout += 'z'
-            utils.write_to_img(root, data, outlayout, nzfills, ext)
-
-    return data
+    return chunksize
 
 
-def split_filepath(outputpath):
-    """Split a filepath in root and extension."""
+def get_image(image_in, comm=None, dataslices=None):
 
-    if '.h5' in outputpath:  # ext in middle of outputfilepath
-        ext = '.h5'
-        root = outputpath.split(ext)[0]
-    elif outputpath.endswith('.nii.gz'):  # double ext
-        ext = '.nii.gz'
-        root = outputpath.split(ext)[0]
-    else:  # simple ext
-        root, ext = os.path.splitext(outputpath)
+    if isinstance(image_in, Image):
+        im = image_in
+        im.dataslices = dataslices
+        if im.format == '.h5':
+            im.h5_load()
+    else:
+        im = Image(image_in, dataslices=dataslices)
+        im.load(comm=comm)
 
-    return root, ext
+    return im
 
 
 if __name__ == "__main__":

@@ -18,24 +18,15 @@ already exist in the output directory.
 
 import sys
 import argparse
-import os
-import glob
-from math import ceil
 
 import numpy as np
-from skimage import io
 
 try:
     from mpi4py import MPI
 except ImportError:
     print("mpi4py could not be loaded")
 
-try:
-    import DM3lib as dm3
-except ImportError:
-    print("dm3lib could not be loaded")
-
-from wmem import parse, utils
+from wmem import parse, utils, Image
 
 
 def main(argv):
@@ -50,226 +41,199 @@ def main(argv):
     args = parser.parse_args()
 
     series2stack(
-        args.inputdir,
-        args.regex,
-        args.element_size_um,
+        args.inputpath,
+        args.dataslices,
+        args.inlayout,
         args.outlayout,
+        args.element_size_um,
         args.datatype,
         args.chunksize,
-        args.dataslices,
-        args.usempi & ('mpi4py' in sys.modules),
-        args.outputformats,
         args.outputpath,
         args.save_steps,
         args.protective,
+        args.usempi & ('mpi4py' in sys.modules),
         )
 
 
 def series2stack(
-        inputdir,
-        regex='*.tif',
-        element_size_um=[None, None, None],
-        outlayout='zyx',
-        datatype='',
-        chunksize=[20, 20, 20],
+        image_in,
         dataslices=None,
-        usempi=False,
-        outputformats=['.h5'],
+        inlayout=None,
+        outlayout=None,
+        elsize=[],
+        datatype=None,
+        chunksize=[],
         outputpath='',
         save_steps=False,
         protective=False,
+        usempi=False,
         ):
     """"Convert a directory of tifs to an hdf5 stack."""
 
-    # Check if any output paths already exist.
-    if '.h5' in outputformats:
-        outpaths = {'out': outputpath}
-        status = utils.output_check(outpaths, save_steps, protective)
-        if status == "CANCELLED":
-            return
+    mpi_info = utils.get_mpi_info(usempi)
 
-    # Get the list of input filepaths.
-    files = sorted(glob.glob(os.path.join(inputdir, regex)))
+    im = utils.get_image(image_in, comm=mpi_info['comm'],
+                         dataslices=dataslices, axlab=inlayout,
+                         load_data=False)
 
-    # Get some metadata from the inputfiles
-    zyxdims, datatype, element_size_um = get_metadata(files,
-                                                      datatype,
-                                                      outlayout,
-                                                      element_size_um)
+    # Determine the properties of the output dataset.
+    datatype = datatype or im.dtype
+    outlayout = outlayout or im.axlab
+    chunksize = chunksize or im.chunks
+    elsize = elsize or im.elsize
+    outshape = im.slices2shape()
 
-    # (plane, row, column) indexing to outlayout (where prc -> zyx).
-    in2out = ['zyx'.index(o) for o in outlayout]
+    in2out = [im.axlab.index(l) for l in outlayout]
+    if chunksize is not None:
+        chunksize = tuple([chunksize[i] for i in in2out])
+    elsize = [im.elsize[i] for i in in2out]
+    outshape = [outshape[i] for i in in2out]
 
-    # Get the properties of the output dataset.
-    slices = utils.get_slice_objects_prc(dataslices, zyxdims)  # prc-order
-    files = files[slices[0]]
-    datashape_out_prc = (len(files),
-                         len(range(*slices[1].indices(slices[1].stop))),
-                         len(range(*slices[2].indices(slices[2].stop))))
-    datashape_out = [datashape_out_prc[i] for i in in2out]
+    # Open the outputfile for writing and create the dataset or output array.
+    mo = Image(outputpath,
+               elsize=elsize,
+               axlab=outlayout,
+               shape=outshape,
+               chunks=chunksize,
+               dtype=datatype,
+               protective=protective)
+    mo.create(comm=mpi_info['comm'])
+
+    # Prepare for processing with MPI.
+    blocksize = [dim for dim in im.dims]
+    if mo.chunks is not None:
+        blocksize[im.axlab.index('z')] = mo.chunks[mo.axlab.index('z')]
+    blocks = utils.get_blocks(im.dims, blocksize, [0, 0, 0], im.dataslices)
+    series = utils.scatter_series(mpi_info, len(blocks))[0]
+
+    # Write blocks of 2D images to the outputfile(s).
+    for blocknr in series:
+        im.dataslices = blocks[blocknr]['dataslices']
+        im.load()
+
+        slcs_out = im.get_slice_objects(im.dataslices)
+        slcs_out = [slcs_out[i] for i in in2out]
+        mo.write(data=np.transpose(im.ds, in2out), slices=slcs_out)
+
+    im.close()
+    mo.close()
+
+    return mo
+
+
+def get_layouts(im, inlayout, outlayout):
+
+    inlayout = inlayout or ''.join(im.axlab) or 'zyxct'[0:im.get_ndim()]
+    outlayout = outlayout or inlayout
+    in2out = [inlayout.index(l) for l in outlayout]
+
+    return inlayout, outlayout, in2out
+
+
+def get_shape(im, in2out):
+
+    slices = im.get_slice_objects()
+    outshape = (len(range(*slices[0].indices(slices[0].stop))),
+                len(range(*slices[1].indices(slices[1].stop))),
+                len(range(*slices[2].indices(slices[2].stop))))
+    outshape = [outshape[i] for i in in2out]
+
+    return outshape
+
+
+def get_chunksize(im, in2out, chunksize):
+
+    if chunksize is None:
+        return
+
+    if chunksize:
+        return tuple(chunksize)
+
+    if not any(chunksize):
+        return True
+
+    if im.chunks:
+        chunksize = tuple([im.chunks[i] for i in in2out])
+
+    # make sure chunksize does not exceed dimensions
+    chunksize = tuple([cs if cs < dim else dim
+                       for cs, dim in zip(list(chunksize), im.dims)])
+
+    return chunksize
+
+
+
+
+def get_blocks_dataslices(im, blocksize):
+
+    nblocks = [int(np.ceil(float(dim) / bs))
+               for bs, dim in zip(blocksize, im.dims)]
+
+    dslices = []
+    for nb in nblocks:
+        for blocknr in range(0, nb):
+            dataslices = []
+            for bs, dim in zip(blocksize, im.dims):
+                start = blocknr * bs
+                stop = np.minimum(dim, blocknr * bs + bs)
+                dataslices += [start, stop, 1]
+
+                dslices.append(dataslices)
+
+    return dslices
+
+
+def get_blocks_zslices(im, scs):
+
+    dim_z = im.dims[im.axlab.index('z')]
+    nblocks = int(np.ceil(float(dim_z) / scs))
+    dslices = []
+    for blocknr in range(0, nblocks):
+        dslices.append(blockedslices(im, scs, blocknr))
+
+    return dslices
+
+
+def blockedslices(im, scs, blocknr):
+
+    dslices = []
+    for al in im.axlab:
+        if al == 'z':
+            start = blocknr * scs
+            zdim = im.dims[im.axlab.index('z')]
+            stop = np.minimum(zdim, blocknr * scs + scs)
+            dslices += [start, stop, 1]
+        else:
+            dim = im.dims[im.axlab.index(al)]
+            dslices += [0, dim, 1]
+
+    return dslices
+
+
+def get_blocks_filelist(im, scs):
 
     # Reshape the file list into a list of blockwise file lists.
-    scs = chunksize[outlayout.index('z')]  # chunksize slice dimension
+    slices = im.get_slice_objects()
+    files = im.file[slices[0]]
     files_blocks = zip(* [iter(files)] * scs)
     rem = len(files) % scs
     if rem:
         files_blocks += [tuple(files[-rem:])]
 
-    # Get slice objects for every output block.
-    slices_out_prc = [[slice(bnr * scs, bnr * scs + scs),
-                       slice(0, datashape_out_prc[1]),
-                       slice(0, datashape_out_prc[2])]
-                      for bnr in range(0, len(files_blocks))]
-    slices_out = [[sliceset_prc[i] for i in in2out]
-                  for sliceset_prc in slices_out_prc]
 
-    # Prepare for processing with MPI.
-    mpi_info = utils.get_mpi_info(usempi)
-    series = np.array(range(0, len(files_blocks)), dtype=int)
-    if mpi_info['enabled']:
-        series = utils.scatter_series(mpi_info, series)[0]
+def slices2blockedslices(mo, scs, blocknr):
 
-    # Open the outputfile for writing and create the dataset or output array.
-    if '.h5' in outputformats:
-        h5file_out, ds_out = utils.h5_write(None, datashape_out, datatype,
-                                            outputpath,
-                                            element_size_um=element_size_um,
-                                            axislabels=outlayout,
-                                            chunks=tuple(chunksize),
-                                            comm=mpi_info['comm'])
-        outdir = os.path.dirname(outputpath.split('.h5')[0])
-    else:
-        ds_out = None
-        outdir = outputpath
-
-    # Write blocks of 2D images to the outputfile(s).
-    for blocknr in series:
-        if '.h5' in outputformats:
-            ds_out = process_block(files_blocks[blocknr], ds_out,
-                                   slices, slices_out[blocknr], in2out,
-                                   outputformats, outdir)
+    # Get slice objects for an output block.
+    dslices = []
+    for al in mo.axlab:
+        if al == 'z':
+            dslices += [blocknr * scs, blocknr * scs + scs, 1]
         else:
-            process_slices(files_blocks[blocknr],
-                           slices, slices_out[blocknr],
-                           outputformats, outdir, datatype)
+            dim = mo.dims[mo.axlab.index(al)]
+            dslices += [0, dim, 1]
+    slices = mo.get_slice_objects(dslices)
 
-    # Close the h5 files or return the output array.
-    try:
-        h5file_out.close()
-    except (ValueError, AttributeError):
-        return ds_out
-    except UnboundLocalError:
-        pass
-
-
-def process_block(files, ds_out, slcs_in, slcs_out, in2out,
-                  outputformats=['.h5'], outdir=''):
-    """Read the block from 2D images and write to stack.
-
-    NOTE: slices is in prc-order, slices_out is in outlayout-order
-    """
-
-    datashape_block = (
-        len(files),
-        len(range(*slcs_in[1].indices(slcs_in[1].stop))),
-        len(range(*slcs_in[2].indices(slcs_in[2].stop))),
-        )
-    block = np.empty(datashape_block)
-    for i, fpath in enumerate(files):
-        im = get_image(fpath, ds_out.dtype)
-        block[i, :, :] = im[slcs_in[1], slcs_in[2]]
-
-    for ext in outputformats:
-        if ext == '.h5':
-            ds_out[slcs_out[0],
-                   slcs_out[1],
-                   slcs_out[2]] = block.transpose(in2out)
-        elif ext in ('.tif', '.png', '.jpg'):
-            utils.write_to_img(outdir, block,
-                               'zyx', nzfills=5, ext=ext,
-                               slcoffset=slcs_out[0].start)
-
-    return ds_out
-
-
-def process_slices(files, slcs_in, slcs_out,
-                   outputformats=['.tif'], outdir='',
-                   datatype='uint16'):
-    """Read the block from 2D images and write to stack.
-
-    NOTE: slices is in prc-order, slices_out is in outlayout-order
-    """
-
-    for i, fpath in enumerate(files):
-        slcno = slcs_out[0].start + i
-        im = get_image(fpath, datatype)
-
-        for ext in outputformats:
-            savedir = os.path.join(outdir, ext[1:])
-            utils.mkdir_p(savedir)
-            data = im[slcs_in[1], slcs_in[2]]
-            if ext != '.tif':
-                data = utils.normalize_data(data)[0]
-                # FIXME: normalize over full dataset
-            fname = '{:05d}{}'.format(slcno, ext)
-            filepath = os.path.join(savedir, fname)
-            io.imsave(filepath, data)
-
-
-def get_image(fpath, datatype):
-
-    if fpath.endswith('.dm3'):
-        dm3f = dm3.DM3(fpath, debug=0)
-        im = dm3f.imagedata
-    else:
-        im = io.imread(fpath)
-
-    return im.astype(datatype)
-
-
-def get_metadata(files, datatype, outlayout, elsize):
-
-    # derive the stop-values from the image data if not specified
-    if files[0].endswith('.dm3'):
-
-        try:
-            import DM3lib as dm3
-        except ImportError:
-            raise
-
-        dm3f = dm3.DM3(files[0], debug=0)
-
-#         yxdims = dm3f.imagedata.shape
-        alt_dtype = dm3f.imagedata.dtype
-#         yxelsize = dm3f.pxsize[0]
-
-        id = 'root.ImageList.1.ImageData'
-        tag = '{}.Dimensions.{:d}'
-        yxdims = []
-        for dim in [0, 1]:
-            yxdims += [int(dm3f.tags.get(tag.format(id, dim)))]
-
-        tag = '{}.Calibrations.Dimension.{:d}.Scale'
-        for lab, dim in zip('xy', [0, 1]):
-            if elsize[outlayout.index(lab)] == -1:
-                pxsize = float(dm3f.tags.get(tag.format(id, dim)))
-                elsize[outlayout.index(lab)] = pxsize
-        tag = 'root.ImageList.1.ImageTags.SBFSEM.Record.Slice thickness'
-        slicethickness = float(dm3f.tags.get(tag.format(id, dim)))
-        elsize[outlayout.index('z')] = slicethickness / 1000
-
-    else:
-        yxdims = io.imread(files[0]).shape
-
-        alt_dtype = io.imread(files[0]).dtype
-
-    zyxdims = [len(files)] + list(yxdims)
-
-    datatype = datatype or alt_dtype
-
-    elsize = [0 if el is None else el for el in elsize]
-
-    return zyxdims, datatype, elsize
+    return slices
 
 
 if __name__ == "__main__":
