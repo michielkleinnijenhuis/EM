@@ -84,7 +84,7 @@ def mergeblocks(
     mpi_info = utils.get_mpi_info(usempi)
     series = np.array(range(0, len(h5paths_in)), dtype=int)
     if mpi_info['enabled']:
-        series = utils.scatter_series(mpi_info, series)[0]
+        series = utils.scatter_series(mpi_info, len(series))[0]
 
     # TODO: save_steps
     # check output paths

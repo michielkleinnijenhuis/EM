@@ -100,7 +100,7 @@ def evaluate_overlaps(
     n_slices = ds_in.shape[slicedim] - offsets
     series = np.array(range(0, n_slices), dtype=int)
     if mpi_info['enabled']:
-        series = utils.scatter_series(mpi_info, series)[0]
+        series = utils.scatter_series(mpi_info, len(series))[0]
 
     # merge overlapping neighbours
     labelsets = {}

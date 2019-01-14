@@ -202,7 +202,7 @@ def CC_2D(
     n_slices = ds_mm.shape[slicedim]
     series = np.array(range(0, n_slices), dtype=int)
     if mpi_info['enabled']:
-        series = utils.scatter_series(mpi_info, series)[0]
+        series = utils.scatter_series(mpi_info, len(series))[0]
 
     # open data for writing
     h5file_out, ds_out = utils.h5_write(None, ds_mm.shape, 'uint32',
@@ -297,7 +297,7 @@ def CC_2Dfilter(
     n_slices = ds_mm.shape[slicedim]
     series = np.array(range(0, n_slices), dtype=int)
     if mpi_info['enabled']:
-        series = utils.scatter_series(mpi_info, series)[0]
+        series = utils.scatter_series(mpi_info, len(series))[0]
         if mpi_info['rank'] == 0:
             fws_reduced = np.zeros((maxlabel + 1, len(map_propnames)),
                                    dtype='float')
@@ -384,7 +384,7 @@ def CC_2Dprops(
     series = np.array(range(0, n_props), dtype=int)
     mpi_info = utils.get_mpi_info(usempi)
     if mpi_info['enabled']:
-        series = utils.scatter_series(mpi_info, series)[0]
+        series = utils.scatter_series(mpi_info, len(series))[0]
 
     fws = {}
     for i in series:

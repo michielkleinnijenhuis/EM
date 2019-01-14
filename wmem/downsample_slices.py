@@ -114,7 +114,7 @@ def downsample_slices(
                             slices[0].stop,
                             slices[0].step), dtype=int)
     if mpi_info['enabled']:
-        series = utils.scatter_series(mpi_info, series)[0]
+        series = utils.scatter_series(mpi_info, len(series))[0]
 
     # Downsample and save the images.
     for slc in series:
