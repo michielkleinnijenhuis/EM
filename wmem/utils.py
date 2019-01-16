@@ -882,7 +882,7 @@ def read_labelsets_from_txt(lsfile):
         lines = f.readlines()
         for line in lines:
             splitline = line.split(':', 2)
-            lsk = splitline[0]
+            lsk = int(splitline[0])
             lsv = set(np.fromstring(splitline[1], dtype=int, sep=' '))
             labelsets[lsk] = lsv
 
