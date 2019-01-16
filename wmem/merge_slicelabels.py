@@ -121,6 +121,7 @@ def evaluate_overlaps(
     mname = "host-{}_rank-{:02d}".format(socket.gethostname(), mpi_info['rank'])
     lsroot = '{}_{}_{}'.format(h5root, ds_out_name, mname)
     utils.write_labelsets(labelsets, lsroot, ['pickle'])
+#     utils.dump_labelsets(labelsets, im.split_path(outputpath), mpi_info['rank'])
 
     h5file_in.close()
 
@@ -130,6 +131,7 @@ def evaluate_overlaps(
 
     # let one process combine the overlaps found in the separate processes
     if mpi_info['rank'] == 0:
+#         utils.combine_labelsets(labelsets, comps)
         lsroot = '{}_{}'.format(h5root, ds_out_name)
         match = "{}_host*_rank*.pickle".format(lsroot)
         infiles = glob.glob(match)
@@ -256,6 +258,8 @@ def filter_labels(
     if relabel_from > 1:
         print('relabeling from {}'.format(relabel_from))
         labels = relabel_sequential(labels, relabel_from)[0]
+        # NOTE: do not use to force an offset when there is nothing to relabel
+        # ... relabel_sequential will return doing nothing
         # TODO: save mapping?
 
     ds_out[:, :, :] = labels
