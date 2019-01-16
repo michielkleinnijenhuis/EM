@@ -51,7 +51,9 @@ def downsample_blockwise(
     im = utils.get_image(image_in, dataslices=dataslices)
 
     # Get the matrix size and resolution of the outputdata.
-    outsize, elsize = get_new_sizes(func, blockreduce, im.dims, im.elsize)
+    slices = im.get_slice_objects()
+    slicedshape = im.slices2shape()
+    outsize, elsize = get_new_sizes(func, blockreduce, slicedshape, im.elsize)
 
     # Open the outputfile for writing and create the dataset or output array.
     mo = Image(outputpath,
@@ -62,12 +64,10 @@ def downsample_blockwise(
                protective=protective)
     mo.create()
 
-    # Get the slice objects for the input data.
-    slices = im.get_slice_objects()
-
     # Reformat the data to the outputsize.
     if func == 'expand':
-        out = im.ds[slices[0], ...]
+#         out = im.ds[slices[0], ...]
+        out = im.ds[slices[0], slices[1], slices[2]]  # FIXME: 4D
         for axis in range(0, mo.get_ndim()):
             out = np.repeat(out, blockreduce[axis], axis=axis)
         mo.ds[slices[0], ...] = out
