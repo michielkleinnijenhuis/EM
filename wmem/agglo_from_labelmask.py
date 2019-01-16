@@ -25,7 +25,7 @@ def main(argv):
     args = parser.parse_args()
 
     agglo_from_labelmask(
-        args.inpufile,
+        args.inputfile,
         args.labelvolume,
         args.ratio_threshold,
         args.outputfile,
