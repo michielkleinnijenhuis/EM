@@ -550,6 +550,79 @@ def parse_connected_components_clf(parser):
     return parser
 
 
+def parse_merge_labels(parser):
+
+    parser.add_argument(
+        'inputfile',
+        help="""path to hdf5 dataset <filepath>.h5/<...>/<dataset>:
+                """
+        )
+    parser.add_argument(
+        'outputfile',
+        default='',
+        help="""path to hdf5 dataset <filepath>.h5/<...>/<dataset>:
+                """
+        )
+
+    parser.add_argument(
+        '-d', '--slicedim',
+        type=int,
+        default=0,
+        help='...'
+        )
+
+    parser.add_argument(
+        '-m', '--merge_method',
+        default='neighbours',
+        help='neighbours, conncomp, and/or watershed'
+        )
+
+    parser.add_argument(
+        '-s', '--min_labelsize',
+        type=int,
+        default=0,
+        help='...'
+        )
+    parser.add_argument(
+        '-R', '--remove_small_labels',
+        action='store_true',
+        help='remove the small labels before further processing'
+        )
+
+    parser.add_argument(
+        '-q', '--offsets',
+        type=int,
+        default=2,
+        help='...'
+        )
+    parser.add_argument(
+        '-o', '--overlap_threshold',
+        type=float,
+        default=0.50,
+        help='for neighbours'
+        )
+
+    parser.add_argument(
+        '-r', '--searchradius',
+        nargs=3,
+        type=int,
+        default=[100, 30, 30],
+        help='for watershed'
+        )
+    parser.add_argument(
+        '--data',
+        help="""path to hdf5 dataset <filepath>.h5/<...>/<dataset>:
+                """
+        )
+    parser.add_argument(
+        '--maskMM',
+        help="""path to hdf5 dataset <filepath>.h5/<...>/<dataset>:
+                """
+        )
+
+    return parser
+
+
 def parse_merge_slicelabels(parser):
 
     parser.add_argument(

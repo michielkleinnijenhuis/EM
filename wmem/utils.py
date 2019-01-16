@@ -11,6 +11,8 @@ import errno
 import pickle
 import re
 from random import shuffle
+import socket
+import glob
 
 import numpy as np
 
@@ -1231,3 +1233,28 @@ def get_image(image_in, **kwargs):
         im.load(comm, load_data)
 
     return im
+
+
+def dump_labelsets(labelsets, comps, rank):
+    """Dump labelsets from a single process in a pickle."""
+
+    mname = "host-{}_rank-{:02d}".format(socket.gethostname(), rank)
+    lsroot = '{}_{}_{}'.format(comps['base'], comps['dset'], mname)
+    write_labelsets(labelsets, lsroot, ['pickle'])
+
+
+def combine_labelsets(labelsets, comps):
+    """Combine labelsets from separate processes."""
+
+    lsroot = '{}_{}'.format(comps['base'], comps['dset'])
+    match = "{}_host*_rank*.pickle".format(lsroot)
+    infiles = glob.glob(match)
+    for ppath in infiles:
+        with open(ppath, "r") as f:
+            newlabelsets = pickle.load(f)
+        for lsk, lsv in newlabelsets.items():
+            labelsets = classify_label_set(labelsets, lsv, lsk)
+
+    write_labelsets(labelsets, lsroot, ['txt', 'pickle'])
+
+    return labelsets
