@@ -66,14 +66,14 @@ def agglo_from_labelmask(
 
     fwmap = np.zeros(maxlabel + 1, dtype='i')
 
-    areas_ws = np.bincount(ds_in.ravel())
+    areas_ws = np.bincount(ds_in[:].ravel().astype('int64'))
 
     labelsets = {}
     rp_lw = regionprops(ds_lv, ds_in)
     for prop in rp_lw:
 
         maskedregion = prop.intensity_image[prop.image]
-        counts = np.bincount(maskedregion)
+        counts = np.bincount(maskedregion.astype('int64'))
         svoxs_in_label = [l for sl in np.argwhere(counts) for l in sl]
 
         ratios_svox_in_label = [float(counts[svox]) / float(areas_ws[svox])
