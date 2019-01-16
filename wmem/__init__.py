@@ -573,9 +573,17 @@ class Image:
 
         # FIXME: generalize to 2D/4D
         slices = self.get_slice_objects(dataslices, dims)
-        shape = (len(range(*slices[0].indices(slices[0].stop))),
-                 len(range(*slices[1].indices(slices[1].stop))),
-                 len(range(*slices[2].indices(slices[2].stop))))
+#         shape = (len(range(*slc.indices(slc.stop)))
+#                  for slc in slices)
+        if len(slices) == 3:
+            shape = (len(range(*slices[0].indices(slices[0].stop))),
+                     len(range(*slices[1].indices(slices[1].stop))),
+                     len(range(*slices[2].indices(slices[2].stop))))
+        elif len(slices) == 4:
+            shape = (len(range(*slices[0].indices(slices[0].stop))),
+                     len(range(*slices[1].indices(slices[1].stop))),
+                     len(range(*slices[2].indices(slices[2].stop))),
+                     len(range(*slices[3].indices(slices[3].stop))))
 
         return shape
 
