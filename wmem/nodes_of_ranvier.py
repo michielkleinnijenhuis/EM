@@ -112,7 +112,7 @@ def nodes_of_ranvier(
                                     outpaths, elsize, axlab)[2]
     labelset -= ls_small
     ls_nt -= ls_small
-    ls_short = filter_on_heigth(labels, 5)
+    ls_short = filter_on_heigth(labels, 0)  # 5
     labelset -= ls_short
     ls_nt -= ls_short
     ls_tv = labelset - ls_nt
@@ -121,6 +121,12 @@ def nodes_of_ranvier(
     print('number of large, long in-volume labels: {}'.format(len(ls_nt)))
     print('number of large, long through-volume labels: {}'.format(len(ls_tv)))
 
+    labelsets = {l: set([l]) for l in ls_tv}
+    filestem = '{}_{}_tv_auto'.format(root, ds_out.name[1:])
+    utils.write_labelsets(labelsets, filestem, filetypes=['txt'])
+    labelsets = {l: set([l]) for l in ls_nt}
+    filestem = '{}_{}_nt_auto'.format(root, ds_out.name[1:])
+    utils.write_labelsets(labelsets, filestem, filetypes=['txt'])
 
     # map the large labels that don't traverse the volume
     fw_nt = np.zeros(maxlabel + 1, dtype='i')
@@ -130,15 +136,15 @@ def nodes_of_ranvier(
 
     # automated label merge
     labelsets = {}
-    min_labelsize = 10
+#     min_labelsize = 10
     labelsets, filled = merge_labels(labels_nt, labelsets, merge_methods,
                                      overlap_threshold,
                                      h5path_data, h5path_mmm,
                                      min_labelsize,
                                      searchradius)
 
-    fw = np.zeros(maxlabel + 1, dtype='i')
-    ds_out[:] = utils.forward_map(np.array(fw), labels, labelsets)
+#     fw = np.zeros(maxlabel + 1, dtype='i')
+    ds_out[:] = utils.forward_map(np.array(fw_nt), labels, labelsets)
 
     if save_steps:
 
@@ -236,6 +242,11 @@ def merge_labels(labels, labelsets={}, merge_methods=[],
                                          overlap_threshold)
             filled = None
 
+        if merge_method == 'neighbours_slices':
+            labelsets = merge_neighbours_slices(labels, labelsets,
+                                                overlap_threshold)
+            filled = None
+
         elif merge_method == 'conncomp':
             labelsets = merge_conncomp(labels, labelsets)
             filled = None
@@ -273,6 +284,41 @@ def merge_neighbours(labels, labelsets={}, overlap_thr=20):
             labelset = set([prop.label] + label_neighbours[1:])
             labelsets = utils.classify_label_set(labelsets, labelset,
                                                  prop.label)
+
+    return labelsets
+
+
+def merge_neighbours_slices(labels, labelsets={}, overlap_thr=20):
+    """Find candidates for label merge based on overlapping faces."""
+
+    from wmem.merge_slicelabels import merge_neighbours
+    overlap_thr = 0.20
+    offsets = 2
+
+    rp_nt = regionprops(labels)
+
+    for prop in rp_nt:
+        # get indices to the box surrounding the label
+        C = find_region_coordinates('around', labels, prop, [0, 0, 0])
+        x, X, y, Y, z, Z = C
+
+        data_section = labels[z, y:Y, x:X]
+        data_section[data_section != prop.label] = 0
+        for j in range(1, offsets):
+            if z-j >= 0:
+                nb_section = labels[z-j, y:Y, x:X]
+                labelsets = merge_neighbours(labelsets,
+                                             data_section, nb_section,
+                                             threshold_overlap=overlap_thr)
+
+        data_section = labels[Z-1, y:Y, x:X]
+        data_section[data_section != prop.label] = 0
+        for j in range(1, offsets):
+            if Z-1+j < labels.shape[0]:
+                nb_section = labels[Z-1+j, y:Y, x:X]
+                labelsets = merge_neighbours(labelsets,
+                                             data_section, nb_section,
+                                             threshold_overlap=overlap_thr)
 
     return labelsets
 
@@ -326,7 +372,7 @@ def merge_watershed(labels, labelsets={},
             # TODO: improve searchregion by not taking the groundplane of the whole label region
             imregion = labels[z:Z, y:Y, x:X]
             labels_in_region = np.unique(imregion)
-            print(labels_in_region)
+#             print(labels_in_region)
 
             if len(labels_in_region) < 2:
                 continue  # label 0 and prop.label assumed to be there
