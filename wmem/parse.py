@@ -913,13 +913,13 @@ def parse_watershed_ics(parser):
     parser.add_argument(
         '-l', '--lower_threshold',
         type=float,
-        default=None,
+        default=0.00,
         help='the lower threshold for generating seeds from the dataset'
         )
     parser.add_argument(
         '-u', '--upper_threshold',
         type=float,
-        default=None,
+        default=1.00,
         help='the upper threshold for generating seeds from the dataset'
         )
     parser.add_argument(
