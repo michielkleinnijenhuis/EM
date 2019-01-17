@@ -696,27 +696,22 @@ def string_masks(masks, mask):
                'OR': 'np.logical_or',
                'XOR': 'np.logical_xor'}
 
+    not_flag = False
     op = eval('np.logical_and')
-    for m in masks:
 
+    for m in masks:
         if m in aliases.keys():
             m = aliases[m]
-
-        try:
-            _, _ = m.split('.h5')  # ValueError if not a h5 dataset path
-            op = eval(m)  # SyntaxError if it does not evaluate
-        except ValueError:
-            op = eval(m)
-            do = False  # if m == 'np.logical_not' else True
-        except SyntaxError:
-            newmask = h5_load(m, load_data=True, dtype='bool')[0]
-            do = True if m == 'np.logical_not' else False
-
-        if do:
-            if m == 'np.logical_not':
-                op(newmask, newmask)
+            if eval(m) is np.logical_not:
+                not_flag = True
             else:
-                op(mask, newmask, mask)
+                op = eval(m)
+        else:
+            newmask = h5_load(m, load_data=True, dtype='bool')[0]
+            if not_flag:
+                np.logical_not(newmask, newmask)
+                not_flag = False
+            op(mask, newmask, mask)
 
     return mask
 
