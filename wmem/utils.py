@@ -521,21 +521,7 @@ def load_dataset(ds, elsize=[], axlab='',
 
     slices = get_slice_objects(dataslices, ds.shape)
 
-    try:
-        ndim = ds.ndim
-    except AttributeError:
-        ndim = len(ds.dims)
-
-    if ndim == 1:
-        data = ds[slices[0]]
-    elif ndim == 2:
-        data = ds[slices[0], slices[1]]
-    elif ndim == 3:
-        data = ds[slices[0], slices[1], slices[2]]
-    elif ndim == 4:
-        data = ds[slices[0], slices[1], slices[2], slices[3]]
-    elif ndim == 5:
-        data = ds[slices[0], slices[1], slices[2], slices[3], slices[4]]
+    data = slice_dataset(ds, slices)
 
     if list(axlab) != list(outlayout):
         in2out = [axlab.index(l) for l in outlayout]
@@ -553,6 +539,27 @@ def load_dataset(ds, elsize=[], axlab='',
         data = img_as_ubyte(data)
 
     return data, elsize, axlab, slices
+
+
+def slice_dataset(ds, slices):
+
+    try:
+        ndim = ds.ndim
+    except AttributeError:
+        ndim = len(ds.dims)
+
+    if ndim == 1:
+        data = ds[slices[0]]
+    elif ndim == 2:
+        data = ds[slices[0], slices[1]]
+    elif ndim == 3:
+        data = ds[slices[0], slices[1], slices[2]]
+    elif ndim == 4:
+        data = ds[slices[0], slices[1], slices[2], slices[3]]
+    elif ndim == 5:
+        data = ds[slices[0], slices[1], slices[2], slices[3], slices[4]]
+
+    return data
 
 
 def ds_in2out(in2out, ds, elsize):
