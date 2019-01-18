@@ -12,7 +12,7 @@ function prep_environment {
     host_arc=ndcn0180@arcus-b.arc.ox.ac.uk
     scriptdir_loc='/Users/michielk/workspace/EM'
     scriptdir_jal='/home/fs0/michielk/workspace/EM'
-    scriptdir_arc='/home/ndcn-fmrib-water-brain/ndcn0180/workspace/EM'
+    scriptdir_arc='/home/ndcn0180/workspace/EM'
 
     if [ "$compute_env" == "ARCB" ]
     then
