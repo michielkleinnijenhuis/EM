@@ -83,6 +83,7 @@ def series2stack(
     elsize = elsize or im.elsize
     outshape = im.slices2shape()
 
+    in2out_offset = -np.array(im.dataslices[::3])
     in2out = [im.axlab.index(l) for l in outlayout]
     if chunksize is not None:
         chunksize = tuple([chunksize[i] for i in in2out])
@@ -111,7 +112,7 @@ def series2stack(
         im.dataslices = blocks[blocknr]['dataslices']
         im.load()
 
-        slcs_out = im.get_slice_objects(im.dataslices)
+        slcs_out = im.get_slice_objects(im.dataslices, offsets=in2out_offset)
         slcs_out = [slcs_out[i] for i in in2out]
         mo.write(data=np.transpose(im.ds, in2out), slices=slcs_out)
 

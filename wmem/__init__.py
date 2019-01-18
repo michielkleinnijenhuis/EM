@@ -528,7 +528,7 @@ class Image:
             for dim in self.dims:
                 self.dataslices += [0, dim, 1]
 
-    def get_slice_objects(self, dataslices=None, dims=None):
+    def get_slice_objects(self, dataslices=None, dims=None, offsets=None):
         """Get the full ranges for z, y, x if upper bound is undefined."""
 
         if dataslices is None:
@@ -536,9 +536,11 @@ class Image:
             dataslices = self.dataslices
         if dims is None:
             dims = self.dims
+        if offsets is None:
+            offsets = [0 for _ in dataslices[::3]]
 
-        starts = dataslices[::3]
-        stops = dataslices[1::3]
+        starts = dataslices[::3] + offsets
+        stops = dataslices[1::3] + offsets
         stops = [dim if stop == 0 else stop
                  for stop, dim in zip(stops, dims)]
         steps = dataslices[2::3]
