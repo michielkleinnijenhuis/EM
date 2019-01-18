@@ -101,7 +101,7 @@ def series2stack(
     mo.create(comm=mpi_info['comm'])
 
     # Prepare for processing with MPI.
-    blocksize = [dim for dim in im.dims]
+    blocksize = [dim for dim in outshape]
     if mo.chunks is not None:
         blocksize[im.axlab.index('z')] = mo.chunks[mo.axlab.index('z')]
     blocks = utils.get_blocks(im, blocksize)
