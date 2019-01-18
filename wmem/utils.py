@@ -685,7 +685,7 @@ def h5_write_attributes(h5ds, element_size_um=None, axislabels=None):
             h5ds.dims[i].label = label
 
 
-def string_masks(masks, mask):
+def string_masks(masks, mask, dataslices=None):
     """Work out a mask from a series of operations and masks."""
 
     if not masks:
@@ -707,7 +707,8 @@ def string_masks(masks, mask):
             else:
                 op = eval(m)
         else:
-            newmask = h5_load(m, load_data=True, dtype='bool')[0]
+            newmask = h5_load(m, load_data=True, dtype='bool',
+                              dataslices=dataslices)[0]
             if not_flag:
                 np.logical_not(newmask, newmask)
                 not_flag = False
