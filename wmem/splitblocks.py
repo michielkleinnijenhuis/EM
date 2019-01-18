@@ -35,7 +35,7 @@ def main(argv):
         args.dataslices,
         args.dset_name,
         args.blocksize,
-        args.margin,
+        args.blockmargin,
         args.blockrange,
         args.outputpath,
         args.save_steps,
@@ -48,8 +48,8 @@ def splitblocks(
         image_in,
         dataslices=None,
         dset_name='',
-        blocksize=[500, 500, 500],
-        margin=[20, 20, 20],
+        blocksize=[],
+        blockmargin=[],
         blockrange=[],
         outputpath='',
         save_steps=False,
@@ -65,13 +65,9 @@ def splitblocks(
     im = utils.get_image(image_in, comm=mpi_info['comm'],
                          dataslices=dataslices)
 
-    # Determine the outputpath template string.
-    tpl = get_template_string(im, blocksize, dset_name, outputpath)
-
     # Divide the data into a series of blocks.
-    blocks = utils.get_blocks(im.dims, blocksize, margin, im.dataslices, tpl)
-    if blockrange:
-        blocks = blocks[blockrange[0]:blockrange[1]]
+    tpl = get_template_string(im, blocksize, dset_name, outputpath)
+    blocks = utils.get_blocks(im, blocksize, blockmargin, blockrange, tpl)
     series = utils.scatter_series(mpi_info, len(blocks))[0]
 
     # Write blocks to the outputfile(s).

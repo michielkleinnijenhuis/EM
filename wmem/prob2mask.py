@@ -104,7 +104,7 @@ def prob2mask(
         se = disk
     else:
         se = ball
-    blocks = utils.get_blocks(im.dims, blocksize, [0, 0, 0], im.dataslices)
+    blocks = utils.get_blocks(im, blocksize)
     series = utils.scatter_series(mpi_info, len(blocks))[0]
 
     # Threshold (and dilate and filter) the data.

@@ -1164,11 +1164,21 @@ def get_format(filepath):
             return fileformat
 
 
-def get_blocks(shape, blocksize, margin, dataslices, path_tpl=''):
+def get_blocks(im, blocksize, margin=[], blockrange=[], path_tpl=''):
     """Create a list of dictionaries with data block info."""
+
+    shape = im.dims
+    dataslices = im.dataslices
 
     slices_init = get_slice_objects(dataslices, shape)
     shape = list(slices2sizes(slices_init))
+
+    if not blocksize:
+        blocksize = [dim for dim in shape]
+    if not margin:
+        margin = [0 for dim in shape]
+
+    blocksize = [dim if bs == 0 else bs for bs, dim in zip(blocksize, shape)]
 
     blockbounds, blocks = {}, []
     for i, dim in enumerate('zyx'):
@@ -1188,6 +1198,9 @@ def get_blocks(shape, blocksize, margin, dataslices, path_tpl=''):
                 block['dataslices'] = slices2dataslices(block['slc'])
                 block['path'] = path_tpl.format(block['id'])
                 blocks.append(block)
+
+    if blockrange:
+        blocks = blocks[blockrange[0]:blockrange[1]]
 
     return blocks
 

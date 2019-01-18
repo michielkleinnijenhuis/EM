@@ -101,7 +101,7 @@ def stack2stack(
     blocksize = [dim for dim in im.dims]
     if mo.chunks is not None:
         blocksize[im.axlab.index('z')] = mo.chunks[mo.axlab.index('z')]  #TODO
-    blocks = utils.get_blocks(im.dims, blocksize, [0, 0, 0], im.dataslices)
+    blocks = utils.get_blocks(im, blocksize)
     series = utils.scatter_series(mpi_info, len(blocks))[0]
 
     data = im.slice_dataset()

@@ -36,6 +36,30 @@ def parse_common(parser):
         help='protect against overwriting data'
         )
 
+    parser.add_argument(
+        '--blocksize',
+        nargs='*',
+        type=int,
+        default=[],
+        help='size of the datablock'
+        )
+
+    parser.add_argument(
+        '--blockmargin',
+        nargs='*',
+        type=int,
+        default=[],
+        help='the datablock overlap used'
+        )
+
+    parser.add_argument(
+        '--blockrange',
+        nargs=2,
+        type=int,
+        default=[],
+        help='a range of blocks to process'
+        )
+
     return parser
 
 
