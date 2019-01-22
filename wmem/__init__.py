@@ -1326,7 +1326,10 @@ class wmeMPI(object):
         series = np.array(range(0, self.nblocks), dtype=int)
 
         if not self.enabled:
-            return self.series, None, None
+            self.series = series
+            self.n_local = None
+            self.diplacements = None
+            return
 
         n_all = len(series)
         n_local = np.ones(self.size, dtype=int) * n_all / self.size
@@ -1344,7 +1347,6 @@ class wmeMPI(object):
                             self.displacements,
                             self.mpi_dtype],
                            self.series, root=0)
-
 
     def set_blocks(self, im, blocksize, margin=[], blockrange=[], path_tpl=''):
         """Create a list of dictionaries with data block info.
