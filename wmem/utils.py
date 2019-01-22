@@ -80,20 +80,21 @@ def split_filename(filename, blockoffset=[0, 0, 0]):
     return dset_info, x, X, y, Y, z, Z
 
 
-def dataset_name2dataslices(dset_name, blockoffset, axlab='xyz', shape=[]):
+def dset_name2slices(dset_name, blockoffset, axlab='xyz', shape=[]):
     """Get slices from data indices in a filename."""
 
     _, x, X, y, Y, z, Z = split_filename(dset_name, blockoffset)
-    slices = {'x': [x, X, 1], 'y': [y, Y, 1], 'z': [z, Z, 1]}
+    slicedict = {'x': slice(x, X, 1),
+                 'y': slice(y, Y, 1),
+                 'z': slice(z, Z, 1)}
     for dim in ['c', 't']:
         if dim in axlab:
             upper = shape[axlab.index(dim)]
-            slices[dim] = [0, upper, 1]
+            slicedict[dim] = slice(0, upper, 1)
 
-    sliceslist = [slices[dim] for dim in axlab]
-    dataslices = [item for sl in sliceslist for item in sl]
+    slices = [slicedict[dim] for dim in axlab]
 
-    return dataslices
+    return slices
 
 
 def xyz_datarange(xyz, files):
@@ -559,7 +560,7 @@ def slice_dataset(ds, slices):
     elif ndim == 5:
         data = ds[slices[0], slices[1], slices[2], slices[3], slices[4]]
 
-    return data
+    return np.squeeze(data)
 
 
 def ds_in2out(in2out, ds, elsize):
@@ -1166,13 +1167,12 @@ def get_format(filepath):
 
 
 def get_blocks(im, blocksize, margin=[], blockrange=[], path_tpl=''):
-    """Create a list of dictionaries with data block info."""
+    """Create a list of dictionaries with data block info.
 
-    shape = im.dims
-    dataslices = im.dataslices
+    TODO: step?
+    """
 
-    slices_init = get_slice_objects(dataslices, shape)
-    shape = list(slices2sizes(slices_init))
+    shape = list(slices2sizes(im.slices))
 
     if not blocksize:
         blocksize = [dim for dim in shape]
@@ -1181,24 +1181,38 @@ def get_blocks(im, blocksize, margin=[], blockrange=[], path_tpl=''):
 
     blocksize = [dim if bs == 0 else bs for bs, dim in zip(blocksize, shape)]
 
-    blockbounds, blocks = {}, []
-    for i, dim in enumerate('zyx'):
-        blockbounds[dim] = get_blockbounds(slices_init[i].start,
-                                           shape[i],
-                                           blocksize[i],
-                                           margin[i])
+    starts, stops, blocks = {}, {}, []
+    for i, dim in enumerate(im.axlab):
+        starts[dim], stops[dim] = get_blockbounds(im.slices[i].start,
+                                                  shape[i],
+                                                  blocksize[i],
+                                                  margin[i])
 
-    for x, X in blockbounds['x']:
-        for y, Y in blockbounds['y']:
-            for z, Z in blockbounds['z']:
-                block = {}
-                idstring = '{:05d}-{:05d}_{:05d}-{:05d}_{:05d}-{:05d}'
-                block['id'] = idstring.format(x, X, y, Y, z, Z)
-                block['slc'] = [slice(z, Z), slice(y, Y), slice(x, X)]
-                block['size'] = slices2sizes(block['slc'])
-                block['dataslices'] = slices2dataslices(block['slc'])
-                block['path'] = path_tpl.format(block['id'])
-                blocks.append(block)
+    ndim = len(im.axlab)
+    starts = tuple(starts[dim] for dim in im.axlab)
+    stops = tuple(stops[dim] for dim in im.axlab)
+    startsgrid = np.array(np.meshgrid(*starts))
+    stopsgrid = np.array(np.meshgrid(*stops))
+    starts = np.transpose(np.reshape(startsgrid, [ndim, -1]))
+    stops = np.transpose(np.reshape(stopsgrid, [ndim, -1]))
+
+    idstring = '{:05d}-{:05d}_{:05d}-{:05d}_{:05d}-{:05d}'
+    for start, stop in zip(starts, stops):
+
+        block = {}
+        block['slices'] = [slice(sta, sto) for sta, sto in zip(start, stop)]
+
+        x = block['slices'][im.axlab.index('x')]
+        y = block['slices'][im.axlab.index('y')]
+        z = block['slices'][im.axlab.index('z')]
+        block['id'] = idstring.format(x.start, x.stop,
+                                      y.start, y.stop,
+                                      z.start, z.stop)
+#         block['dataslices'] = slices2dataslices(block['slices'])
+#         block['size'] = list(im.slices2shape(slices=block['slices']))
+        block['path'] = path_tpl.format(block['id'])
+
+        blocks.append(block)
 
     if blockrange:
         blocks = blocks[blockrange[0]:blockrange[1]]
@@ -1230,7 +1244,7 @@ def get_blockbounds(offset, shape, blocksize, margin):
     starts[starts < offset] = offset
     stops[stops > shape + offset] = shape + offset
 
-    return zip(starts, stops)
+    return starts, stops
 
 
 def get_image(image_in, imtype='', **kwargs):
@@ -1280,3 +1294,12 @@ def combine_labelsets(labelsets, comps):
     write_labelsets(labelsets, lsroot, ['txt', 'pickle'])
 
     return labelsets
+
+
+def transpose(prop, in2out):
+
+    if prop is not None:
+        prop = tuple([prop[i] for i in in2out])
+
+    return prop
+

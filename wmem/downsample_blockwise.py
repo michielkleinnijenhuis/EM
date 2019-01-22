@@ -51,8 +51,7 @@ def downsample_blockwise(
     im = utils.get_image(image_in, dataslices=dataslices)
 
     # Get the matrix size and resolution of the outputdata.
-    slices = im.get_slice_objects()
-    slicedshape = im.slices2shape()
+    slicedshape = list(im.slices2shape())
     outsize, elsize = get_new_sizes(func, blockreduce, slicedshape, im.elsize)
 
     # Open the outputfile for writing and create the dataset or output array.
@@ -66,20 +65,19 @@ def downsample_blockwise(
 
     # Reformat the data to the outputsize.
     if func == 'expand':
-#         out = im.ds[slices[0], ...]
-        out = im.ds[slices[0], slices[1], slices[2]]  # FIXME: 4D
+        out = im.ds[im.slices[0], im.slices[1], im.slices[2]]  # FIXME: 4D
         for axis in range(0, mo.get_ndim()):
             out = np.repeat(out, blockreduce[axis], axis=axis)
-        mo.ds[slices[0], ...] = out
+        mo.ds[mo.slices[0], ...] = out
     else:
         """ TODO: flexible mapping from in to out
         now:
         the reduction factor of the first axis must be 1;
         the extent of the remaining axes must be full
         """
-        mo.ds[slices[0], ...] = block_reduce(im.ds[slices[0], ...],
-                                             block_size=tuple(blockreduce),
-                                             func=eval(func))
+        mo.ds[mo.slices[0], ...] = block_reduce(im.ds[im.slices[0], ...],
+                                                block_size=tuple(blockreduce),
+                                                func=eval(func))
 
     mo.write()
 
@@ -198,20 +196,6 @@ def mode(array, axis=None):  # axis argument needed for block_reduce
                 smode[i, j, k] = np.argmax(np.bincount(block))
 
     return smode
-
-
-def get_image(image_in, comm=None, dataslices=None):
-
-    if isinstance(image_in, Image):
-        im = image_in
-        im.dataslices = dataslices
-        if im.format == '.h5':
-            im.h5_load()
-    else:
-        im = Image(image_in, dataslices=dataslices)
-        im.load(comm=comm)
-
-    return im
 
 
 if __name__ == "__main__":

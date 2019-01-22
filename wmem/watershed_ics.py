@@ -13,7 +13,7 @@ from scipy.ndimage import label
 from skimage.morphology import watershed, remove_small_objects
 from skimage.segmentation import relabel_sequential
 
-from wmem import parse, utils
+from wmem import parse, utils, Image, LabelImage, MaskImage
 
 
 def main(argv):
@@ -29,6 +29,10 @@ def main(argv):
 
     watershed_ics(
         args.inputfile,
+        args.dataslices,
+        args.blocksize,
+        args.blockmargin,
+        args.blockrange,
         args.masks,
         args.seedimage,
         args.seed_size,
@@ -38,92 +42,158 @@ def main(argv):
         args.outputfile,
         args.save_steps,
         args.protective,
+        args.usempi & ('mpi4py' in sys.modules),
         )
 
 
 def watershed_ics(
-        h5path_in,
+        image_in,
+        dataslices=None,
+        blocksize=[],
+        blockmargin=[],
+        blockrange=[],
         masks=[],
-        h5path_seeds='',
+        seeds_in='',
         seed_size=64,
         lower_threshold=0.00,
         upper_threshold=1.00,
         invert=False,
-        h5path_out='',
+        outputpath='',
         save_steps=False,
         protective=False,
+        usempi=False,
         ):
     """Perform watershed on the intracellular space compartments."""
 
-    # check output paths
-    outpaths = {'out': h5path_out, 'seeds': h5path_seeds, 'mask': ''}
-    root, ds_main = outpaths['out'].split('.h5')
-    for dsname, _ in outpaths.items():
-        grpname = ds_main + "_steps"
-        outpaths[dsname] = os.path.join(root + '.h5' + grpname, dsname)
-    status = utils.output_check(outpaths, save_steps, protective)
-    if status == "CANCELLED":
-        return
+    mpi_info = utils.get_mpi_info(usempi)
 
-    # open data for reading
-    h5file_in, ds_in, elsize, axlab = utils.h5_load(h5path_in)
+    # Open the inputfile for reading.
+    im = utils.get_image(image_in, comm=mpi_info['comm'],
+                         dataslices=dataslices)
 
-    # open data for writing
-    h5file_out, ds_out = utils.h5_write(None, ds_in.shape[:3], 'uint32',
-                                        h5path_out,
-                                        element_size_um=elsize,
-                                        axislabels=axlab)
+    in2out_offset = -np.array([slc.start for slc in im.slices])
+    # Open the outputfiles for writing and create the dataset or output array.
+    outpaths = get_outpaths(outputpath, save_steps)
+    kwargs = im.get_image_props()
+    kwargs['dtype'] = 'uint32'
 
-    # load/generate the seeds
-    if h5path_seeds:
-        h5file_sds, ds_sds, _, _ = utils.h5_load(h5path_seeds)
+    mo = LabelImage(outpaths['out'], protective=protective, **kwargs)
+    mo.create(comm=mpi_info['comm'])  # FIXME: load if exist
+
+    # FIXME: if seeds h5 already exists with different dims it will load and fail
+    # load/generate the seeds and mask
+    seeds = get_seeds(seeds_in, mpi_info, outpaths['seeds'], **kwargs)
+    mask_in = (type(masks) is list and len(masks) == 1) or (type(masks) is Image)
+    mask = get_mask(mask_in, masks, mpi_info, outpaths['mask'], **kwargs)
+
+    # Prepare for processing with MPI.
+    blocks = utils.get_blocks(im, blocksize, blockmargin, blockrange)
+    series = utils.scatter_series(mpi_info, len(blocks))[0]
+
+    for blocknr in series:
+
+        for img in [im, mask, seeds]:
+            img.slices = blocks[blocknr]['slices']
+
+        slices_out = im.get_offset_slices(in2out_offset)
+
+        data = im.slice_dataset()
+        if mask_in:
+            maskdata = mask.slice_dataset()
+        else:
+            maskdata = calculate_mask(mask, masks)
+
+        if seeds_in:
+            seedsdata = seeds.slice_dataset()
+        else:
+            seedsdata = calculate_seeds(data,
+                                        lower_threshold,
+                                        upper_threshold,
+                                        seed_size)
+            seeds.write(seedsdata, slices_out)
+
+        # perform the watershed
+        if invert:
+            ws = watershed(-data, seedsdata, mask=maskdata)
+        else:
+            ws = watershed(data, seedsdata, mask=maskdata)
+
+        mo.write(data=ws, slices=slices_out)
+
+    im.close()
+    mo.close()
+    seeds.close()
+    mask.close()
+
+    return mo
+
+
+def get_outpaths(h5path_out, save_steps):
+
+    outpaths = {'out': h5path_out, 'seeds': '', 'mask': ''}
+    if save_steps:
+        outpaths = utils.gen_steps(outpaths, save_steps)
+
+    return outpaths
+
+
+def get_seeds(seeds_in, mpi_info, outpath='', **kwargs):
+
+    if seeds_in:
+        seeds = utils.get_image(seeds_in, comm=mpi_info['comm'],
+                                slices=kwargs['slices'])
     else:
-        h5file_sds, ds_sds = utils.h5_write(None, ds_in.shape[:3], 'uint32',
-                                            outpaths['seeds'],
-                                            element_size_um=elsize,
-                                            axislabels=axlab)
+        seeds = LabelImage(outpath, dtype='uint32', **kwargs)
+        seeds.create(comm=mpi_info['comm'])
 
-        lower_threshold = lower_threshold or np.amin(ds_in[:]) - 1
-        upper_threshold = upper_threshold or np.amax(ds_in[:]) + 1
-        ds_sds[:] = np.logical_and(ds_in[:] > lower_threshold,
-                                   ds_in[:] <= upper_threshold)
-        ds_sds[:], _ = label(ds_sds[:])
-        ds_sds[:] = remove_small_objects(ds_sds[:], min_size=seed_size)
-        ds_sds[:] = relabel_sequential(ds_sds[:])[0]
-        """ NOTE:
-        numpy/scipy/skimage inplace is not written when using hdf5
-        Therefore, we cannot use:
-        np.logical_and(ds_in[:] > lower_threshold,
-                       ds_in[:] <= upper_threshold, ds_sds[:])
-        num = label(ds_sds[:], output=ds_sds[:])
-        remove_small_objects(ds_sds[:], min_size=seed_size, in_place=True)
-        """
+    return seeds
 
-    # determine the mask
-    mask = np.ones(ds_in.shape[:3], dtype='bool')
-    mask = utils.string_masks(masks, mask)
-    h5file_mask, ds_mask = utils.h5_write(None, ds_in.shape[:3], 'uint8',
-                                          outpaths['mask'],
-                                          element_size_um=elsize,
-                                          axislabels=axlab)
-    ds_mask[:] = mask
-#     ds_mask[:].fill(1)
-#     ds_mask[:] = utils.string_masks(masks, ds_mask[:])
 
-    # perform the watershed
-    if invert:
-        ds_out[:] = watershed(-ds_in[:], ds_sds[:], mask=ds_mask[:])
+def calculate_seeds(data, lower_threshold, upper_threshold, min_seed_size):
+    """Extracts watershed seeds from data."""
+
+    lower_threshold = lower_threshold or np.amin(data) - 1
+    upper_threshold = upper_threshold or np.amax(data) + 1
+    seeds = np.logical_and(data > lower_threshold, data <= upper_threshold)
+    seeds = label(seeds)[0]
+    seeds = remove_small_objects(seeds, min_size=min_seed_size)
+    seeds = relabel_sequential(seeds)[0]
+    """ NOTE:
+    numpy/scipy/skimage inplace is not written when using hdf5
+    Therefore, we cannot use:
+    np.logical_and(ds_in[:] > lower_threshold,
+                   ds_in[:] <= upper_threshold, ds_sds[:])
+    num = label(ds_sds[:], output=ds_sds[:])
+    remove_small_objects(ds_sds[:], min_size=seed_size, in_place=True)
+    """
+
+    return seeds
+
+
+def get_mask(mask_in, masks, mpi_info, outpath='', **kwargs):
+
+    if mask_in:
+        mask = utils.get_image(masks[0], comm=mpi_info['comm'],
+                               slices=kwargs['slices'])
     else:
-        ds_out[:] = watershed(ds_in[:], ds_sds[:], mask=ds_mask[:])
+        mask = MaskImage(outpath, dtype='bool', **kwargs)
+        mask.create(comm=mpi_info['comm'])
 
-    # close and return
-    h5file_in.close()
-    try:
-        h5file_out.close()
-        h5file_sds.close()
-        h5file_mask.close()
-    except (ValueError, AttributeError):
-        return ds_out, ds_sds, ds_mask
+    return mask
+
+
+def calculate_mask(maskimage, masks):
+    """Extracts watershed seeds from data."""
+
+    dims = list(maskimage.slices2shape())
+    maskdata = np.ones(dims, dtype='bool')
+    if masks:
+        dataslices = utils.slices2dataslices(maskimage.slices)
+        maskdata = utils.string_masks(masks, maskdata, dataslices)
+
+    maskimage.write(data=maskdata, slices=maskimage.slices)
+
+    return maskdata
 
 
 if __name__ == "__main__":

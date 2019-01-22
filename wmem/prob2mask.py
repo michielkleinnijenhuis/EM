@@ -82,20 +82,18 @@ def prob2mask(
     # Open the inputfile for reading.
     im = utils.get_image(image_in, comm=mpi_info['comm'],
                          dataslices=dataslices)
-    squeezed = im.squeeze_channel(dim=3)
-    dims = im.slices2shape()
 
     # Open the outputfile for writing and create the dataset or output array.
     outpaths = get_outpaths(outputpath, save_steps, dilation, size)
     mos = {}
     for stepname, outpath in outpaths.items():
         mos[stepname] = MaskImage(outpath,
-                                  elsize=squeezed['es'],
-                                  axlab=squeezed['al'],
-                                  shape=dims,
                                   dtype='bool',
-                                  protective=protective)
+                                  protective=protective,
+                                  **im.squeeze_channel())
         mos[stepname].create(comm=mpi_info['comm'])  # FIXME: load if exist
+
+    in2out_offset = -np.array([slc.start for slc in im.slices])
 
     # Prepare for processing with MPI.
     blocksize = [dim for dim in im.dims]
@@ -109,8 +107,10 @@ def prob2mask(
 
     # Threshold (and dilate and filter) the data.
     for blocknr in series:
-        im.dataslices = blocks[blocknr]['dataslices']
+
+        im.slices = blocks[blocknr]['slices']
         im.load()
+
         data = im.slice_dataset()
         masks = process_slice(data,
                               lower_threshold, upper_threshold,
@@ -118,9 +118,8 @@ def prob2mask(
 
         # FIXME: cannot write nifti/3Dtif in parts
         for stepname, mask in masks.items():
-            dslcs = squeezed['dslcs']  # FIXME: dslcs_out for go2D
-            slices = mos[stepname].get_slice_objects(dataslices=dslcs)
-            mos[stepname].write(data=mask, slices=slices)
+            slcs_out = im.get_offset_slices(in2out_offset)
+            mos[stepname].write(data=mask, slices=slcs_out)
 
     im.close()
     for _, mo in mos.items():
@@ -196,20 +195,6 @@ def frange(x, y, jump):
     while x < y:
         yield x
         x += jump
-
-
-def get_image(image_in, comm=None, dataslices=None):
-
-    if isinstance(image_in, Image):
-        im = image_in
-        im.dataslices = dataslices
-        if im.format == '.h5':
-            im.h5_load()
-    else:
-        im = Image(image_in, dataslices=dataslices)
-        im.load(comm=comm)
-
-    return im
 
 
 if __name__ == "__main__":

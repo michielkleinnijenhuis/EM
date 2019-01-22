@@ -26,54 +26,94 @@ def main(argv):
     combine_vols(
         args.inputfile,
         args.dataslices,
+        args.blocksize,
+        args.blockmargin,
+        args.blockrange,
         args.volidxs,
         args.outputfile,
+        args.save_steps,
         args.protective,
+        args.usempi & ('mpi4py' in sys.modules),
         )
 
 
 def combine_vols(
         image_in,
         dataslices=None,
+        blocksize=[],
+        blockmargin=[],
+        blockrange=[],
         vol_idxs=[],
         outputpath='',
+        save_steps=False,
         protective=False,
+        usempi=False,
         ):
     """Combine volumes by addition."""
 
-    # Open data for reading.
-    im = utils.get_image(image_in, dataslices=dataslices)
-    c_axis = im.axlab.index('c')
-    squeezed = im.squeeze_channel(c_axis)
-    dims = im.slices2shape()  # FIXME
+    mpi_info = utils.get_mpi_info(usempi)
+
+    # Open the inputfile for reading.
+    im = utils.get_image(image_in, comm=mpi_info['comm'],
+                         dataslices=dataslices)
+
+    squeezed = im.squeeze_channel(im.axlab.index('c'))
+    in2out_offset = -np.array([slc.start for slc in squeezed['slices']])
 
     # Open the outputfile for writing and create the dataset or output array.
-    mo = Image(outputpath,
-               shape=dims,
-               dtype=im.dtype,
-               elsize=squeezed['es'],
-               axlab=squeezed['al'],
-               chunks=squeezed['chunks'],
-               dataslices=squeezed['dslcs'],
-               protective=protective)
-    mo.create()
+    mo = Image(outputpath, dtype=im.dtype, protective=protective, **squeezed)
+    mo.create(comm=mpi_info['comm'])
 
-    out = np.zeros(mo.dims, dtype=mo.dtype)
-    if vol_idxs:
-        for volnr in vol_idxs:
-            im.dataslices[c_axis*3] = volnr
-            im.dataslices[c_axis*3+1] = volnr + 1
-            im.dataslices[c_axis*3+2] = 1
-            out += im.slice_dataset()
-    else:
-        out = np.sum(im.slice_dataset(), axis=c_axis)
+    # Prepare for processing with MPI.
+    blocks = utils.get_blocks(im, blocksize, blockmargin, blockrange)
+    series = utils.scatter_series(mpi_info, len(blocks))[0]
 
-    mo.write(data=out)
+    for blocknr in series:
+
+        out = add_volumes(im, blocks[blocknr], vol_idxs)
+
+        slcs_out = squeeze_slices(im.slices, im.axlab.index('c'))
+        slcs_out = im.get_offset_slices(in2out_offset)
+        mo.write(data=out, slices=slcs_out)
 
     im.close()
     mo.close()
 
     return mo
+
+
+def add_volumes(im, block, vol_idxs):
+    """"""
+
+    c_axis = im.axlab.index('c')
+    size = get_outsize(im, block['slices'])
+    out = np.zeros(size, dtype=im.dtype)
+
+    im.slices = block['slices']
+    if vol_idxs:
+        for volnr in vol_idxs:
+            im.slices[c_axis] = slice(volnr, volnr + 1, 1)
+            out += im.slice_dataset()
+    else:
+        out = np.sum(im.slice_dataset(), axis=c_axis)
+
+    return out
+
+
+def squeeze_slices(slices, axis):
+
+    slcs = list(slices)
+    del slcs[axis]
+
+    return slcs
+
+
+def get_outsize(im, slices):
+
+    slcs = squeeze_slices(slices, im.axlab.index('c'))
+    size = list(im.slices2shape(slcs))
+
+    return size
 
 
 if __name__ == "__main__":

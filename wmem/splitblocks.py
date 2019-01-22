@@ -80,11 +80,11 @@ def splitblocks(
 def write_block(im, block, protective=False, comm=None):
     """Write the block to file."""
 
-    im.dataslices = block['dataslices']
+    im.slices = block['slices']
     im.load()
     data = im.slice_dataset()
 
-    shape = list(block['size'])
+    shape = list(im.slices2shape())
     if im.get_ndim() == 4:
         shape += [im.ds.shape[3]]
 

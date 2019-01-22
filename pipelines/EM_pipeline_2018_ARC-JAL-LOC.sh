@@ -6,11 +6,12 @@ source $scriptdir/pipelines/datasets.sh
 source $scriptdir/pipelines/functions.sh
 source $scriptdir/pipelines/submission.sh
 export PYTHONPATH=$PYTHONPATH:/Users/michielk/workspace/pyDM3reader  # FIXME
+export PYTHONPATH=$PYTHONPATH:/Users/michielk/workspace/maskSLIC  # FIXME
 
 #compute_env='JAL'
 #compute_env='ARC'
-compute_env='LOCAL'
-#compute_env='ARCB'
+#compute_env='LOCAL'
+compute_env='ARCB'
 prep_environment $scriptdir $compute_env
 
 # dataset='M3S1GNU'
@@ -25,9 +26,9 @@ bs='0500' && prep_dataset $dataset $bs && echo ${#datastems[@]}
 
 #echo -n -e "\033]0;$dataset\007"
 
-source activate scikit-image-devel_0.13
 export LC_ALL=en_US.UTF-8
 export LANG=en_US.UTF-8
+source activate scikit-image-devel_0.13
 
 
 ###=========================================================================###
