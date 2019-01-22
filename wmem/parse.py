@@ -1296,6 +1296,19 @@ def parse_slicvoxels(parser):
         )
 
     parser.add_argument(
+        '--masks',
+        nargs='*',
+        default=[],
+        help="""string of paths to hdf5 datasets <filepath>.h5/<...>/<dataset>
+                and logical functions (NOT, AND, OR, XOR)
+                to add the hdf5 masks together
+                (NOT operates on the following dataset), e.g.
+                NOT <f1>.h5/<m1> AND <f1>.h5/<m2> will first invert m1,
+                then combine the result with m2 through the AND operator
+                starting point is np.ones(<in>.shape[:3], dtype='bool')"""
+        )
+
+    parser.add_argument(
         '-l', '--slicvoxelsize',
         type=int,
         default=500,
