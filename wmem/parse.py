@@ -267,28 +267,6 @@ def parse_splitblocks(parser):
         )
 
     parser.add_argument(
-        '-p', '--blocksize',
-        nargs=3,
-        type=int,
-        default=[500, 500, 500],
-        help='size of the datablock'
-        )
-    parser.add_argument(
-        '-q', '--margin',
-        nargs=3,
-        type=int,
-        default=[20, 20, 20],
-        help='the datablock overlap used'
-        )
-    parser.add_argument(
-        '-r', '--blockrange',
-        nargs=2,
-        type=int,
-        default=[],
-        help='a range of blocks to process'
-        )
-
-    parser.add_argument(
         '-o', '--outputpath',
         default='',
         help="""path to the output directory"""

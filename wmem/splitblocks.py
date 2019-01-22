@@ -33,10 +33,10 @@ def main(argv):
     splitblocks(
         args.inputpath,
         args.dataslices,
-        args.dset_name,
         args.blocksize,
         args.blockmargin,
         args.blockrange,
+        args.dset_name,
         args.outputpath,
         args.save_steps,
         args.protective,
@@ -47,10 +47,10 @@ def main(argv):
 def splitblocks(
         image_in,
         dataslices=None,
-        dset_name='',
         blocksize=[],
         blockmargin=[],
         blockrange=[],
+        dset_name='',
         outputpath='',
         save_steps=False,
         protective=False,
