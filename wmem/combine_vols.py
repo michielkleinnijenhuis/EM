@@ -9,7 +9,7 @@ import argparse
 
 import numpy as np
 
-from wmem import parse, utils, Image
+from wmem import parse, utils, Image, wmeMPI
 
 
 def main(argv):
@@ -51,25 +51,25 @@ def combine_vols(
         ):
     """Combine volumes by addition."""
 
-    mpi_info = utils.get_mpi_info(usempi)
+    mpi = wmeMPI(usempi)
 
     # Open the inputfile for reading.
-    im = utils.get_image(image_in, comm=mpi_info['comm'],
-                         dataslices=dataslices)
+    im = utils.get_image(image_in, comm=mpi.comm, dataslices=dataslices)
 
     # Open the outputfile for writing and create the dataset or output array.
     props = im.get_props(protective=protective, squeeze=True)
     mo = Image(outputpath, **props)
-    mo.create(comm=mpi_info['comm'])
+    mo.create(comm=mpi.comm)
     in2out_offset = -np.array([slc.start for slc in mo.slices])
 
     # Prepare for processing with MPI.
-    blocks = utils.get_blocks(im, blocksize, blockmargin, blockrange)
-    series = utils.scatter_series(mpi_info, len(blocks))[0]
+    mpi.set_blocks(im, blocksize, blockmargin, blockrange)
+    mpi.scatter_series()
 
-    for blocknr in series:
+    for i in mpi.series:
+        block = mpi.blocks[i]
 
-        out = add_volumes(im, blocks[blocknr], vol_idxs)
+        out = add_volumes(im, block, vol_idxs)
 
         slcs_out = squeeze_slices(im.slices, im.axlab.index('c'))
         slcs_out = im.get_offset_slices(in2out_offset)

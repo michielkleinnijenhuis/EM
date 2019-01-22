@@ -1292,3 +1292,125 @@ class LabelImage(Image):
         fwmapped = np.array(fw)[self.ds]
 
         return fwmapped
+
+
+class wmeMPI(object):
+
+    def __init__(self, usempi, mpi_dtype=''):
+
+        if usempi:
+            if not mpi_dtype:
+                self.mpi_dtype = MPI.SIGNED_LONG_LONG
+            else:
+                self.mpi_dtype = mpi_dtype
+            self.comm = MPI.COMM_WORLD
+            self.enabled = True
+            self.rank = self.comm.Get_rank()
+            self.size = self.comm.Get_size()
+        else:
+            self.mpi_dtype = None
+            self.comm = None
+            self.enabled = False
+            self.rank = 0
+            self.size = 1
+
+        self.nblocks = 1
+        self.blocks = []
+        self.series = []
+        self.n_local = ()
+        self.displacements = []
+
+    def scatter_series(self):
+        """Scatter a series of jobnrs over processes."""
+
+        series = np.array(range(0, self.nblocks), dtype=int)
+
+        if not self.enabled:
+            return self.series, None, None
+
+        n_all = len(series)
+        n_local = np.ones(self.size, dtype=int) * n_all / self.size
+        n_local[0:n_all % self.size] += 1
+        self.n_local = tuple(n_local)
+
+        series = np.array(series, dtype=int)
+        self.series = np.zeros(n_local[self.rank], dtype=int)
+
+        self.displacements = tuple(sum(n_local[0:r])
+                                   for r in range(0, self.size))
+
+        self.comm.Scatterv([series,
+                            self.n_local,
+                            self.displacements,
+                            self.mpi_dtype],
+                           self.series, root=0)
+
+
+    def set_blocks(self, im, blocksize, margin=[], blockrange=[], path_tpl=''):
+        """Create a list of dictionaries with data block info.
+
+        TODO: step?
+        """
+
+        shape = list((len(range(*slc.indices(slc.stop))) for slc in im.slices))
+
+        if not blocksize:
+            blocksize = [dim for dim in shape]
+        if not margin:
+            margin = [0 for dim in shape]
+
+        blocksize = [dim if bs == 0 else bs
+                     for bs, dim in zip(blocksize, shape)]
+
+        starts, stops, = {}, {}
+        for i, dim in enumerate(im.axlab):
+            starts[dim], stops[dim] = self.get_blockbounds(im.slices[i].start,
+                                                           shape[i],
+                                                           blocksize[i],
+                                                           margin[i])
+
+        ndim = len(im.axlab)
+        starts = tuple(starts[dim] for dim in im.axlab)
+        stops = tuple(stops[dim] for dim in im.axlab)
+        startsgrid = np.array(np.meshgrid(*starts))
+        stopsgrid = np.array(np.meshgrid(*stops))
+        starts = np.transpose(np.reshape(startsgrid, [ndim, -1]))
+        stops = np.transpose(np.reshape(stopsgrid, [ndim, -1]))
+
+        idstring = '{:05d}-{:05d}_{:05d}-{:05d}_{:05d}-{:05d}'
+        for start, stop in zip(starts, stops):
+
+            block = {}
+            block['slices'] = [slice(sta, sto) for sta, sto in zip(start, stop)]
+
+            x = block['slices'][im.axlab.index('x')]
+            y = block['slices'][im.axlab.index('y')]
+            z = block['slices'][im.axlab.index('z')]
+            block['id'] = idstring.format(x.start, x.stop,
+                                          y.start, y.stop,
+                                          z.start, z.stop)
+            block['path'] = path_tpl.format(block['id'])
+
+            self.blocks.append(block)
+
+        if blockrange:
+            self.blocks = self.blocks[blockrange[0]:blockrange[1]]
+
+        self.nblocks = len(self.blocks)
+
+    def get_blockbounds(self, offset, shape, blocksize, margin):
+        """Get the block range for a dimension."""
+
+        # blocks
+        starts = range(offset, shape + offset, blocksize)
+        stops = np.array(starts) + blocksize
+
+        # blocks with margin
+        starts = np.array(starts) - margin
+        stops = np.array(stops) + margin
+
+        # blocks with margin reduced on boundary blocks
+        starts[starts < offset] = offset
+        stops[stops > shape + offset] = shape + offset
+
+        return starts, stops
