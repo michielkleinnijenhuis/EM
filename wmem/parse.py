@@ -873,7 +873,8 @@ def parse_agglo_from_labelsets(parser):
                 labelvolume with agglomerated labels"""
         )
 
-    parser.add_argument(
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument(
         '-l', '--labelset_files',
         nargs='*',
         default=[],
@@ -885,9 +886,8 @@ def parse_agglo_from_labelsets(parser):
                 <label_new1>: <label_1> <label_2> <...>
                 <label_new2>: <label_6> <label_3> <...>"""
         )
-    parser.add_argument(
+    group.add_argument(
         '-f', '--fwmap',
-        default=[],
         help="""numpy .npy file with vector of length np.amax(<labels>) + 1
                 representing the forward map to apply, e.g.
                 fwmap = np.array([0, 0, 4, 8, 8]) will map
