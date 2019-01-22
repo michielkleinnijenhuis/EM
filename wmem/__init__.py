@@ -390,14 +390,40 @@ class Image(object):
                 self.ds.append(im)
             self.ds = np.array(self.ds, dtype=self.dtype)
 
-    def get_image_props(self):
+    def get_props(self, shape=[], elsize=[], axlab='',
+                  chunks=False, slices=[], dtype='',
+                  protective=False, squeeze=False):
 
-        props = {'shape': self.ds.shape,
-                 'elsize': self.elsize,
-                 'axlab': self.axlab,
-                 'chunks': self.chunks,
-                 'slices': self.slices,
-                 'dtype': self.dtype}
+        props = {'shape': shape or list(self.slices2shape()),
+                 'elsize': elsize or self.elsize,
+                 'axlab': axlab or self.axlab,
+                 'chunks': chunks or self.chunks,
+                 'slices': slices or self.slices,
+                 'dtype': dtype or self.dtype,
+                 'protective': protective or self.protective}
+
+        if squeeze:
+            props = self.squeeze_props(props)
+
+        return props
+
+    def squeeze_props(self, props, dim=None):
+
+        if dim is None:
+            if 'c' in self.axlab:
+                dim = self.axlab.index('c')
+            else:
+                return props
+
+        squeezable = ['shape', 'elsize', 'axlab', 'chunks', 'slices']
+        for prop in squeezable:
+
+            val = props[prop]
+            if val is not None:
+                props[prop] = list(val)
+                del props[prop][dim]
+            else:
+                props[prop] = val
 
         return props
 

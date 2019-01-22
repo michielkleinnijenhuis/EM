@@ -68,13 +68,13 @@ def slicvoxels(
     im = utils.get_image(image_in, comm=mpi_info['comm'],
                          dataslices=dataslices)
     mask = utils.get_image(masks[0], comm=mpi_info['comm'],
-                           dataslices=dataslices)
-    in2out_offset = -np.array([slc.start for slc in im.slices])
+                           dataslices=dataslices)  # TODO: string masks
 
     # Determine the properties of the output dataset.
-    mo = LabelImage(outputpath, protective=protective,
-                    **im.squeeze_channel())
+    props = im.get_props(protective=protective, dtype='uint64', squeeze=True)
+    mo = LabelImage(outputpath, **props)
     mo.create(comm=mpi_info['comm'])
+    in2out_offset = -np.array([slc.start for slc in mo.slices])
 
     blocks = utils.get_blocks(im, blocksize, blockmargin, blockrange)
     series = utils.scatter_series(mpi_info, len(blocks))[0]
@@ -116,8 +116,12 @@ def slicvoxels(
 
     if mpi_info['enabled']:
         mpi_info['comm'].Barrier()
+#         mo.set_maxlabel()
+#         print(mpi_info['rank'], mo.maxlabel, mo.ulabels)
         if mpi_info['rank'] == 0 and mpi_info['size'] > 1:
-            mo.ds[:] = segmentation.relabel_sequential(mo.ds[:].astype('i'))[0]
+            mo.ds[:] = segmentation.relabel_sequential(mo.ds[:])[0]
+#             mo.set_maxlabel()
+#             print('final', mo.maxlabel, mo.ulabels)
             print("Output was relabeled sequentially.")
 
     im.close()

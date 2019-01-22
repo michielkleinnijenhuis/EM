@@ -47,10 +47,10 @@ def agglo_from_labelsets(
     im = utils.get_image(image_in, imtype='Label')
 
     outpaths = get_outpaths(outputpath, save_steps)
-    props = im.get_image_props()
+    props = im.get_props(protective=protective)
     mos = {}
     for stepname, outpath in outpaths.items():
-        mos[stepname] = LabelImage(outpath, protective=protective, **props)
+        mos[stepname] = LabelImage(outpath, **props)
         mos[stepname].create()
 
     # read labelsets from file

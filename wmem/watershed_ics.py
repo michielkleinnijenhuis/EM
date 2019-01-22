@@ -71,20 +71,19 @@ def watershed_ics(
     im = utils.get_image(image_in, comm=mpi_info['comm'],
                          dataslices=dataslices)
 
-    in2out_offset = -np.array([slc.start for slc in im.slices])
     # Open the outputfiles for writing and create the dataset or output array.
+    props = im.get_props(protective=protective, dtype='uint64', squeeze=True)
     outpaths = get_outpaths(outputpath, save_steps)
-    kwargs = im.get_image_props()
-    kwargs['dtype'] = 'uint32'
-
-    mo = LabelImage(outpaths['out'], protective=protective, **kwargs)
+    mo = LabelImage(outpaths['out'], **props)
     mo.create(comm=mpi_info['comm'])  # FIXME: load if exist
+    in2out_offset = -np.array([slc.start for slc in mo.slices])
 
     # FIXME: if seeds h5 already exists with different dims it will load and fail
     # load/generate the seeds and mask
-    seeds = get_seeds(seeds_in, mpi_info, outpaths['seeds'], **kwargs)
-    mask_in = (type(masks) is list and len(masks) == 1) or (type(masks) is Image)
-    mask = get_mask(mask_in, masks, mpi_info, outpaths['mask'], **kwargs)
+    seeds = get_seeds(seeds_in, mpi_info, outpaths['seeds'], **props)
+    mask_in = ((type(masks) is list and len(masks) == 1) or
+               (type(masks) is Image))
+    mask = get_mask(mask_in, masks, mpi_info, outpaths['mask'], **props)
 
     # Prepare for processing with MPI.
     blocks = utils.get_blocks(im, blocksize, blockmargin, blockrange)
@@ -139,11 +138,13 @@ def get_outpaths(h5path_out, save_steps):
 
 def get_seeds(seeds_in, mpi_info, outpath='', **kwargs):
 
+    kwargs['dtype'] = 'uint64'
+
     if seeds_in:
         seeds = utils.get_image(seeds_in, comm=mpi_info['comm'],
                                 slices=kwargs['slices'])
     else:
-        seeds = LabelImage(outpath, dtype='uint32', **kwargs)
+        seeds = LabelImage(outpath, **kwargs)
         seeds.create(comm=mpi_info['comm'])
 
     return seeds
@@ -172,11 +173,13 @@ def calculate_seeds(data, lower_threshold, upper_threshold, min_seed_size):
 
 def get_mask(mask_in, masks, mpi_info, outpath='', **kwargs):
 
+    kwargs['dtype'] = 'bool'
+
     if mask_in:
         mask = utils.get_image(masks[0], comm=mpi_info['comm'],
                                slices=kwargs['slices'])
     else:
-        mask = MaskImage(outpath, dtype='bool', **kwargs)
+        mask = MaskImage(outpath, **kwargs)
         mask.create(comm=mpi_info['comm'])
 
     return mask

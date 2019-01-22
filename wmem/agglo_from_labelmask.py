@@ -47,8 +47,8 @@ def agglo_from_labelmask(
     axons = utils.get_image(image_in, imtype='Label')
     svoxs = utils.get_image(oversegmentation, imtype='Label')
 
-    mo = LabelImage(outputpath, protective=protective,
-                    **svoxs.get_image_props())
+    props = svoxs.get_props(protective=protective)
+    mo = LabelImage(outputpath, **props)
     mo.create()
 
     areas_svoxs = np.bincount(svoxs.ds[:].ravel().astype('int64'))

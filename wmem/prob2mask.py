@@ -84,16 +84,13 @@ def prob2mask(
                          dataslices=dataslices)
 
     # Open the outputfile for writing and create the dataset or output array.
+    props = im.get_props(protective=protective, dtype='bool', squeeze=True)
     outpaths = get_outpaths(outputpath, save_steps, dilation, size)
     mos = {}
     for stepname, outpath in outpaths.items():
-        mos[stepname] = MaskImage(outpath,
-                                  dtype='bool',
-                                  protective=protective,
-                                  **im.squeeze_channel())
+        mos[stepname] = MaskImage(outpath, **props)
         mos[stepname].create(comm=mpi_info['comm'])  # FIXME: load if exist
-
-    in2out_offset = -np.array([slc.start for slc in im.slices])
+    in2out_offset = -np.array([slc.start for slc in mos['out'].slices])
 
     # Prepare for processing with MPI.
     blocksize = [dim for dim in im.dims]

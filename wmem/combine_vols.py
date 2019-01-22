@@ -57,12 +57,11 @@ def combine_vols(
     im = utils.get_image(image_in, comm=mpi_info['comm'],
                          dataslices=dataslices)
 
-    squeezed = im.squeeze_channel(im.axlab.index('c'))
-    in2out_offset = -np.array([slc.start for slc in squeezed['slices']])
-
     # Open the outputfile for writing and create the dataset or output array.
-    mo = Image(outputpath, dtype=im.dtype, protective=protective, **squeezed)
+    props = im.get_props(protective=protective, squeeze=True)
+    mo = Image(outputpath, **props)
     mo.create(comm=mpi_info['comm'])
+    in2out_offset = -np.array([slc.start for slc in mo.slices])
 
     # Prepare for processing with MPI.
     blocks = utils.get_blocks(im, blocksize, blockmargin, blockrange)
