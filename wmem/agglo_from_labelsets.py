@@ -9,7 +9,8 @@ import argparse
 
 import numpy as np
 
-from wmem import parse, utils
+
+from wmem import parse, utils, LabelImage
 
 
 def main(argv):
@@ -34,33 +35,23 @@ def main(argv):
 
 
 def agglo_from_labelsets(
-        h5path_in,
+        image_in,
         labelset_files='',
         fwmap='',
-        h5path_out='',
+        outputpath='',
         save_steps=False,
         protective=False,
         ):
     """Apply mapping of labelsets to a labelvolume."""
 
-    # check output paths
-    outpaths = {'out': h5path_out, 'deleted': '', 'added': ''}
-    status = utils.output_check(outpaths, save_steps, protective)
-    if status == "CANCELLED":
-        return
+    im = utils.get_image(image_in, imtype='Label')
 
-    # open data for reading
-    h5file_in, ds_in, elsize, axlab = utils.h5_load(h5path_in)
-
-    # open data for writing
-    h5file_out, ds_out = utils.h5_write(None, ds_in.shape, ds_in.dtype,
-                                        h5path_out,
-                                        element_size_um=elsize,
-                                        axislabels=axlab)
-
-    ulabels = np.unique(ds_in)
-    maxlabel = np.amax(ulabels)
-    print("number of labels in watershed: %d" % maxlabel)
+    outpaths = get_outpaths(outputpath, save_steps)
+    props = im.get_image_props()
+    mos = {}
+    for stepname, outpath in outpaths.items():
+        mos[stepname] = LabelImage(outpath, protective=protective, **props)
+        mos[stepname].create()
 
     # read labelsets from file
     for lsfile in labelset_files:
@@ -77,30 +68,29 @@ def agglo_from_labelsets(
                     remapped.append(idx[0][0])
             labelsets[lsk] = set(remapped)
 
-    # merge labelsets and return labelvolume with only the merged labels
-    fw = np.zeros(maxlabel + 1, dtype='i')
-    ds_out[:] = utils.forward_map(np.array(fw), ds_in, labelsets)
+    mos['out'].ds[:] = im.forward_map(labelsets=labelsets,
+                                      from_empty=True)
+    if save_steps:
+        mos['del'].ds[:] = im.forward_map(labelsets=labelsets,
+                                          delete_labelsets=True)
+        mos['all'].ds[:] = im.forward_map(labelsets=labelsets)
 
-    # delete labelsets from the labelvolume
-    fw = np.array([l if l in ulabels else 0
-                   for l in range(0, maxlabel + 1)])
-    fwmapped = utils.forward_map(np.array(fw), ds_in, labelsets,
-                                 delete_labelsets=True)
-    utils.save_step(outpaths, 'deleted', fwmapped, elsize, axlab)
+    im.close()
+    for _, mo in mos.items():
+        mo.close()
 
-    # merge labelsets and return labelvolume with all labels
-    # TODO: could simply add the previous outputs?
-    fw = np.array([l if l in ulabels else 0
-                   for l in range(0, maxlabel + 1)])
-    fwmapped = utils.forward_map(np.array(fw), ds_in, labelsets)
-    utils.save_step(outpaths, 'added', fwmapped, elsize, axlab)
+    return mos['out']
 
-    # close and return
-    h5file_in.close()
-    try:
-        h5file_out.close()
-    except (ValueError, AttributeError):
-        return ds_out
+
+def get_outpaths(h5path_out, save_steps):
+
+    outpaths = {'out': h5path_out}
+    if save_steps:
+        outpaths['del'] = ''
+        outpaths['all'] = ''
+    outpaths = utils.gen_steps(outpaths, save_steps)
+
+    return outpaths
 
 
 if __name__ == "__main__":
