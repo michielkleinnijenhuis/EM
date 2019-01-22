@@ -13,7 +13,7 @@ from scipy.ndimage import label
 from skimage.morphology import watershed, remove_small_objects
 from skimage.segmentation import relabel_sequential
 
-from wmem import parse, utils, Image, LabelImage, MaskImage
+from wmem import parse, utils, wmeMPI, Image, LabelImage, MaskImage
 
 
 def main(argv):
@@ -65,34 +65,34 @@ def watershed_ics(
         ):
     """Perform watershed on the intracellular space compartments."""
 
-    mpi_info = utils.get_mpi_info(usempi)
+    mpi = wmeMPI(usempi)
 
     # Open the inputfile for reading.
-    im = utils.get_image(image_in, comm=mpi_info['comm'],
-                         dataslices=dataslices)
+    im = utils.get_image(image_in, comm=mpi.comm, dataslices=dataslices)
 
     # Open the outputfiles for writing and create the dataset or output array.
     props = im.get_props(protective=protective, dtype='uint64', squeeze=True)
     outpaths = get_outpaths(outputpath, save_steps)
     mo = LabelImage(outpaths['out'], **props)
-    mo.create(comm=mpi_info['comm'])  # FIXME: load if exist
+    mo.create(comm=mpi.comm)  # FIXME: load if exist
     in2out_offset = -np.array([slc.start for slc in mo.slices])
 
     # FIXME: if seeds h5 already exists with different dims it will load and fail
     # load/generate the seeds and mask
-    seeds = get_seeds(seeds_in, mpi_info, outpaths['seeds'], **props)
+    seeds = get_seeds(seeds_in, mpi, outpaths['seeds'], **props)
     mask_in = ((type(masks) is list and len(masks) == 1) or
                (type(masks) is Image))
-    mask = get_mask(mask_in, masks, mpi_info, outpaths['mask'], **props)
+    mask = get_mask(mask_in, masks, mpi, outpaths['mask'], **props)
 
     # Prepare for processing with MPI.
-    blocks = utils.get_blocks(im, blocksize, blockmargin, blockrange)
-    series = utils.scatter_series(mpi_info, len(blocks))[0]
+    mpi.set_blocks(im, blocksize, blockmargin, blockrange)
+    mpi.scatter_series()
 
-    for blocknr in series:
+    for i in mpi.series:
+        block = mpi.blocks[i]
 
         for img in [im, mask, seeds]:
-            img.slices = blocks[blocknr]['slices']
+            img.slices = block['slices']
 
         slices_out = im.get_offset_slices(in2out_offset)
 
@@ -136,16 +136,16 @@ def get_outpaths(h5path_out, save_steps):
     return outpaths
 
 
-def get_seeds(seeds_in, mpi_info, outpath='', **kwargs):
+def get_seeds(seeds_in, mpi, outpath='', **kwargs):
 
     kwargs['dtype'] = 'uint64'
 
     if seeds_in:
-        seeds = utils.get_image(seeds_in, comm=mpi_info['comm'],
+        seeds = utils.get_image(seeds_in, comm=mpi.comm,
                                 slices=kwargs['slices'])
     else:
         seeds = LabelImage(outpath, **kwargs)
-        seeds.create(comm=mpi_info['comm'])
+        seeds.create(comm=mpi.comm)
 
     return seeds
 
@@ -171,16 +171,16 @@ def calculate_seeds(data, lower_threshold, upper_threshold, min_seed_size):
     return seeds
 
 
-def get_mask(mask_in, masks, mpi_info, outpath='', **kwargs):
+def get_mask(mask_in, masks, mpi, outpath='', **kwargs):
 
     kwargs['dtype'] = 'bool'
 
     if mask_in:
-        mask = utils.get_image(masks[0], comm=mpi_info['comm'],
+        mask = utils.get_image(masks[0], comm=mpi.comm,
                                slices=kwargs['slices'])
     else:
         mask = MaskImage(outpath, **kwargs)
-        mask.create(comm=mpi_info['comm'])
+        mask.create(comm=mpi.comm)
 
     return mask
 

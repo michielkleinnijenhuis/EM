@@ -9,15 +9,10 @@ import argparse
 
 import numpy as np
 
-try:
-    from mpi4py import MPI
-except ImportError:
-    print("mpi4py could not be loaded")
-
 from skimage.morphology import remove_small_objects
 from skimage.morphology import binary_dilation, ball, disk
 
-from wmem import parse, utils, Image, MaskImage
+from wmem import parse, utils, wmeMPI, Image, MaskImage
 
 
 def main(argv):
@@ -77,11 +72,10 @@ def prob2mask(
         ):
     """Create thresholded hard segmentation."""
 
-    mpi_info = utils.get_mpi_info(usempi)
+    mpi = wmeMPI(usempi)
 
     # Open the inputfile for reading.
-    im = utils.get_image(image_in, comm=mpi_info['comm'],
-                         dataslices=dataslices)
+    im = utils.get_image(image_in, comm=mpi.comm, dataslices=dataslices)
 
     # Open the outputfile for writing and create the dataset or output array.
     props = im.get_props(protective=protective, dtype='bool', squeeze=True)
@@ -89,7 +83,7 @@ def prob2mask(
     mos = {}
     for stepname, outpath in outpaths.items():
         mos[stepname] = MaskImage(outpath, **props)
-        mos[stepname].create(comm=mpi_info['comm'])  # FIXME: load if exist
+        mos[stepname].create(comm=mpi.comm)  # FIXME: load if exist
     in2out_offset = -np.array([slc.start for slc in mos['out'].slices])
 
     # Prepare for processing with MPI.
@@ -99,13 +93,14 @@ def prob2mask(
         se = disk
     else:
         se = ball
-    blocks = utils.get_blocks(im, blocksize)
-    series = utils.scatter_series(mpi_info, len(blocks))[0]
+    mpi.set_blocks(im, blocksize)
+    mpi.scatter_series()
 
     # Threshold (and dilate and filter) the data.
-    for blocknr in series:
+    for i in mpi.series:
+        block = mpi.blocks[i]
 
-        im.slices = blocks[blocknr]['slices']
+        im.slices = block['slices']
         im.load()
 
         data = im.slice_dataset()

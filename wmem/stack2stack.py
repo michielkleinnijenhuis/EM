@@ -9,7 +9,7 @@ import argparse
 
 import numpy as np
 
-from wmem import parse, utils, Image
+from wmem import parse, utils, wmeMPI, Image
 
 
 def main(argv):
@@ -59,10 +59,10 @@ def stack2stack(
         ):
     """Convert/select/downscale/transpose/... an hdf5 dataset."""
 
-    mpi_info = utils.get_mpi_info(usempi)
+    mpi = wmeMPI(usempi)
 
     # Open the inputfile for reading.
-    im = utils.get_image(image_in, dataslices=dataslices)
+    im = utils.get_image(image_in, comm=mpi.comm, dataslices=dataslices)
 
     if dset_name:
         im.slices = utils.dset_name2slices(dset_name, blockoffset,
@@ -81,7 +81,7 @@ def stack2stack(
 
     # Open the outputfile for writing and create the dataset or output array.
     mo = Image(outputpath, protective=protective, **props)
-    mo.create(comm=mpi_info['comm'])
+    mo.create(comm=mpi.comm)
 
     data = im.slice_dataset()
     data = np.transpose(data, in2out)

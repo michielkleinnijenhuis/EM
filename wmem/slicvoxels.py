@@ -12,7 +12,7 @@ import numpy as np
 from skimage import segmentation
 import maskslic as seg
 
-from wmem import parse, utils, LabelImage
+from wmem import parse, utils, wmeMPI, LabelImage
 
 
 def main(argv):
@@ -62,28 +62,29 @@ def slicvoxels(
         ):
     """Calculate SLIC supervoxels."""
 
-    mpi_info = utils.get_mpi_info(usempi)
+    mpi = wmeMPI(usempi)
 
     # Open the inputfile for reading.
-    im = utils.get_image(image_in, comm=mpi_info['comm'],
-                         dataslices=dataslices)
-    mask = utils.get_image(masks[0], comm=mpi_info['comm'],
-                           dataslices=dataslices)  # TODO: string masks
+    im = utils.get_image(image_in, comm=mpi.comm, dataslices=dataslices)
+    mask = utils.get_image(masks[0], comm=mpi.comm, dataslices=dataslices)
+    # TODO: string masks
 
     # Determine the properties of the output dataset.
     props = im.get_props(protective=protective, dtype='uint64', squeeze=True)
     mo = LabelImage(outputpath, **props)
-    mo.create(comm=mpi_info['comm'])
+    mo.create(comm=mpi.comm)
     in2out_offset = -np.array([slc.start for slc in mo.slices])
 
-    blocks = utils.get_blocks(im, blocksize, blockmargin, blockrange)
-    series = utils.scatter_series(mpi_info, len(blocks))[0]
+    # Prepare for processing with MPI.
+    mpi.set_blocks(im, blocksize, blockmargin, blockrange)
+    mpi.scatter_series()
 
     spac = [es for es in np.absolute(mo.elsize)]
 
-    for blocknr in series:
-        im.slices = blocks[blocknr]['slices']
-        mask.slices = blocks[blocknr]['slices']
+    for i in mpi.series:
+        block = mpi.blocks[i]
+
+        im.slices = mask.slices = block['slices']
 
         blocksize = np.prod(np.array(list(im.slices2shape())))
         n_segments = int(blocksize / slicvoxelsize)
@@ -108,17 +109,17 @@ def slicvoxels(
                             enforce_connectivity=enforce_connectivity)
 
         print("Number of supervoxels: {}".format(np.amax(segments) + 1))
-        offset = 2 * n_segments * blocknr + 1
+        offset = 2 * n_segments * i + 1
         segments[~maskdata] = segments[~maskdata] + offset
-        print("Offsett blocknr {} by: {}".format(blocknr, offset))
+        print("Offsett blocknr {} by: {}".format(i, offset))
         slices_out = im.get_offset_slices(in2out_offset)
         mo.write(data=segments, slices=slices_out)
 
-    if mpi_info['enabled']:
-        mpi_info['comm'].Barrier()
+    if mpi.enabled:
+        mpi.comm.Barrier()
 #         mo.set_maxlabel()
 #         print(mpi_info['rank'], mo.maxlabel, mo.ulabels)
-        if mpi_info['rank'] == 0 and mpi_info['size'] > 1:
+        if mpi.rank == 0 and mpi.size > 1:
             mo.ds[:] = segmentation.relabel_sequential(mo.ds[:])[0]
 #             mo.set_maxlabel()
 #             print('final', mo.maxlabel, mo.ulabels)

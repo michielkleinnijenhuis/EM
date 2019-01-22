@@ -21,7 +21,7 @@ import argparse
 
 import numpy as np
 
-from wmem import parse, utils, Image
+from wmem import parse, utils, wmeMPI, Image
 
 
 def main(argv):
@@ -71,11 +71,10 @@ def series2stack(
         ):
     """"Convert a directory of tifs to an hdf5 stack."""
 
-    mpi_info = utils.get_mpi_info(usempi)
+    mpi = wmeMPI(usempi)
 
-    im = utils.get_image(image_in, comm=mpi_info['comm'],
-                         dataslices=dataslices, axlab=inlayout,
-                         load_data=False)
+    im = utils.get_image(image_in, comm=mpi.comm, dataslices=dataslices,
+                         axlab=inlayout, load_data=False)
 
     # Determine the properties of the output dataset.
     props = {'dtype': datatype or im.dtype,
@@ -89,7 +88,7 @@ def series2stack(
 
     # Open the outputfile for writing and create the dataset or output array.
     mo = Image(outputpath, protective=protective, **props)
-    mo.create(comm=mpi_info['comm'])
+    mo.create(comm=mpi.comm)
 
     in2out_offset = -np.array([slc.start for slc in im.slices])
 
@@ -102,13 +101,14 @@ def series2stack(
         if mo.chunks is not None:
             z_idx = mo.axlab.index('z')
             blocksize[z_idx] = mo.chunks[z_idx]
-    blocks = utils.get_blocks(im, blocksize, blockmargin, blockrange)
-    series = utils.scatter_series(mpi_info, len(blocks))[0]
+    mpi.set_blocks(im, blocksize, blockmargin, blockrange)
+    mpi.scatter_series()
 
     # Write blocks of 2D images to the outputfile(s).
-    for blocknr in series:
+    for i in mpi.series:
+        block = mpi.blocks[i]
 
-        im.slices = blocks[blocknr]['slices']
+        im.slices = block['slices']
         im.load()
 
         slcs_out = im.get_offset_slices(in2out_offset)

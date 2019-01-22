@@ -16,7 +16,7 @@ try:
 except ImportError:
     print("mpi4py could not be loaded")
 
-from wmem import parse, utils, Image
+from wmem import parse, utils, wmeMPI, Image
 
 
 def main(argv):
@@ -58,21 +58,21 @@ def splitblocks(
         ):
     """"Convert a directory of tifs to an hdf5 stack."""
 
-    # Prepare for processing with MPI.
-    mpi_info = utils.get_mpi_info(usempi)
+    mpi = wmeMPI(usempi)
 
     # Open data for reading.
-    im = utils.get_image(image_in, comm=mpi_info['comm'],
-                         dataslices=dataslices)
+    im = utils.get_image(image_in, comm=mpi.comm, dataslices=dataslices)
 
-    # Divide the data into a series of blocks.
+    # Prepare for processing with MPI.
     tpl = get_template_string(im, blocksize, dset_name, outputpath)
-    blocks = utils.get_blocks(im, blocksize, blockmargin, blockrange, tpl)
-    series = utils.scatter_series(mpi_info, len(blocks))[0]
+    mpi.set_blocks(im, blocksize, blockmargin, blockrange, tpl)
+    mpi.scatter_series()
 
     # Write blocks to the outputfile(s).
-    for blocknr in series:
-        write_block(im, blocks[blocknr], protective, comm=mpi_info['comm'])
+    for i in mpi.series:
+        block = mpi.blocks[i]
+
+        write_block(im, block, protective, comm=mpi.comm)
 
     im.close()
 

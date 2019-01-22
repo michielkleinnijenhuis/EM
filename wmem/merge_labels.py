@@ -12,7 +12,7 @@ import numpy as np
 from skimage.measure import label, regionprops
 from skimage.morphology import binary_dilation, watershed
 
-from wmem import parse, utils, LabelImage
+from wmem import parse, utils, wmeMPI, LabelImage
 
 
 def main(argv):
@@ -62,12 +62,10 @@ def merge_labels(
         ):
     """Find labels that do not traverse through the volume."""
 
-    # Prepare for processing with MPI.
-    mpi_info = utils.get_mpi_info(usempi)
+    mpi = wmeMPI(usempi)
 
     # Open data for reading.
-    im = utils.get_image(image_in, comm=mpi_info['comm'],
-                         dataslices=dataslices)
+    im = utils.get_image(image_in, comm=mpi.comm, dataslices=dataslices)
     comps = im.split_path(outputpath)
     ulabels = np.unique(im.ds[:])
     maxlabel = np.amax(ulabels)
@@ -75,7 +73,7 @@ def merge_labels(
 
     labelsets = {}
     labelsets, filled = merge_labels_by_method(merge_method,
-                                               mpi_info,
+                                               mpi,
                                                im,
                                                labelsets,
                                                slicedim,
@@ -86,13 +84,13 @@ def merge_labels(
                                                min_labelsize,
                                                searchradius)
 
-    utils.dump_labelsets(labelsets, comps, mpi_info['rank'])
-    if mpi_info['enabled']:
-        mpi_info['comm'].Barrier()
+    utils.dump_labelsets(labelsets, comps, mpi.rank)
+    if mpi.enabled:
+        mpi.comm.Barrier()
 
     im.close()
 
-    if mpi_info['rank'] == 0:
+    if mpi.rank == 0:
 
         utils.combine_labelsets(labelsets, comps)
 
@@ -167,7 +165,7 @@ def map_labels(
     im.close()
 
 
-def merge_labels_by_method(merge_method, mpi_info, labels, labelsets={},
+def merge_labels_by_method(merge_method, mpi, labels, labelsets={},
                            slicedim=0, offsets=2,
                            overlap_threshold=0.50,
                            h5path_data='', h5path_mmm='',
@@ -176,13 +174,13 @@ def merge_labels_by_method(merge_method, mpi_info, labels, labelsets={},
 
     # find connection candidates
     if merge_method == 'neighbours':
-        labelsets, filled = evaluate_labels(merge_method, mpi_info,
+        labelsets, filled = evaluate_labels(merge_method, mpi,
                                             labels.ds, None,
                                             labelsets, None,
                                             overlap_threshold=overlap_threshold)
 
     elif merge_method == 'neighbours_slices':
-        labelsets, filled = evaluate_labels(merge_method, mpi_info,
+        labelsets, filled = evaluate_labels(merge_method, mpi,
                                             labels.ds, None,
                                             labelsets, None,
                                             overlap_threshold=overlap_threshold,
@@ -194,16 +192,16 @@ def merge_labels_by_method(merge_method, mpi_info, labels, labelsets={},
 
         filled = np.copy(labels.ds)  # TODO: copy Image class
 
-        data = utils.get_image(h5path_data, comm=mpi_info['comm'],
+        data = utils.get_image(h5path_data, comm=mpi.comm,
                                dataslices=labels.dataslices)
         if h5path_mmm:
-            mask = utils.get_image(h5path_mmm, comm=mpi_info['comm'],
+            mask = utils.get_image(h5path_mmm, comm=mpi.comm,
                                    dataslices=labels.dataslices)
 #                 mask = utils.h5_load(h5path_mmm, load_data=True, dtype='bool')[0]
         else:
             mask = np.zeros_like(data.ds, dtype='bool')
 
-        labelsets, filled = evaluate_labels(merge_method, mpi_info,
+        labelsets, filled = evaluate_labels(merge_method, mpi,
                                             labels.ds, None,
                                             labelsets, filled,
                                             ds_data=data.ds,
@@ -216,7 +214,7 @@ def merge_labels_by_method(merge_method, mpi_info, labels, labelsets={},
 
         labelmask = labels.ds != 0
         labels_connected = label(labelmask, connectivity=1)
-        labelsets, filled = evaluate_labels(merge_method, mpi_info,
+        labelsets, filled = evaluate_labels(merge_method, mpi,
                                             labels_connected, labels.ds,
                                             labelsets, None,
                                             ds_data=data.ds,
@@ -228,17 +226,16 @@ def merge_labels_by_method(merge_method, mpi_info, labels, labelsets={},
     return labelsets, filled
 
 
-def evaluate_labels(merge_method, mpi_info, labels, aux, labelsets, filled, **kwargs):
+def evaluate_labels(merge_method, mpi, labels, aux, labelsets, filled, **kwargs):
 
     rp = regionprops(labels, aux)
 
-    series = np.array(range(0, len(rp)), dtype=int)
-    if mpi_info['enabled']:
-        series = utils.scatter_series(mpi_info, len(rp))[0]
+    # Prepare for processing with MPI.
+    mpi.nblocks = len(rp)
+    mpi.scatter_series()
 
-    for i in series:
+    for i in mpi.series:
         prop = rp[i]
-        print(i)
 
         if merge_method == 'neighbours':
             labelsets = merge_neighbours(labels, prop, labelsets, filled,
