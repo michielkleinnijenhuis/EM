@@ -1170,7 +1170,7 @@ class LabelImage(Image):
 
         super(LabelImage, self).__init__(path, **kwargs)
         self.maxlabel = maxlabel
-        self.ulabels = ulabels
+        self.ulabels = np.array(ulabels)
 
     def load(self, comm=None, load_data=True):
         """Load a dataset."""
@@ -1235,7 +1235,7 @@ class LabelImage(Image):
 
     def set_maxlabel(self):
 
-        if not self.ulabels:
+        if not self.ulabels.any():
             self.set_ulabels()
         self.maxlabel = int(np.amax(self.ulabels))
         print("{} labels in volume {}".format(self.maxlabel, self.path))
