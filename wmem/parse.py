@@ -967,6 +967,11 @@ def parse_agglo_from_labelmask(parser):
     parser.add_argument(
         'inputfile',
         help="""path to hdf5 dataset <filepath>.h5/<...>/<dataset>:
+                labelvolume"""
+        )
+    parser.add_argument(
+        'oversegmentation',
+        help="""path to hdf5 dataset <filepath>.h5/<...>/<dataset>:
                 labelvolume of oversegmented supervoxels"""
         )
     parser.add_argument(
@@ -976,11 +981,6 @@ def parse_agglo_from_labelmask(parser):
                 labelvolume with agglomerated labels"""
         )
 
-    parser.add_argument(
-        '-l', '--labelvolume',
-        default='',
-        help='...'
-        )
     parser.add_argument(
         '-r', '--ratio_threshold',
         type=float,

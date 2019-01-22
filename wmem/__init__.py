@@ -1,6 +1,7 @@
 import os
 import h5py
 import glob
+import pickle
 import numpy as np
 import nibabel as nib
 from skimage.io import imread, imsave
@@ -18,14 +19,14 @@ except ImportError:
     raise
 
 
-class Image:
+class Image(object):
     """
 
     """
 
-    def __init__(self, path='',
+    def __init__(self, path,
                  elsize=None, axlab=None, dtype='float',
-                 shape=None, dataslices=None,
+                 shape=None, dataslices=None, slices=None,
                  chunks=None, compression='gzip',
                  protective=False):
 
@@ -34,7 +35,10 @@ class Image:
         self.axlab = axlab
         self.dtype = dtype
         self.dims = shape
-        self.dataslices = dataslices
+        if slices is not None:
+            self.slices = slices
+        else:
+            self.slices = self.get_slice_objects(dataslices)
         self.chunks = chunks
         self.compression = compression
         self.protective = protective
@@ -315,6 +319,8 @@ class Image:
 
         formats[self.format](comm, load_data)
 
+        self.set_slices()
+
         self.elsize = self.get_elsize()
         self.axlab = self.get_axlab()
 
@@ -361,7 +367,7 @@ class Image:
         self.dims = np.array([len(self.file)] + self.tif_get_yxdims())
         self.dtype = self.tif_load_dtype()
 
-        if load_data:  # TODO: dataslices (see dm3)
+        if load_data:  # TODO: slices (see dm3)
             for fpath in self.file:
                 self.ds.append(self.get_image(fpath))
             self.ds = np.array(self.ds, dtype=self.dtype)
@@ -375,28 +381,39 @@ class Image:
         self.dtype = self.dm3_load_dtype()
 
         if load_data:
-            slcs = self.get_slice_objects()
-            slcs_z = slcs[self.axlab.index('z')]
+            slcs_z = self.slices[self.axlab.index('z')]
+            slcs_y = self.slices[self.axlab.index('y')]
+            slcs_x = self.slices[self.axlab.index('x')]
             for fpath in self.file[slcs_z]:
                 im = self.get_image(fpath)
-                im = im[slcs[self.axlab.index('y')],
-                        slcs[self.axlab.index('x')]]
+                im = im[slcs_y, slcs_x]
                 self.ds.append(im)
             self.ds = np.array(self.ds, dtype=self.dtype)
 
-    def squeeze_channel(self, dim):
+    def get_image_props(self):
 
-        props = {'dims': self.ds.shape,
-                 'es': self.elsize,
-                 'al': self.axlab,
-                 'chunks': self.chunks}
+        props = {'shape': self.ds.shape,
+                 'elsize': self.elsize,
+                 'axlab': self.axlab,
+                 'chunks': self.chunks,
+                 'slices': self.slices,
+                 'dtype': self.dtype}
 
-        if self.get_ndim() != 4:  # FIXME: generalize
-            if self.dataslices is not None:
-                props['dslcs'] = list(self.dataslices)
+        return props
+
+    def squeeze_channel(self, dim=None):
+
+        props = {'shape': list(self.slices2shape()),
+                 'elsize': self.elsize,
+                 'axlab': self.axlab,
+                 'chunks': self.chunks,
+                 'slices': self.slices}
+
+        if dim is None:
+            if 'c' in self.axlab:
+                dim = self.axlab.index('c')
             else:
-                props['dslcs'] = self.dataslices
-            return props
+                return props
 
         squeezed = {}
         for prop, val in props.items():
@@ -406,19 +423,12 @@ class Image:
             else:
                 squeezed[prop] = val
 
-        dslcs = self.dataslices
-        if dslcs is not None:
-            squeezed['dslcs'] = list(dslcs)
-            del squeezed['dslcs'][dim*3:dim*3+3]
-        else:
-            squeezed['dslcs'] = None
-
         return squeezed
 
     def slice_dataset(self):
 
         ndim = self.get_ndim()
-        slices = self.get_slice_objects()
+        slices = self.slices
 
         if ndim == 1:
             data = self.ds[slices[0]]
@@ -441,18 +451,7 @@ class Image:
                            slices[3],
                            slices[4]]
 
-#         print(data.shape, np.nonzero(data.shape == 1))
-#         for singleton in np.nonzero(data.shape == 1):
-#             del self.elsize[singleton]
-#             del self.axlab[singleton]
-#             del self.chunks[singleton]
-#             del self.dataslices[singleton]
-# 
-#         self.dims = len(self.elsize)
-#         dslcs = [[0, dim, 1] for dim in self.dims]
-#         self.dataslices = [item for dslc in dslcs for item in dslc]
-
-        self.ds = np.squeeze(data)
+#         self.ds = np.squeeze(data)  # FIXME?
 
         return np.squeeze(data)
 
@@ -462,29 +461,6 @@ class Image:
         self.format = '.dat'
         self.file = None
         self.set_dims()
-
-    def load_dataset_old(self, outlayout='', uint8conv=False):
-        """Load data from a proxy and select/transpose/convert/...."""
-
-        slices = self.get_slice_objects(self.ds.shape)
-        data = self.slice_dataset()
-
-        if list(self.axlab) != list(outlayout):
-            in2out = [self.axlab.index(l) for l in outlayout]
-            data = np.transpose(data, in2out)
-            self.elsize = np.array(self.elsize)[in2out]
-            self.axlab = outlayout
-            slices = [slices[i] for i in in2out]
-
-        if self.dtype:
-            data = data.astype(self.dtype, copy=False)
-
-        if uint8conv:
-            from skimage import img_as_ubyte
-            data = self.normalize_data(data)[0]
-            data = img_as_ubyte(data)
-
-        return data, slices
 
     def normalize_data(self, data):
         """Normalize data between 0 and 1."""
@@ -528,66 +504,73 @@ class Image:
             for dim in self.dims:
                 self.dataslices += [0, dim, 1]
 
-    def get_slice_objects(self, dataslices=None, dims=None, offsets=None):
+    def get_offset_slices(self, offsets, slices=None):
+        """."""
+
+        if slices is None:
+            slices = list(self.slices)
+
+        slcs = [slice(slc.start + o, slc.stop + o, slc.step)
+                for o, slc in zip(offsets, slices)]
+
+        return slcs
+
+    def set_slices(self):
+
+        if self.slices is None:
+            self.slices = [slice(0, dim, 1) for dim in self.dims]
+        else:
+            slices = []
+            for slc, dim in zip(self.slices, self.dims):
+                if slc.stop == 0:
+                    slices.append(slice(slc.start, dim, slc.step))
+                else:
+                    slices.append(slc)
+            self.slices = slices
+
+    def get_slice_objects(self, dataslices, dims=None, offsets=None):
         """Get the full ranges for z, y, x if upper bound is undefined."""
 
         if dataslices is None:
-            self.set_dataslices()
-            dataslices = self.dataslices
-        if dims is None:
-            dims = self.dims
+            return
+
         if offsets is None:
             offsets = [0 for _ in dataslices[::3]]
 
         starts = dataslices[::3] + offsets
         stops = dataslices[1::3] + offsets
-        stops = [dim if stop == 0 else stop
-                 for stop, dim in zip(stops, dims)]
+#         stops = [dim if stop == 0 else stop
+#                  for stop, dim in zip(stops, dims)]
         steps = dataslices[2::3]
         slices = [slice(start, stop, step)
                   for start, stop, step in zip(starts, stops, steps)]
 
         return slices
 
-    def get_slice_objects_prc(self, dataslices, zyxdims):
-        """Get the full ranges for z, y, x if upper bound is undefined."""
-
-        # set default dataslice
-        if dataslices is None:
-            dataslices = [0, 0, 1, 0, 0, 1, 0, 0, 1]
-
-        dataslices[1] = dataslices[1] or zyxdims[0]
-        dataslices[4] = dataslices[4] or zyxdims[1]
-        dataslices[7] = dataslices[7] or zyxdims[2]
-
-        # create the slice objects
-        if dataslices is not None:
-            starts = dataslices[::3]
-            stops = dataslices[1::3]
-            steps = dataslices[2::3]
-            slices = [slice(start, stop, step)
-                      for start, stop, step in zip(starts, stops, steps)]
-
-        return slices
-
-    def slices2shape(self, dataslices=None, dims=None):
+    def slices2shape(self, slices=None):
         """Get the shape of the sliced dataset."""
 
-        # FIXME: generalize to 2D/4D
-        slices = self.get_slice_objects(dataslices, dims)
-#         shape = (len(range(*slc.indices(slc.stop)))
-#                  for slc in slices)
-        if len(slices) == 3:
-            shape = (len(range(*slices[0].indices(slices[0].stop))),
-                     len(range(*slices[1].indices(slices[1].stop))),
-                     len(range(*slices[2].indices(slices[2].stop))))
-        elif len(slices) == 4:
-            shape = (len(range(*slices[0].indices(slices[0].stop))),
-                     len(range(*slices[1].indices(slices[1].stop))),
-                     len(range(*slices[2].indices(slices[2].stop))),
-                     len(range(*slices[3].indices(slices[3].stop))))
+        if slices is None:
+            slices = self.slices
 
-        return shape
+        return (len(range(*slc.indices(slc.stop))) for slc in slices)
+
+#         if len(slices) == 1:
+#             shape = (len(range(*slices[0].indices(slices[0].stop))))
+#         if len(slices) == 2:
+#             shape = (len(range(*slices[0].indices(slices[0].stop))),
+#                      len(range(*slices[1].indices(slices[1].stop))))
+#         if len(slices) == 3:
+#             shape = (len(range(*slices[0].indices(slices[0].stop))),
+#                      len(range(*slices[1].indices(slices[1].stop))),
+#                      len(range(*slices[2].indices(slices[2].stop))))
+#         elif len(slices) == 4:
+#             shape = (len(range(*slices[0].indices(slices[0].stop))),
+#                      len(range(*slices[1].indices(slices[1].stop))),
+#                      len(range(*slices[2].indices(slices[2].stop))),
+#                      len(range(*slices[3].indices(slices[3].stop))))
+# 
+#         return shape
 
     def get_elsize(self):
         """Get the element sizes."""
@@ -761,6 +744,8 @@ class Image:
 
         formats[self.format](comm)
 
+        self.set_slices()
+
     def h5_create(self, comm=None):
         """Create a h5 dataset."""
 
@@ -854,7 +839,7 @@ class Image:
             data = self.ds
 
         if slices is None:
-            slices = self.get_slice_objects()
+            slices = self.slices
 
         formats = {'.h5': self.h5_write,
                    '.nii': self.nii_write,
@@ -940,7 +925,7 @@ class Image:
         """Write a block of data into a dataset."""
 
         if slices is None:
-            slices = self.get_slice_objects()
+            slices = self.slices
 
         ndim = self.get_ndim()
 
@@ -1150,10 +1135,7 @@ class Image:
         self.axlab = outlayout
         self.elsize = np.array(self.elsize)[in2out]
         self.ds[:] = np.transpose(self.ds[:], in2out)  # FIXME: fail for proxies
-
-        slices = self.get_slice_objects()
-        slices = [slices[i] for i in in2out]
-        self.dataslices = [item for sl in slices for item in sl]
+        self.slices = [self.slices[i] for i in in2out]
 
     def squeeze(self):
         pass
@@ -1170,10 +1152,117 @@ class Image:
 
 class MaskImage(Image):
 
+    def __init__(self, path,
+                 **kwargs):
+
+        super(MaskImage, self).__init__(path, **kwargs)
+
     def invert(self):
 
         self.ds[:] = ~self.ds[:]
 
 
 class LabelImage(Image):
-    pass
+
+    def __init__(self, path,
+                 maxlabel=0, ulabels=[],
+                 **kwargs):
+
+        super(LabelImage, self).__init__(path, **kwargs)
+        self.maxlabel = maxlabel
+        self.ulabels = ulabels
+
+    def load(self, comm=None, load_data=True):
+        """Load a dataset."""
+
+        super(LabelImage, self).load(comm, load_data)
+        self.set_maxlabel()
+
+
+    def read_labelsets(self, lsfile):
+        """Read labelsets from file."""
+
+        e = os.path.splitext(lsfile)[1]
+        if e == '.pickle':
+            with open(lsfile, 'rb') as f:
+                labelsets = pickle.load(f)
+        else:
+            labelsets = self.read_labelsets_from_txt(lsfile)
+
+        return labelsets
+
+    def read_labelsets_from_txt(self, lsfile):
+        """Read labelsets from a textfile."""
+        labelsets = {}
+
+        with open(lsfile) as f:
+            lines = f.readlines()
+            for line in lines:
+                splitline = line.split(':', 2)
+                lsk = int(splitline[0])
+                lsv = set(np.fromstring(splitline[1], dtype=int, sep=' '))
+                labelsets[lsk] = lsv
+
+        return labelsets
+
+    def write_labelsets(self, labelsets, filetypes=['pickle']):
+        """Write labelsets to file."""
+
+        filestem = self.split_path()['base']
+
+        if 'txt' in filetypes:
+            filepath = filestem + '.txt'
+            self.write_labelsets_to_txt(labelsets, filepath)
+        if 'pickle' in filetypes:
+            filepath = filestem + '.pickle'
+            with open(filepath, "wb") as f:
+                pickle.dump(labelsets, f)
+
+    def write_labelsets_to_txt(self, labelsets, filepath):
+        """Write labelsets to a textfile."""
+
+        with open(filepath, "wb") as f:
+            for lsk, lsv in labelsets.items():
+                f.write("%8d: " % lsk)
+                ls = sorted(list(lsv))
+                for l in ls:
+                    f.write("%8d " % l)
+                f.write('\n')
+
+    def set_ulabels(self):
+
+        self.ulabels = np.unique(self.ds)
+
+    def set_maxlabel(self):
+
+        if not self.ulabels:
+            self.set_ulabels()
+        self.maxlabel = int(np.amax(self.ulabels))
+        print("{} labels in volume {}".format(self.maxlabel, self.path))
+
+    def get_fwmap(self, empty=False):
+
+        fw = np.zeros(self.maxlabel + 1, dtype='i')
+        if not empty:
+            fw = np.array([l if l in self.ulabels else 0 for l in fw])
+
+        return fw
+
+    def forward_map(self, fw=[], labelsets={}, delete_labelsets=False,
+                    from_empty=False):
+        """Map all labels in value to key."""
+
+        fw = fw or self.get_fwmap(empty=from_empty)
+
+        for lsk, lsv in labelsets.items():
+            lsv = sorted(list(lsv))
+            for l in lsv:
+                if delete_labelsets:
+                    fw[l] = 0
+                else:
+                    fw[l] = lsk
+
+        fw[0] = 0
+        fwmapped = np.array(fw)[self.ds]
+
+        return fwmapped

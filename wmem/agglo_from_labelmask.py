@@ -10,7 +10,7 @@ import argparse
 import numpy as np
 from skimage.measure import regionprops
 
-from wmem import parse, utils
+from wmem import parse, utils, LabelImage
 
 
 def main(argv):
@@ -26,7 +26,7 @@ def main(argv):
 
     agglo_from_labelmask(
         args.inputfile,
-        args.labelvolume,
+        args.oversegmentation,
         args.ratio_threshold,
         args.outputfile,
         args.save_steps,
@@ -35,66 +35,57 @@ def main(argv):
 
 
 def agglo_from_labelmask(
-        h5path_in,
-        h5path_lv='',
+        image_in,
+        oversegmentation,
         ratio_threshold=0,
-        h5path_out='',
+        outputpath='',
         save_steps=False,
         protective=False,
         ):
     """Apply mapping of labelsets to a labelvolume."""
 
-    # check output paths
-    outpaths = {'out': h5path_out}
-    status = utils.output_check(outpaths, save_steps, protective)
-    if status == "CANCELLED":
-        return
+    axons = utils.get_image(image_in, imtype='Label')
+    svoxs = utils.get_image(oversegmentation, imtype='Label')
 
-    # open data for reading
-    h5file_in, ds_in, elsize, axlab = utils.h5_load(h5path_in)
-    h5file_lv, ds_lv, _, _ = utils.h5_load(h5path_lv)
+    mo = LabelImage(outputpath, protective=protective,
+                    **svoxs.get_image_props())
+    mo.create()
 
-    # open data for writing
-    h5file_out, ds_out = utils.h5_write(None, ds_in.shape, ds_in.dtype,
-                                        h5path_out,
-                                        element_size_um=elsize,
-                                        axislabels=axlab)
-
-    ulabels = np.unique(ds_in)
-    maxlabel = np.amax(ulabels)
-    print("number of labels in watershed: {:d}".format(maxlabel))
-
-    fwmap = np.zeros(maxlabel + 1, dtype='i')
-
-    areas_ws = np.bincount(ds_in[:].ravel().astype('int64'))
-
+    areas_svoxs = np.bincount(svoxs.ds[:].ravel().astype('int64'))
+    rp = regionprops(axons.ds, svoxs.ds)
     labelsets = {}
-    rp_lw = regionprops(ds_lv, ds_in)
-    for prop in rp_lw:
+    for axon in rp:
+#         FIXME: double assignments?
+        labelsets[axon.label] = assign_supervoxels_to_axon(axon,
+                                                           areas_svoxs,
+                                                           ratio_threshold)
 
-        maskedregion = prop.intensity_image[prop.image]
-        counts = np.bincount(maskedregion.astype('int64'))
-        svoxs_in_label = [l for sl in np.argwhere(counts) for l in sl]
+    mo.write_labelsets(labelsets)
+    mo.ds[:] = svoxs.forward_map(labelsets=labelsets, from_empty=True)
 
-        ratios_svox_in_label = [float(counts[svox]) / float(areas_ws[svox])
-                                for svox in svoxs_in_label]
-        fwmask = np.greater(ratios_svox_in_label, ratio_threshold)
-        labelset = np.array(svoxs_in_label)[fwmask]
-        labelsets[prop.label] = set(labelset) - set([0])
+    svoxs.close()
+    axons.close()
+    mo.close()
 
-    basepath = h5path_in.split('.h5/')[0]
-    utils.write_labelsets(labelsets, basepath + "_svoxsets",
-                          filetypes=['pickle'])
+    return mo
 
-    ds_out[:] = utils.forward_map(np.array(fwmap), ds_in, labelsets)
 
-    # close and return
-    h5file_in.close()
-    h5file_lv.close()
-    try:
-        h5file_out.close()
-    except (ValueError, AttributeError):
-        return ds_out
+def assign_supervoxels_to_axon(axon, areas_svox, ratio_threshold):
+    """"""
+
+    svoxs_in_label = axon.intensity_image[axon.image]
+    areas_svoxs_in_label = np.bincount(svoxs_in_label.astype('int64'))
+    list_svoxs_in_label = [l for sl in np.argwhere(areas_svoxs_in_label)
+                           for l in sl]
+
+    ratios_svox_in_label = [float(areas_svoxs_in_label[svox]) / float(areas_svox[svox])
+                            for svox in list_svoxs_in_label]
+
+    # return set of supervoxels larger than threshold
+    fwmask = np.greater(ratios_svox_in_label, ratio_threshold)
+    labelset = set(np.array(list_svoxs_in_label)[fwmask]) - set([0])
+
+    return labelset
 
 
 if __name__ == "__main__":

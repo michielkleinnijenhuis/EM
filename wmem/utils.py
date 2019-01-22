@@ -30,7 +30,7 @@ except ImportError:
 
 import h5py
 
-from wmem import Image
+from wmem import Image, LabelImage, MaskImage
 
 
 def mkdir_p(filepath):
@@ -1233,19 +1233,25 @@ def get_blockbounds(offset, shape, blocksize, margin):
     return zip(starts, stops)
 
 
-def get_image(image_in, **kwargs):
+def get_image(image_in, imtype='', **kwargs):
 
     comm = kwargs.pop('comm', None)
     load_data = kwargs.pop('load_data', True)
 
     if isinstance(image_in, Image):
         im = image_in
-        if 'dataslices' in kwargs.keys():
-            im.dataslices = kwargs['dataslices']
+        if 'slices' in kwargs.keys():
+            im.slices = kwargs['slices']
         if im.format == '.h5':
             im.h5_load(comm, load_data)
     else:
-        im = Image(image_in, **kwargs)
+        if imtype == 'Label':
+            im = LabelImage(image_in, **kwargs)
+        elif imtype == 'Mask':
+            im = MaskImage(image_in, **kwargs)
+        else:
+            im = Image(image_in, **kwargs)
+
         im.load(comm, load_data)
 
     return im
