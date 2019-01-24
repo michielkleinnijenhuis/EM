@@ -144,9 +144,7 @@ def evaluate_overlaps(
         utils.write_labelsets(labelsets, lsroot, ['txt', 'pickle'])
 
         if do_map_labels:
-            map_labels(h5path_in, h5path_mm,
-                       min_labelsize, close, relabel_from,
-                       h5path_out, save_steps, protective)
+            map_labels(h5path_in, h5path_out, save_steps, protective)
 
 
 def map_labels(
