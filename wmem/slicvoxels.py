@@ -108,8 +108,9 @@ def slicvoxels(
                             convert2lab=False,
                             enforce_connectivity=enforce_connectivity)
 
+        segments = segments + 1
         print("Number of supervoxels: {}".format(np.amax(segments) + 1))
-        offset = 2 * n_segments * i + 1
+        offset = 2 * i * n_segments
         segments[~maskdata] = segments[~maskdata] + offset
         print("Offsett blocknr {} by: {}".format(i, offset))
         slices_out = im.get_offset_slices(in2out_offset)
