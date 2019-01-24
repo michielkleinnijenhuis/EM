@@ -10,7 +10,7 @@ import argparse
 import numpy as np
 from skimage.measure import regionprops
 
-from wmem import parse, utils, LabelImage
+from wmem import parse, utils, wmeMPI, LabelImage
 
 
 def main(argv):
@@ -31,6 +31,7 @@ def main(argv):
         args.outputfile,
         args.save_steps,
         args.protective,
+        args.usempi & ('mpi4py' in sys.modules),
         )
 
 
@@ -41,27 +42,44 @@ def agglo_from_labelmask(
         outputpath='',
         save_steps=False,
         protective=False,
+        usempi=False,
         ):
     """Apply mapping of labelsets to a labelvolume."""
 
-    axons = utils.get_image(image_in, imtype='Label')
-    svoxs = utils.get_image(oversegmentation, imtype='Label')
+    mpi = wmeMPI(usempi)
+
+    axons = utils.get_image(image_in, comm=mpi.comm, imtype='Label')
+    svoxs = utils.get_image(oversegmentation, comm=mpi.comm, imtype='Label')
 
     props = svoxs.get_props(protective=protective)
     mo = LabelImage(outputpath, **props)
-    mo.create()
+    mo.create(comm=mpi.comm)
 
     areas_svoxs = np.bincount(svoxs.ds[:].ravel().astype('int64'))
     rp = regionprops(axons.ds, svoxs.ds)
     labelsets = {}
-    for axon in rp:
-#         FIXME: double assignments?
-        labelsets[axon.label] = assign_supervoxels_to_axon(axon,
-                                                           areas_svoxs,
-                                                           ratio_threshold)
 
-    mo.write_labelsets(labelsets)
-    mo.ds[:] = svoxs.forward_map(labelsets=labelsets, from_empty=True)
+    mpi.nblocks = len(rp)
+    mpi.scatter_series(randomize=True)
+
+    for i in mpi.series:
+        axon = rp[i]
+#         print(axon.label)
+#         FIXME: double assignments?
+        labelset = assign_supervoxels_to_axon(axon, areas_svoxs, ratio_threshold)
+        if labelset:
+            labelsets[axon.label] = labelset
+
+    comps = axons.split_path(outputpath)
+    utils.dump_labelsets(labelsets, comps, mpi.rank)
+
+    if mpi.enabled:
+        mpi.comm.Barrier()
+
+    if mpi.rank == 0:
+        labelsets = utils.combine_labelsets(labelsets, comps)
+        mo.ds[:] = svoxs.forward_map(labelsets=labelsets, from_empty=True)
+        # TODO: not from_empty, but from axons?
 
     svoxs.close()
     axons.close()
