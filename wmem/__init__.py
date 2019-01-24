@@ -2,6 +2,7 @@ import os
 import h5py
 import glob
 import pickle
+import random
 import numpy as np
 import nibabel as nib
 from skimage.io import imread, imsave
@@ -1320,10 +1321,12 @@ class wmeMPI(object):
         self.n_local = ()
         self.displacements = []
 
-    def scatter_series(self):
+    def scatter_series(self, randomize=False):
         """Scatter a series of jobnrs over processes."""
 
         series = np.array(range(0, self.nblocks), dtype=int)
+        if randomize:
+            random.shuffle(series)
 
         if not self.enabled:
             self.series = series
