@@ -1265,7 +1265,9 @@ class LabelImage(Image):
         if not self.ulabels.any():
             self.set_ulabels()
         self.maxlabel = int(np.amax(self.ulabels))
-        print("{} labels in volume {}".format(self.maxlabel, self.path))
+        print("{} labels (max: {}) in volume {}".format(len(self.ulabels) - 1,
+                                                        self.maxlabel,
+                                                        self.path))
 
     def get_fwmap(self, empty=False):
 
