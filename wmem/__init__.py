@@ -1271,9 +1271,11 @@ class LabelImage(Image):
 
     def get_fwmap(self, empty=False):
 
-        fw = np.zeros(self.maxlabel + 1, dtype='i')
-        if not empty:
-            fw = np.array([l if l in self.ulabels else 0 for l in fw])
+        if empty:
+            fw = np.zeros(self.maxlabel + 1, dtype='i')
+        else:
+            fw = [l if l in self.ulabels else 0
+                  for l in range(0, self.maxlabel + 1)]
 
         return fw
 
