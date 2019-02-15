@@ -11,7 +11,7 @@ import os
 import numpy as np
 from skimage.measure import label, regionprops
 
-from wmem import parse, utils
+from wmem import parse, utils, LabelImage
 
 
 def main(argv):
@@ -48,7 +48,7 @@ def main(argv):
 
 
 def remap_labels(
-        inputfile,
+        image_in,
         delete_labels=[],
         delete_files=[],
         except_files=[],
@@ -63,72 +63,64 @@ def remap_labels(
         conncomp=False,
         nifti_output=False,
         nifti_transpose=False,
-        h5path_out='',
+        outputpath='',
         save_steps=False,
         protective=False,
         ):
     """Delete/split/merge/... labels in a labelvolume."""
 
-    # check output paths
-    outpaths = {'out': h5path_out, 'deleted': '', 'split': '', 'merged': ''}
-    status = utils.output_check(outpaths, save_steps, protective)
-    if status == "CANCELLED":
-        return
+    im = utils.get_image(image_in, imtype='Label')
 
-    # open data for reading
-    h5file_in, ds_in, elsize, axlab = utils.load(inputfile)
+    mo = LabelImage(outputpath, **im.get_props())
+    mo.create()
 
-    # open data for writing
-    h5file_out, ds_out = utils.h5_write(None, ds_in.shape, ds_in.dtype,
-                                        h5path_out,
-                                        element_size_um=elsize,
-                                        axislabels=axlab)
-    ds_out[:] = ds_in[:]
+#     comps = mo.split_path()
+#     root = comps['base']
 
     # filter labels on size
-    root = os.path.splitext(h5file_out.filename)[0]
-    ls_small = utils.filter_on_size(ds_out[:], min_labelsize, False,
-                                    save_steps, root, ds_out.name[1:],
-                                    outpaths, elsize, axlab)[1]
-    delete_labels = set(delete_labels) | ls_small
+#     ls_small = utils.filter_on_size(ds_out[:], min_labelsize, False,
+#                                     save_steps, root, ds_out.name[1:],
+#                                     outpaths, elsize, axlab)[1]
+#     delete_labels = set(delete_labels) | ls_small
+    # TODO: to LabelImage method
 
     # delete labels
-    delete_labelsets(ds_out, delete_labels, delete_files, except_files)
-    if save_steps:  # FIXME!
-        save_diff(ds_in[:], ds_out[:], 'deleted', outpaths, elsize, axlab)
+    delete_labelsets(im, mo, delete_labels, delete_files, except_files)
+#     print('writing')
+#     mo.write()
+#     if save_steps:  # FIXME!
+#         save_diff(ds_in[:], ds_out[:], 'deleted', outpaths, elsize, axlab)
 
-    # split labels
-    split_labelsets(ds_out, split_labels, split_files, aux_labelvolume, conncomp)
-    if save_steps:
-        save_diff(ds_in[:], ds_out[:], 'split', outpaths, elsize, axlab)
+#     # split labels
+#     split_labelsets(ds_out, split_labels, split_files, aux_labelvolume, conncomp)
+#     if save_steps:
+#         save_diff(ds_in[:], ds_out[:], 'split', outpaths, elsize, axlab)
 
-    # merge labels
-    merge_labelsets(ds_out, merge_labels, merge_files)
-    if save_steps:
-        save_diff(ds_in[:], ds_out[:], 'merged', outpaths, elsize, axlab)
+#     # merge labels
+#     merge_labelsets(ds_out, merge_labels, merge_files)
+#     if save_steps:
+#         save_diff(ds_in[:], ds_out[:], 'merged', outpaths, elsize, axlab)
 
-    # remove small, non-contiguous segments of labels
-    if min_segmentsize or keep_only_largest:
-        filter_segments(ds_out[:], min_segmentsize, keep_only_largest)
+#     # remove small, non-contiguous segments of labels
+#     if min_segmentsize or keep_only_largest:
+#         filter_segments(ds_out[:], min_segmentsize, keep_only_largest)
 
-    if nifti_output:
-        if nifti_transpose:
-            ds_out[:] = np.transpose(ds_out[:])
-            elsize = elsize[::-1]
-            axlab = axlab[::-1]
-        fpath = '{}_{}.nii.gz'.format(root, ds_out.name[1:])
-        utils.write_to_nifti(fpath, ds_out[:], elsize)
+#     if nifti_output:
+#         if nifti_transpose:
+#             ds_out[:] = np.transpose(ds_out[:])
+#             elsize = elsize[::-1]
+#             axlab = axlab[::-1]
+#         fpath = '{}_{}.nii.gz'.format(root, ds_out.name[1:])
+#         utils.write_to_nifti(fpath, ds_out[:], elsize)
 
-    # close and return
-    h5file_in.close()
-    try:
-        h5file_out.close()
-    except (ValueError, AttributeError):
-        return ds_out
+    im.close()
+    mo.close()
+
+    return mo
 
 
-def delete_labelsets(labels, delete_labels=[], delete_files=[],
-                     except_files=[]):
+def delete_labelsets(labels_in, labels_out,
+                     delete_labels=[], delete_files=[], except_files=[]):
     """Delete labels from a labelvolume."""
 
     # add labels in delete_files to delete_labels list
@@ -136,21 +128,30 @@ def delete_labelsets(labels, delete_labels=[], delete_files=[],
         delsets = utils.read_labelsets(delfile)
         dellist = [d for _, dv in delsets.items() for d in list(dv)]
         delete_labels = set(dellist) | set(delete_labels)
+
     if delete_labels:
+
         # remove labels that are in except files
         for excfile in except_files:
             excsets = utils.read_labelsets(excfile)
             exclist = [d for _, dv in excsets.items() for d in list(dv)]
             delete_labels = delete_labels - set(exclist)
-        # delete the labels
-        print('deleting ', delete_labels)
-        ulabels = np.unique(labels)
-        fw = [l if ((l in ulabels) and
-                    (l not in delete_labels)) else 0
-              for l in range(0, np.amax(ulabels) + 1)]
-        labels[:] = np.array(fw)[labels[:]]
 
-        return labels, fw
+        # delete the labels
+        fw = np.zeros(labels_in.maxlabel + 1, dtype='bool')
+        for dl in delete_labels:
+            fw[dl] = True
+        labels = labels_in.ds[:]
+        mask = np.array(fw)[labels]
+        labels[mask] = 0
+        labels_out.write(labels)
+
+#         print('deleting ', delete_labels)
+#         labels = labels_in.forward_map(labelsets={0: delete_labels},
+#                                        delete_labelsets=True)
+#         labels_out.write(labels)
+
+#         labels_out.set_maxlabel()
 
 
 def split_labelsets(labels, split_labels=[], split_files=[],
