@@ -452,7 +452,7 @@ class Image(object):
 
         return squeezed
 
-    def slice_dataset(self):
+    def slice_dataset(self, squeeze=True):
 
         ndim = self.get_ndim()
         slices = self.slices
@@ -480,7 +480,10 @@ class Image(object):
 
 #         self.ds = np.squeeze(data)  # FIXME?
 
-        return np.squeeze(data)
+        if squeeze:
+            data = np.squeeze(data)
+
+        return data
 
     def load_dataset(self):
 
