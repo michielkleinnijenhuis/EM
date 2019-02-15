@@ -621,6 +621,11 @@ def parse_merge_labels(parser):
         help="""path to hdf5 dataset <filepath>.h5/<...>/<dataset>:
                 """
         )
+    parser.add_argument(
+        '--maskDS',
+        help="""path to hdf5 dataset <filepath>.h5/<...>/<dataset>:
+                """
+        )
 
     return parser
 
