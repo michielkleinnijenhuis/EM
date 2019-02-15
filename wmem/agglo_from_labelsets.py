@@ -25,7 +25,7 @@ def main(argv):
     args = parser.parse_args()
 
     agglo_from_labelsets(
-        args.inpufile,
+        args.inputfile,
         args.labelset_files,
         args.fwmap,
         args.outputfile,
