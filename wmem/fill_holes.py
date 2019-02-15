@@ -8,13 +8,17 @@ import sys
 import argparse
 
 import numpy as np
-from scipy.ndimage.morphology import (binary_closing,
+from scipy.ndimage.morphology import (binary_dilation,
+                                      binary_erosion,
+                                      binary_closing,
                                       binary_fill_holes,
                                       grey_dilation)
 from skimage.measure import label, regionprops
 from skimage.morphology import watershed
 
-from wmem import parse, utils
+from wmem import parse, utils, wmeMPI, Image, MaskImage, LabelImage
+from wmem.merge_slicelabels import generate_anisotropic_selem
+from wmem.merge_labels import get_region_slices_around
 
 
 def main(argv):
@@ -41,89 +45,87 @@ def main(argv):
         args.outputMA,
         args.outputMM,
         args.protective,
+        args.usempi & ('mpi4py' in sys.modules),
         )
 
 
 def fill_holes(
-        h5path_in,
+        image_in,
         methods,
         selem,
         h5path_mask='',
         h5path_md='',
         h5path_mm='',
         h5path_mx='',
-        h5path_out='',
+        outputpath='',
         h5path_out_holes='',
         h5path_out_ma='',
         h5path_out_mm='',
         protective=False,
+        usempi=False,
         ):
     """Fill holes in labels."""
 
-    # check output path  # TODO check other output volumes (holes, ma, mm)
-    for outpath in [h5path_out,
-                    h5path_out_holes, h5path_out_ma, h5path_out_mm]:
-        if '.h5' in outpath:
-            status, info = utils.h5_check(outpath, protective)
-            print(info)
-            if status == "CANCELLED":
-                return
+    mpi = wmeMPI(usempi)
 
-    # open data for reading
-    h5file_in, ds_in, elsize, axlab = utils.h5_load(h5path_in)
-
+    # Open the inputfile for reading.
+    im = utils.get_image(image_in, comm=mpi.comm)
     if h5path_mask:
-        h5file_ml, ds_ml, _, _ = utils.h5_load(h5path_mask)
-        ds_in[~ds_ml[:].astype('bool')] = 0
-        h5file_ml.close()
+        mask = utils.get_image(h5path_mask, comm=mpi.comm)
+        # TODO: mask im
+#         ds_in[~ds_ml[:].astype('bool')] = 0
+        mask.close()
 
-    # open data for writing
-    h5file_out, ds_out = utils.h5_write(None, ds_in.shape, ds_in.dtype,
-                                        h5path_out,
-                                        element_size_um=elsize,
-                                        axislabels=axlab)
+    # Determine the properties of the output dataset.
+    props = im.get_props(protective=protective, squeeze=True)
+    mo = LabelImage(outputpath, **props)
+    mo.create(comm=mpi.comm)
 
     # fill holes
-    ds_out[:] = ds_in[:]  # TODO: simply make copy h5file_in and open it?
+    if mpi.rank == 0:
+        mo.write(im.ds)
+
     for m in methods:
-        if m == '1':
-            ds_out = fill_holes_m1(ds_out, selem)
-        if m == '2':
-            ds_out = fill_holes_m2(ds_out, selem)
-        if m == '3':
-            ds_out = fill_holes_m3(ds_out, selem)
-        if m == '4':
-            ds_out = fill_holes_m4(ds_out, h5path_md, h5path_mm, h5path_mx)
+        if m == '5':
+            fill_holes_m5(mo, selem, mpi)
+        else:
+            if m == '1':
+                mo.ds[:] = fill_holes_m1(mo.ds[:], selem)
+            if m == '2':
+                mo.ds[:] = fill_holes_m2(mo.ds[:], selem)
+            if m == '3':
+                mo.ds[:] = fill_holes_m3(mo.ds[:], selem)
+            if m == '4':
+                mo.ds[:] = fill_holes_m4(mo.ds[:], h5path_md, h5path_mm, h5path_mx)
+            mo.write()
 
-    # additional output: holes filled and updated masks
-    if h5path_out_holes:
-        h5file_ho, ds_ho, _, _ = utils.h5_write(None,
-                                                ds_out.shape, ds_out.dtype,
-                                                h5path_out_holes,
-                                                element_size_um=elsize,
-                                                axislabels=axlab)
-        ds_ho[:] = ds_out[:]
-        ds_ho[ds_in > 0] = 0
-        h5file_ho.close()
-    if h5path_out_ma:
-        ds_ma = utils.h5_write(ds_out.astype('bool'), ds_out.shape, 'uint8',
-                               h5path_out_ma,
-                               element_size_um=elsize,
-                               axislabels=axlab)[1]
-    if h5path_out_mm:
-        ds_mm = utils.h5_load(h5path_mm, load_data=True)
-        ds_mm[ds_ho > 0] = 0
-        ds_mm = utils.h5_write(ds_mm.astype('bool'), ds_mm.shape, 'uint8',
-                               h5path_out_mm,
-                               element_size_um=elsize,
-                               axislabels=axlab)
+#     # additional output: holes filled and updated masks
+#     if h5path_out_holes:
+#         h5file_ho, ds_ho, _, _ = utils.h5_write(None,
+#                                                 ds_out.shape, ds_out.dtype,
+#                                                 h5path_out_holes,
+#                                                 element_size_um=elsize,
+#                                                 axislabels=axlab)
+#         ds_ho[:] = ds_out[:]
+#         ds_ho[ds_in > 0] = 0
+#         h5file_ho.close()
+#     if h5path_out_ma:
+#         ds_ma = utils.h5_write(ds_out.astype('bool'), ds_out.shape, 'uint8',
+#                                h5path_out_ma,
+#                                element_size_um=elsize,
+#                                axislabels=axlab)[1]
+#     if h5path_out_mm:
+#         ds_mm = utils.h5_load(h5path_mm, load_data=True)
+#         ds_mm[ds_ho > 0] = 0
+#         ds_mm = utils.h5_write(ds_mm.astype('bool'), ds_mm.shape, 'uint8',
+#                                h5path_out_mm,
+#                                element_size_um=elsize,
+#                                axislabels=axlab)
 
-    # close and return
-    try:
-        h5file_in.close()
-        h5file_out.close()
-    except (ValueError, AttributeError):
-        return ds_out, ds_ho, ds_ma, ds_mm
+    im.close()
+    mo.close()
+
+    return mo
 
 
 # ========================================================================== #
@@ -173,6 +175,45 @@ def fill_holes_m2(labels, selem=[3, 3, 3]):
         imregion[mask] = prop.label
 
     return labels
+
+
+def fill_holes_m5(labels, selem=[1, 7, 7], mpi=None):
+    """Fill holes in labels."""
+
+    struct = generate_anisotropic_selem(selem)
+    rp = regionprops(labels.ds)
+
+    # Prepare for processing with MPI.
+    mpi.nblocks = len(rp)
+    mpi.scatter_series()  # randomize=True
+
+#     for prop in rp:
+    for i in mpi.series:
+        prop = rp[i]
+
+        labels.slices = get_region_slices_around(labels, prop, selem)[0]
+        print(prop.label, labels.slices)
+        imregion = labels.slice_dataset()
+        mask = imregion == prop.label
+#         print(np.sum(mask))
+#         z, y, x, Z, Y, X = tuple(prop.bbox)
+#         mask = prop.image
+
+        # TODO: implement border reflection
+#         for _ in range(selem[0]):
+#             print('dil')
+#             mask = binary_dilation(mask, structure=struct, border_value=1)
+#             print('ero')
+#             mask = binary_erosion(mask, structure=struct, border_value=0)
+        mask = binary_closing(mask, structure=struct, iterations=selem[0])
+        mask = binary_fill_holes(mask)
+
+#         imregion = labels[z:Z, y:Y, x:X]
+        imregion[mask] = prop.label
+
+        labels.write(imregion)
+
+#     return labels
 
 
 def fill_holes_m3(labels, selem=[3, 3, 3]):
