@@ -793,7 +793,8 @@ def classify_label_set(labelsets, labelset, lskey=None):
     """Add labels to a labelset or create a new set."""
 
     found = False
-    for lsk, lsv in labelsets.items():
+    for lsk in sorted(labelsets.iterkeys()):
+        lsv = labelsets[lsk]
         for l in labelset:
             if l in lsv:
                 labelsets[lsk] = lsv | labelset
