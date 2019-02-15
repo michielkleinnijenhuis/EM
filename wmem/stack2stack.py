@@ -92,7 +92,18 @@ def stack2stack(
         data = utils.normalize_data(data)[0]
         data = img_as_ubyte(data)
 
-    mo.write(data=data)
+    if mo.format == '.nii':
+        # TODO: properly implement translation of cutouts
+        mat = mo.get_transmat()
+        if im.slices is not None:
+            trans = [es * slc.start for es, slc in zip(im.elsize, im.slices)]
+            trans = np.array(trans)[in2out]
+            mat[0][3] = trans[0]
+            mat[1][3] = trans[1]
+            mat[2][3] = trans[2]
+        mo.nii_write_mat(data, mo.slices, mat)
+    else:
+        mo.write(data=data)
 
     im.close()
     mo.close()

@@ -896,6 +896,18 @@ class Image(object):
         self.write_block(self.ds, data, slices)
         nib.Nifti1Image(self.ds, self.get_transmat()).to_filename(self.path)
 
+    def nii_write_mat(self, data, slices, mat):
+        """Write data to a nifti dataset."""
+
+        if data.dtype == 'bool':
+            data = data.astype('uint8')
+
+#         self.ds = self.file.get_fdata()  # loads as floats
+#         self.ds = np.asanyarray(self.file.dataobj).astype(self.dtype)  # unsafe cast
+        self.ds = np.asanyarray(self.file.dataobj)
+        self.write_block(self.ds, data, slices)
+        nib.Nifti1Image(self.ds, mat).to_filename(self.path)
+
     def tif_write(self, data, slices):
         """Write data to a 3Dtif dataset."""
 
