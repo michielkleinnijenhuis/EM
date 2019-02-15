@@ -10,8 +10,8 @@ export PYTHONPATH=$PYTHONPATH:/Users/michielk/workspace/maskSLIC  # FIXME
 
 #compute_env='JAL'
 #compute_env='ARC'
-#compute_env='LOCAL'
-compute_env='ARCB'
+compute_env='LOCAL'
+#compute_env='ARCB'
 prep_environment $scriptdir $compute_env
 
 # dataset='M3S1GNU'
@@ -320,7 +320,9 @@ scriptfile=$( conncomp 'h' '2Dto3D' $dataset_ds $ipf $ids $opf $ods $meanint )
 [[ -z $jid ]] && dep='' || dep="-j $jid"
 jid=$( fsl_sub -q veryshort.q $dep $scriptfile )
 
-# TODO: might want to keep all this in opf='_labels_labelMA_core2D'
+# TODO: might want to keep all this in opf='_labels_labelMA_core2D'; not in '_labels_labelMA'
+
+
 
 
 ###=========================================================================###
@@ -328,226 +330,851 @@ jid=$( fsl_sub -q veryshort.q $dep $scriptfile )
 ###=========================================================================###
 
 ### easy 3D labeling
+ipf='_masks_maskMM' ids='maskMM'
+opf='_labels_labelMA_core3D' ods='labelMA_core3D'
 python $scriptdir/wmem/connected_components.py \
-$datadir/${dataset_ds}_masks_maskMM.h5/maskMM \
-$datadir/${dataset_ds}_labels_labelMA_core3D.h5/labelMA_core3D \
+$datadir/${dataset_ds}${ipf}.h5/${ids} \
+$datadir/${dataset_ds}${opf}.h5/${ods} \
 -m '3D' -q 5000 -a 500
-h52nii '' $dataset_ds '_labels_labelMA_core3D' 'labelMA_core3D' '' '' '-i zyx -o xyz -d uint16'
+h52nii '' "${dataset_ds}" "${opf}" "${ods}" '' '' '-i zyx -o xyz -d uint16'
 
-# split in the labels that do and don't traverse the volume
+### split in the labels that do (tv) and don't traverse the volume (nt)
+ipf='_labels_labelMA_core3D' ids='labelMA_core3D'
+opf='_labels_labelMA_core3D' ods='labelMA_core3D_NoR'
 python -W ignore $scriptdir/wmem/nodes_of_ranvier.py -S \
-$datadir/${dataset_ds}_labels_labelMA_core3D.h5/labelMA_core3D \
-$datadir/${dataset_ds}_labels_labelMA_core3D.h5/labelMA_core3D_NoR \
+$datadir/${dataset_ds}${ipf}.h5/${ids} \
+$datadir/${dataset_ds}${opf}.h5/${ods} \
 --boundarymask $datadir/${dataset_ds}_masks_maskDS.h5/maskDS
-h52nii '' $dataset_ds '_labels_labelMA_core3D' "labelMA_core3D_NoR_steps/labels_tv" '' '' '-i zyx -o xyz -d uint16'
-h52nii '' $dataset_ds '_labels_labelMA_core3D' "labelMA_core3D_NoR_steps/labels_nt" '' '' '-i zyx -o xyz -d uint16'
 #number of labels in labelvolume: 1604
 #number of short labels: 0
 #number of large, long labels: 1604
 #number of large, long in-volume labels: 273
 #number of large, long through-volume labels: 1331
+h52nii '' "${dataset_ds}" "${opf}" "${ods}_steps/labels_tv" '' '' '-i zyx -o xyz -d uint16'
+h52nii '' "${dataset_ds}" "${opf}" "${ods}_steps/labels_nt" '' '' '-i zyx -o xyz -d uint16'
 
-### NOTE: PROOFREADING done through labels_nt  ###
+### delete labels from labelMA_core3D through manual proofreading
+# NOTE: PROOFREADING done through labels_nt
+ipf='_labels_labelMA_core3D' ids='labelMA_core3D'
+opf='_labels_labelMA_core3D' ods='labelMA_core3D_proofread'
 python $scriptdir/wmem/remap_labels.py \
-$datadir/${dataset_ds}_labels_labelMA_core3D.h5/labelMA_core3D \
-$datadir/${dataset_ds}_labels_labelMA_core3D.h5/labelMA_core3D_proofread \
--d $datadir/${dataset_ds}_labels_labelMA_core3D_delete.txt
-h52nii '' $dataset_ds '_labels_labelMA_core3D' 'labelMA_core3D_proofread' '' '' '-i zyx -o xyz -d uint16'
+$datadir/${dataset_ds}${ipf}.h5/${ids} \
+$datadir/${dataset_ds}${opf}.h5/${ods} \
+-d $datadir/${dataset_ds}${ipf}_${ids}_delete.txt
+h52nii '' "${dataset_ds}" "${opf}" "${ods}" '' '' '-i zyx -o xyz -d uint16'
+
+### split the proofread volume in labels through-volume (tv) / in-volume (nt)
+ipf='_labels_labelMA_core3D' ids='labelMA_core3D_proofread'
+opf='_labels_labelMA_core3D' ods='labelMA_core3D_proofread_NoR'
 python -W ignore $scriptdir/wmem/nodes_of_ranvier.py \
-$datadir/${dataset_ds}_labels_labelMA_core3D.h5/labelMA_core3D_proofread \
-$datadir/${dataset_ds}_labels_labelMA_core3D.h5/labelMA_core3D_proofread_NoR \
+$datadir/${dataset_ds}${ipf}.h5/${ids} \
+$datadir/${dataset_ds}${opf}.h5/${ods} \
 --boundarymask $datadir/${dataset_ds}_masks_maskDS.h5/maskDS
-#number of labels in labelvolume: 1561
+#number of labels in labelvolume: 1560
 #number of short labels: 0
-#number of large, long labels: 1561
-#number of large, long in-volume labels: 230
+#number of large, long labels: 1560
+#number of large, long in-volume labels: 229
 #number of large, long through-volume labels: 1331
+### NOTE: labels_tv and labels_nt not yet correct:
+# labels_nt has many that are actually traversing
+# TODO: improve nodes_of_ranvier.py module such that this proofreading is unnecessary
+# for now, a proofreading step is done:
+###
+def correct_NoR():
+    import os
+    from wmem import utils, LabelImage
+    import numpy as np
+    datadir = '/Users/michielk/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00'
+    # pop manual tv-labels from auto-nt; add to auto-tv; write to tv/nt;
+    lsfile = 'B-NT-S10-2f_ROI_00ds7_labels_labelMA_core3D_labelMA_core3D_proofread_NoR_{}'
+    lspath = os.path.join(datadir, lsfile)
+    nt = utils.read_labelsets(lspath.format('nt_auto') + '.txt')
+    tv = utils.read_labelsets(lspath.format('tv_auto') + '.txt')
+    tv_man = utils.read_labelsets(lspath.format('tv_manual') + '.txt')
+    for l in tv_man[0]:
+        nt.pop(l)
+        tv[l] = set([l])
+    utils.write_labelsets(nt, lspath.format('nt'), filetypes=['txt'])
+    utils.write_labelsets(tv, lspath.format('tv'), filetypes=['txt'])
+    # read the labelvolume
+    h5_fname = 'B-NT-S10-2f_ROI_00ds7_labels_labelMA_core3D.h5'
+    h5_dset = 'labelMA_core3D_proofread'
+    h5_path = os.path.join(datadir, h5_fname, h5_dset)
+    labels = LabelImage(h5_path)
+    labels.load()
+    # map and write the nt and tv volumes
+    h5_fname = 'B-NT-S10-2f_ROI_00ds7_labels_labelMA_core3D.h5'
+    h5_dset = 'labelMA_core3D_proofread_NoR_steps/labels_nt'
+    h5_path = os.path.join(datadir, h5_fname, h5_dset)
+    mo1 = LabelImage(h5_path, **labels.get_props())
+    mo1.create()
+    mo1.write(labels.forward_map(labelsets=nt, from_empty=True))
+    mo1.close()
+    h5_fname = 'B-NT-S10-2f_ROI_00ds7_labels_labelMA_core3D.h5'
+    h5_dset = 'labelMA_core3D_proofread_NoR_steps/labels_tv'
+    h5_path = os.path.join(datadir, h5_fname, h5_dset)
+    mo2 = LabelImage(h5_path, **labels.get_props())
+    mo2.create()
+    mo2.write(labels.forward_map(labelsets=tv, from_empty=True))
+    mo2.close()
+    labels.close()
 
-# labels_tv and labels_nt not yet correct: labels_nt has many that are actually traversing
-# after proofreading do:
-import os
-from wmem import utils, LabelImage
-import numpy as np
-datadir = '/Users/michielk/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00'
-
-lsfile = 'B-NT-S10-2f_ROI_00ds7_labels_labelMA_core3D_labelMA_core3D_proofread_NoR_{}'
-lspath = os.path.join(datadir, lsfile)
-nt = utils.read_labelsets(lspath.format('nt_auto') + '.txt')
-tv = utils.read_labelsets(lspath.format('tv_auto') + '.txt')
-tv_man = utils.read_labelsets(lspath.format('tv_manual') + '.txt')
-
-for l in tv_man[0]:
-    nt.pop(l)
-    tv[l] = set([l])
-
-utils.write_labelsets(nt, lspath.format('nt'), filetypes=['txt'])
-utils.write_labelsets(tv, lspath.format('tv'), filetypes=['txt'])
-
-h5_fname = 'B-NT-S10-2f_ROI_00ds7_labels_labelMA_core3D.h5'
-h5_dset = 'labelMA_core3D_proofread'
-h5_path = os.path.join(datadir, h5_fname, h5_dset)
-labels = LabelImage(h5_path)
-labels.load()
-ulabels = np.unique(labels.ds)
-maxlabel = np.amax(ulabels)
-fw = np.zeros(maxlabel + 1, dtype='i')
-
-h5_fname = 'B-NT-S10-2f_ROI_00ds7_labels_labelMA_core3D.h5'
-h5_dset = 'labelMA_core3D_proofread_NoR_steps/labels_nt'
-h5_path = os.path.join(datadir, h5_fname, h5_dset)
-mo1 = LabelImage(h5_path, shape=labels.dims, elsize=labels.elsize, axlab=labels.axlab, dtype=labels.dtype, protective=False)
-mo1.create()
-mo1.ds[:] = utils.forward_map(np.array(fw), labels.ds[:], nt)
-mo1.close()
-
-h5_fname = 'B-NT-S10-2f_ROI_00ds7_labels_labelMA_core3D.h5'
-h5_dset = 'labelMA_core3D_proofread_NoR_steps/labels_tv'
-h5_path = os.path.join(datadir, h5_fname, h5_dset)
-mo2 = LabelImage(h5_path, shape=labels.dims, elsize=labels.elsize, axlab=labels.axlab, dtype=labels.dtype, protective=False)
-mo2.create()
-mo2.ds[:] = utils.forward_map(np.array(fw), labels.ds[:], tv)
-mo2.close()
-
-labels.close()
+h52nii '' "${dataset_ds}" "${opf}" "${ods}_steps/labels_tv" '' '' '-i zyx -o xyz -d uint16'
+h52nii '' "${dataset_ds}" "${opf}" "${ods}_steps/labels_nt" '' '' '-i zyx -o xyz -d uint16'
 
 
-h52nii '' $dataset_ds '_labels_labelMA_core3D' "labelMA_core3D_proofread_NoR_steps/labels_tv" '' '' '-i zyx -o xyz -d uint16'
-h52nii '' $dataset_ds '_labels_labelMA_core3D' "labelMA_core3D_proofread_NoR_steps/labels_nt" '' '' '-i zyx -o xyz -d uint16'
+
+
+###=========================================================================###
+### TODO: figure out if and/or where to insert _probs_probMA 3Dlabels
+###=========================================================================###
+
+### threshold probability image
+
+# TODO: determine best threshold
+# thr=0.5
+# ipf='_probs_eed_probMA' ids='probMA_eed'
+# opf='_masks_maskMA' ods="probMA_eed_thr${thr}"
+# python -W ignore $scriptdir/wmem/prob2mask.py \
+# "$datadir/${dataset_ds}${ipf}.h5/${ids}" \
+# "$datadir/${dataset_ds}${opf}.h5/${ods}" \
+# -l $thr -u 2
+# h52nii '' "$dataset_ds" "${opf}" "${ods}" '' '' '-i zyx -o xyz -d uint8'
+# ### label the mask  # FIXME: this would expect a myelin mask not an MA mask
+# ipf='_masks_maskMA' ids="probMA_eed_thr${thr}"
+# opf='_labels_labelMA_core3D' ods="probMA_eed_thr${thr}_labeled"
+# python $scriptdir/wmem/connected_components.py \
+# $datadir/${dataset_ds}${ipf}.h5/${ids} \
+# $datadir/${dataset_ds}${opf}.h5/${ods} \
+# -m '3D' -q 5000 -a 500
+# h52nii '' "${dataset_ds}" "${opf}" "${ods}" '' '' '-i zyx -o xyz -d uint16'
+
+def label_probMA_eed():
+    import os
+    import numpy as np
+    #from scipy.ndimage import label
+    from skimage.measure import label
+    from skimage.segmentation import relabel_sequential
+    from wmem import utils, LabelImage, prob2mask
+    relabel_from = 1604
+    datadir = '/Users/michielk/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00'
+    dataset = 'B-NT-S10-2f_ROI_00ds7'
+    ipf, ids ='_probs_eed_probMA', 'probMA_eed'
+    opf, ods = '_labels_labelMA_core3D', 'probMA_eed_thr0.5_labeled'
+    image_in = os.path.join(datadir, '{}{}.h5/{}'.format(dataset, ipf, ids))
+    im = prob2mask.prob2mask(image_in, lower_threshold=0.5, upper_threshold=2)
+    outputpath = os.path.join(datadir, '{}{}.h5/{}'.format(dataset, opf, ods))
+    mo = LabelImage(outputpath, **im.get_props(dtype='uint32'))
+    mo.create()
+    # mo.write(label(im.ds)[0])  # scipy
+    mo.write(relabel_sequential(label(im.ds), relabel_from)[0])  # scikit image
+    im.close()
+    mo.close()
+
+opf='_labels_labelMA_core3D' ods="probMA_eed_thr0.5_labeled"
+h52nii '' "$dataset_ds" "${opf}" "${ods}" '' '' '-i zyx -o xyz -d uint16'
+
+
+
 
 ###=========================================================================###
 ### 2D labeling postprocessing
 ###=========================================================================###
 
-# TODO: how did I get to labelMA_pred_nocore3D (were 2D labels relabeled from maxlabel_3D+1?) 
-# scratchEM8.py: PROBABLY NOT!
+# FIXME 1?: how did I get to labelMA_pred_nocore3D (were 2D labels relabeled from maxlabel_3D+1?); see scratchEM8.py: PROBABLY NOT!
+# FIXME 2: probably not used the proofread version of '_labels_labelMA_core3D.h5/labelMA_core3D'; see scratchEM8.py
 
-### proofreading 2D labels 
+### mask the predicted 2D labels with finished 3D labels
+# FIX 2 DONE
+def delete_core3D_from_pred2D():
+    import os
+    from wmem import utils, LabelImage
+    import numpy as np
+    from skimage.segmentation import relabel_sequential
+    datadir = '/Users/michielk/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00'
+    # load the 3D labels
+    h5_fname = 'B-NT-S10-2f_ROI_00ds7_labels_labelMA_core3D.h5'
+    h5_dset = 'labelMA_core3D_proofread'
+    h5_path = os.path.join(datadir, h5_fname, h5_dset)
+    core3D = LabelImage(h5_path)
+    core3D.load()  #1
+    # load the 2D labels
+    h5_fname = 'B-NT-S10-2f_ROI_00ds7_labels_labelMA.h5'
+    h5_dset = 'labelMA_pred'
+    h5_path = os.path.join(datadir, h5_fname, h5_dset)
+    pred2D = LabelImage(h5_path)
+    pred2D.load()  #2
+    # prepare the output file
+    h5_fname = 'B-NT-S10-2f_ROI_00ds7_labels_labelMA_core2D.h5'
+    h5_dset = 'labelMA_pred_nocore3D'
+    h5_path = os.path.join(datadir, h5_fname, h5_dset)
+    mo = LabelImage(h5_path, **pred2D.get_props())
+    mo.create()
+    # set the 2D labels within the mask of 3D labels to 0
+    labels_3D = core3D.ds[:]
+    labels_2D = pred2D.ds[:]
+    mask_3D = core3D.ds[:].astype('bool')
+    labels_2D[mask_3D] = 0
+    mo.write(labels_2D)
+    # close files
+    mo.close()
+    core3D.close()
+    pred2D.close()
+
+opf='_labels_labelMA_core2D' ods='labelMA_pred_nocore3D'
+h52nii '' "${dataset_ds}" "${opf}" "${ods}" '' '' '-i zyx -o xyz -d uint16'
+
+# fslmaths B-NT-S10-2f_ROI_00ds7_labels_labelMA_core2D_labelMA_pred_nocore3D_nii_delete.nii.gz -add B-NT-S10-2f_ROI_00ds7_labels_labelMA_core2D_labelMA_pred_nocore3D_delete_OLDNAME.nii.gz -bin B-NT-S10-2f_ROI_00ds7_labels_labelMA_core2D_labelMA_pred_nocore3D_nii_delete_new.nii.gz
+
+def delete_nii():
+    import os
+    from wmem import utils, MaskImage, LabelImage
+    import numpy as np
+    datadir = '/Users/michielk/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00'
+    h5_fname = 'B-NT-S10-2f_ROI_00ds7_labels_labelMA_core2D.h5'
+    h5_dset = 'labelMA_pred_nocore3D'
+    h5_path = os.path.join(datadir, h5_fname, h5_dset)
+    pred2D = LabelImage(h5_path)
+    pred2D.load()
+    nii_fname = 'B-NT-S10-2f_ROI_00ds7_labels_labelMA_core2D'
+    nii_dset = 'labelMA_pred_nocore3D_nii_delete'
+    nii_path = os.path.join(datadir, '{}_{}.nii.gz'.format(nii_fname, nii_dset))
+    mask = MaskImage(nii_path)
+    mask.load()
+    m = np.transpose(mask.ds[:].astype('bool'))
+    labs = pred2D.ds[:]
+    labs_masked = labs[m]
+    labels = np.unique(labs_masked)
+    labelsets = {0: set(list(labels))}
+    comps = pred2D.split_path()
+    lsroot = '{}_{}_nii_delete'.format(comps['base'], comps['dset'])
+    utils.write_labelsets(labelsets, lsroot, ['pickle', 'txt'])
+    pred2D.close()
+    mask.close()
+
+### proofread the 2D labels
+ipf='_labels_labelMA_core2D' ids='labelMA_pred_nocore3D'
+opf='_labels_labelMA_core2D' ods='labelMA_pred_nocore3D_proofread'
 python $scriptdir/wmem/remap_labels.py \
-$datadir/${dataset_ds}_labels_labelMA_core2D.h5/labelMA_pred_nocore3D \
-$datadir/${dataset_ds}_labels_labelMA_core2D.h5/labelMA_pred_nocore3D_proofread \
--d $datadir/${dataset_ds}_labels_labelMA_core2D_labelMA_pred_nocore3D_delete.txt
-h52nii '' $dataset_ds '_labels_labelMA_core2D' 'labelMA_pred_nocore3D_proofread' '' '' '-i zyx -o xyz -d uint16'
+$datadir/${dataset_ds}${ipf}.h5/${ids} \
+$datadir/${dataset_ds}${opf}.h5/${ods} \
+-d $datadir/${dataset_ds}${ipf}_${ids}_delete.txt $datadir/${dataset_ds}${ipf}_${ids}_nii_delete.txt
+h52nii '' "${dataset_ds}" "${opf}" "${ods}" '' '' '-i zyx -o xyz -d uint16'
 
-### aggregate 2D labels to 3D labels
-#python -W ignore /Users/michielk/workspace/EM/wmem/connected_components.py -S \
-#$datadir/${dataset_ds}_labels_labelMA_core2D.h5/labelMA_pred_nocore3D_proofread \
-#$datadir/${dataset_ds}_labels_labelMA_core2D.h5/labelMA_pred_nocore3D_proofread_3Dlabeled \
-#-m '2Dto3D' -d 0
-#h52nii '' $dataset_ds '_labels_labelMA_core2D' 'labelMA_pred_nocore3D_proofread_3Dlabeled' '' '' '-i zyx -o xyz -d uint16'
+# ### select the 2D labels overlapping with probMA_labeled and map them
+# NOTE: many useful 2D labels excluded; first aggregate (conservatively)
+# r=0.01
+# ipf='_labels_labelMA_core3D' ids="probMA_eed_thr0.5_labeled"
+# spf='_labels_labelMA_core2D' sds='labelMA_pred_nocore3D_proofread'
+# opf='_labels_labelMA_core2D_test' ods="${lds}_${ids}"
+# mpiexec -n 4 python $scriptdir/wmem/agglo_from_labelmask.py \
+# "${dataset_ds}${ipf}.h5/${ids}" \
+# "${dataset_ds}${spf}.h5/${sds}" \
+# "${dataset_ds}${opf}.h5/${ods}" \
+# -r $r -M
+# h52nii '' "${dataset_ds}" "${opf}" "${ods}" '' '' '-i zyx -o xyz -d uint16'
+
 
 ### aggregate 2D labels to 3D labels (merge_slicelabels alternative)
+# TODO: might go for conservative settings of q/o and proofread from there
+# (but with well-proofread 2D labels and q=2 we can relax the o=0.50)
 q=2; o=0.50
-mpiexec -n 6 python $scriptdir/wmem/merge_slicelabels.py -S \
-$datadir/${dataset_ds}_labels_labelMA_core2D.h5/labelMA_pred_nocore3D_proofread \
-$datadir/${dataset_ds}_labels_labelMA_core2D.h5/labelMA_pred_nocore3D_proofread_2Dmerge_q${q}-o${o} \
--M -m 'MAstitch' -d 0 \
--q $q -o $o -p
-python $scriptdir/wmem/merge_slicelabels.py -S \
-$datadir/${dataset_ds}_labels_labelMA_core2D.h5/labelMA_pred_nocore3D_proofread \
-$datadir/${dataset_ds}_labels_labelMA_core2D.h5/labelMA_pred_nocore3D_proofread_2Dmerge_q${q}-o${o} \
+ipf='_labels_labelMA_core2D' ids='labelMA_pred_nocore3D_proofread'
+opf='_labels_labelMA_core2D' ods="labelMA_pred_nocore3D_proofread_2Dmerge_q${q}-o${o}"
+mpiexec -n 6 python $scriptdir/wmem/merge_slicelabels.py \
+$datadir/${dataset_ds}${ipf}.h5/${ids} \
+$datadir/${dataset_ds}${opf}.h5/${ods} \
+-M -m 'MAstitch' -d 0 -q $q -o $o
+### map the aggregated 2D labels (FIXME: check if can I simply use the -p flag above (, but it can be zipped and chunked when not using MPI))
+ipf='_labels_labelMA_core2D' ids='labelMA_pred_nocore3D_proofread'
+opf='_labels_labelMA_core2D' ods="labelMA_pred_nocore3D_proofread_2Dmerge_q${q}-o${o}"
+python $scriptdir/wmem/merge_slicelabels.py \
+$datadir/${dataset_ds}${ipf}.h5/${ids} \
+$datadir/${dataset_ds}${opf}.h5/${ods} \
 -m 'MAfwmap'
-h52nii '' $dataset_ds '_labels_labelMA_core2D' "labelMA_pred_nocore3D_proofread_2Dmerge_q${q}-o${o}" '' '' '-i zyx -o xyz -d uint16'
-h52nii '' $dataset_ds '_labels_labelMA_core2D' "labelMA_pred_nocore3D_proofread_2Dmerge_q${q}-o${o}_steps/stitched" '' '' '-i zyx -o xyz -d uint16'
+h52nii '' "${dataset_ds}" "${opf}" "${ods}" '' '' '-i zyx -o xyz -d uint16'
+# h52nii '' "${dataset_ds}" "${opf}" "${ods}_steps/stitched" '' '' '-i zyx -o xyz -d uint16'
 
-
+### fill gaps in aggregated labels
+ipf='_labels_labelMA_core2D' ids="labelMA_pred_nocore3D_proofread_2Dmerge_q${q}-o${o}"
+opf='_labels_labelMA_core2D' ods="labelMA_pred_nocore3D_proofread_2Dmerge_q${q}-o${o}_closed"
 python $scriptdir/wmem/merge_slicelabels.py -S \
-$datadir/${dataset_ds}_labels_labelMA_core2D.h5/labelMA_pred_nocore3D_proofread_2Dmerge_q${q}-o${o} \
-$datadir/${dataset_ds}_labels_labelMA_core2D.h5/labelMA_pred_nocore3D_proofread_2Dmerge_q${q}-o${o}_relabeled \
--M -m 'MAfilter' -r 1604
-h52nii '' $dataset_ds '_labels_labelMA_core2D' "labelMA_pred_nocore3D_proofread_2Dmerge_q${q}-o${o}_relabeled" '' '' '-i zyx -o xyz -d uint16'
-
-
-###=========================================================================###
-### 2D+3D partial labels
-###=========================================================================###
-
-### merge with core3D_nt
-import os
-from wmem import utils, LabelImage
-import numpy as np
-datadir = '/Users/michielk/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00'
-h5_fname = 'B-NT-S10-2f_ROI_00ds7_labels_labelMA_core3D.h5'
-h5_dset = 'labelMA_core3D_proofread_NoR_steps/labels_nt'
-h5_path = os.path.join(datadir, h5_fname, h5_dset)
-core3D_nt = LabelImage(h5_path)
-core3D_nt.load()
-h5_fname = 'B-NT-S10-2f_ROI_00ds7_labels_labelMA_core2D.h5'
-h5_dset = 'labelMA_pred_nocore3D_proofread_2Dmerge_q2-o0.50_relabeled'
-h5_path = os.path.join(datadir, h5_fname, h5_dset)
-core2D_nt = LabelImage(h5_path)
-core2D_nt.load()
-h5_fname = 'B-NT-S10-2f_ROI_00ds7_labels_labelMA_comb.h5'
-h5_dset = 'labelMA_nt'
-h5_path = os.path.join(datadir, h5_fname, h5_dset)
-mo = LabelImage(h5_path,
-                shape=core3D_nt.dims,
-                elsize=core3D_nt.elsize,
-                axlab=core3D_nt.axlab,
-                chunks=core3D_nt.chunks,
-                dtype=core3D_nt.dtype,
-                protective=False)
-mo.create()
-mo.ds[:] = core3D_nt.ds[:] + core2D_nt.ds[:]
-mo.close()
-core3D_nt.close()
-core2D_nt.close()
-
-h52nii '' $dataset_ds '_labels_labelMA_comb' 'labelMA_nt' '' '' '-i zyx -o xyz -d uint16'
-
-### aggregate labels by overlap (threshold_overlap=0.80; offsets=3)
-mpiexec -n 6 python -W ignore $scriptdir/wmem/merge_labels.py -M \
-$datadir/${dataset_ds}_labels_labelMA_comb.h5/labelMA_nt \
-$datadir/${dataset_ds}_labels_labelMA_comb.h5/labelMA_nt_ns \
--m 'neighbours_slices' -q 3 -o 0.80
-h52nii '' $dataset_ds '_labels_labelMA_comb' "labelMA_nt_ns" '' '' '-i zyx -o xyz -d uint16'
-### fill gaps in aggregated labels (TODO)
-python $scriptdir/wmem/merge_slicelabels.py -S \
-$datadir/${dataset_ds}_labels_labelMA_comb.h5/labelMA_nt_ns \
-$datadir/${dataset_ds}_labels_labelMA_comb.h5/labelMA_nt_ns_closed \
+$datadir/${dataset_ds}${ipf}.h5/${ids} \
+$datadir/${dataset_ds}${opf}.h5/${ods} \
 --maskMM $datadir/${dataset_ds}_masks_maskMM.h5/maskMM_PP \
--m 'MAfilter' -l 1 0 0  # 3 1 1
-h52nii '' $dataset_ds '_labels_labelMA_comb' "labelMA_nt_ns_closed" '' '' '-i zyx -o xyz -d uint16'
-### aggregate labels by overlap (threshold_overlap=0.20; offsets=2)
+-m 'MAfilter' -l 1 0 0  # 3 1 1 # 6 1 1
+h52nii '' "${dataset_ds}" "${opf}" "${ods}" '' '' '-i zyx -o xyz -d uint16'
+### aggregate labels by overlap (threshold_overlap=0.20; offsets=2) TODO
+ipf='_labels_labelMA_core2D' ids="labelMA_pred_nocore3D_proofread_2Dmerge_q${q}-o${o}_closed"
+opf='_labels_labelMA_core2D' ods="labelMA_pred_nocore3D_proofread_2Dmerge_q${q}-o${o}_closed_ns"
 mpiexec -n 6 python -W ignore $scriptdir/wmem/merge_labels.py -M \
-$datadir/${dataset_ds}_labels_labelMA_comb.h5/labelMA_nt_ns_closed \
-$datadir/${dataset_ds}_labels_labelMA_comb.h5/labelMA_nt_ns_closed_ns \
+$datadir/${dataset_ds}${ipf}.h5/${ids} \
+$datadir/${dataset_ds}${opf}.h5/${ods} \
 -m 'neighbours_slices' -q 2 -o 0.20
-h52nii '' $dataset_ds '_labels_labelMA_comb' "labelMA_nt_ns_closed_ns" '' '' '-i zyx -o xyz -d uint16'
+h52nii '' "${dataset_ds}" "${opf}" "${ods}" '' '' '-i zyx -o xyz -d uint16'
+
+
+### relabel the aggregated 2D labels starting at the maxlabel of labelMA_core3D_proofread
+# NOTE: no need to relabel when combined with probMA_labeled
+# maxlabel_core3D=1604
+# ipf='_labels_labelMA_core2D' ids="labelMA_pred_nocore3D_proofread_2Dmerge_q${q}-o${o}"
+# opf='_labels_labelMA_core2D' ods="labelMA_pred_nocore3D_proofread_2Dmerge_q${q}-o${o}_relabeled"
+# python $scriptdir/wmem/merge_slicelabels.py -S \
+# $datadir/${dataset_ds}${ipf}.h5/${ids} \
+# $datadir/${dataset_ds}${opf}.h5/${ods} \
+# -M -m 'MAfilter' -r $maxlabel_core3D
+# h52nii '' "${dataset_ds}" "${opf}" "${ods}" '' '' '-i zyx -o xyz -d uint16'
+
+
+### fill (doesn't seem relevant here)
+# ipf='_labels_labelMA_comb' ids="labelMA_nt_aux3D"
+# opf='_labels_labelMA_comb' ods="labelMA_nt_aux3D_filledm2"
+# methods='2'
+# python $scriptdir/wmem/fill_holes.py -S \
+# $datadir/${dataset_ds}${ipf}.h5/${ids} \
+# $datadir/${dataset_ds}${opf}.h5/${ods} \
+# -m ${methods} -s 9 9 9
+# h52nii '' "${dataset_ds}" "${opf}" "${ods}" '' '' '-i zyx -o xyz -d uint16'
+### TODO: aggregate labels by overlap (threshold_overlap=0.80; offsets=3)
+# ipf='_labels_labelMA_comb' ids="labelMA_nt_aux3D"
+# opf='_labels_labelMA_comb' ods="labelMA_nt_aux3D_ns"
+# mpiexec -n 6 python -W ignore $scriptdir/wmem/merge_labels.py -M \
+# $datadir/${dataset_ds}${ipf}.h5/${ids} \
+# $datadir/${dataset_ds}${opf}.h5/${ods} \
+# -m 'neighbours_slices' -q 3 -o 0.80
+# h52nii '' "${dataset_ds}" "${opf}" "${ods}" '' '' '-i zyx -o xyz -d uint16'
+
+###=========================================================================###
+### 2D+3D in-volume labels
+###=========================================================================###
+
+### TODO: first merge with core3D_nt??
+### merge aggregated 2D labels with core3D_nt
+def merge_2D_with_3D():
+    import os
+    from wmem import utils, LabelImage
+    import numpy as np
+    datadir = '/Users/michielk/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00'
+    h5_fname = 'B-NT-S10-2f_ROI_00ds7_labels_labelMA_core3D.h5'
+    h5_dset = 'labelMA_core3D_proofread_NoR_steps/labels_nt'
+    h5_path = os.path.join(datadir, h5_fname, h5_dset)
+    core3D_nt = LabelImage(h5_path)
+    core3D_nt.load()
+    h5_fname = 'B-NT-S10-2f_ROI_00ds7_labels_labelMA_core2D.h5'
+    h5_dset = 'labelMA_pred_nocore3D_proofread_2Dmerge_q2-o0.50_closed_ns'
+    h5_path = os.path.join(datadir, h5_fname, h5_dset)
+    core2D_nt = LabelImage(h5_path)
+    core2D_nt.load()
+    h5_fname = 'B-NT-S10-2f_ROI_00ds7_labels_labelMA_comb.h5'
+    h5_dset = 'labelMA_nt'
+    h5_path = os.path.join(datadir, h5_fname, h5_dset)
+    mo = LabelImage(h5_path, **core3D_nt.get_props())
+    mo.create()
+    mo.write(core3D_nt.ds[:] + core2D_nt.ds[:])
+    mo.close()
+    core3D_nt.close()
+    core2D_nt.close()
+
+opf='_labels_labelMA_comb' ods='labelMA_nt'
+h52nii '' "${dataset_ds}" "${opf}" "${ods}" '' '' '-i zyx -o xyz -d uint16'
+
+
+### select the 3D labels overlapping with probMA_labeled and map them
+r=0.00
+ipf='_labels_labelMA_core3D' ids="probMA_eed_thr0.5_labeled"
+spf='_labels_labelMA_comb' sds="labelMA_nt"
+opf='_labels_labelMA_comb' ods="${sds}_${ids}"
+# mpiexec -n 4
+python $scriptdir/wmem/agglo_from_labelmask.py \
+"${dataset_ds}${ipf}.h5/${ids}" \
+"${dataset_ds}${spf}.h5/${sds}" \
+"${dataset_ds}${opf}.h5/${ods}" \
+-r $r # -M
+
+
+def map_axons():
+    import os
+    from wmem import utils, LabelImage
+    import numpy as np
+    import glob
+    import pickle
+    datadir = '/Users/michielk/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00'
+    h5_fname = 'B-NT-S10-2f_ROI_00ds7_labels_labelMA_core3D.h5'
+    h5_dset = 'probMA_eed_thr0.5_labeled'
+    h5_path = os.path.join(datadir, h5_fname, h5_dset)
+    axons = utils.get_image(h5_path, imtype='Label')
+    h5_fname = 'B-NT-S10-2f_ROI_00ds7_labels_labelMA_comb.h5'
+    h5_dset = 'labelMA_nt'
+    h5_path = os.path.join(datadir, h5_fname, h5_dset)
+    svoxs = utils.get_image(h5_path, imtype='Label')
+    h5_fname = 'B-NT-S10-2f_ROI_00ds7_labels_labelMA_comb.h5'
+    h5_dset = 'labelMA_nt_probMA_eed_thr0.5_labeled'
+    outputpath = os.path.join(datadir, h5_fname, h5_dset)
+    props = svoxs.get_props(protective=False)
+
+    def invert_labelsets(labelsets):
+        labelsets_inv = {}  # key_svox: {set_axon} (one-to-one mapping when labelsets_new has no doubles)
+        for lsk in sorted(labelsets.iterkeys()):
+            lsv = labelsets[lsk]
+            for l in lsv:
+                if l in labelsets_inv.keys():
+                    labelsets_inv[l].add(lsk)
+                else:
+                    labelsets_inv[l] = set([lsk])
+        return labelsets_inv
+
+    # FIXME: handle doubles better (now mapped to lowest axon label)
+    lsfile = os.path.join(datadir, 'B-NT-S10-2f_ROI_00ds7_labels_labelMA_comb_labelMA_nt_probMA_eed_thr0.5_labeled_host-MKMBPr.local_rank-00.pickle')
+    labelsets = svoxs.read_labelsets(lsfile)  # key_axon: {set_svoxs} (contains double svoxs in values)
+    labelsets_inv = invert_labelsets(labelsets)  # key_svox: {set_axons} (contains double axons in values)
+
+    # axon mapping (any axons that has doubles needs to be mapped to the lowest-labeled)
+    labelsets_inv_nodoubles = {}
+    for lsk in sorted(labelsets_inv.iterkeys()):
+        labelsets_inv_nodoubles = utils.classify_label_set(labelsets_inv_nodoubles, labelsets_inv[lsk], lsk)
+        axonmapping = {}  # key_axon-first: {set_axons}
+    for lsk, lsv in labelsets_inv_nodoubles.items():
+        lsvlist = sorted(list(lsv))
+        axonmapping[lsvlist[0]] = set(lsvlist)
+
+    # svoxs mapping
+    labelsets_nodoubles = {}  # key_axon: {set_svoxs} (no doubles, labelset with double integrated to lowest-labeled axon)
+    for lsk in sorted(labelsets.iterkeys()):
+        labelset = labelsets[lsk]
+        labelsets_nodoubles = utils.classify_label_set(labelsets_nodoubles, labelset, lsk)
+
+    svoxs_fw = svoxs.forward_map(labelsets=labelsets_nodoubles, from_empty=False)
+    mo2 = LabelImage(outputpath + '_svoxs', **props)
+    mo2.create()
+    mo2.write(svoxs_fw)
+    mo2.close()
+    svoxs_fw = svoxs.forward_map(labelsets=labelsets_nodoubles, from_empty=True)
+    mo4 = LabelImage(outputpath + '_svoxs_stitched', **props)
+    mo4.create()
+    mo4.write(svoxs_fw)
+    mo4.close()
+    axons_fw = axons.forward_map(labelsets=axonmapping, from_empty=True)
+    mo3 = LabelImage(outputpath + '_axons', **props)
+    mo3.create()
+    mo3.write(axons_fw)
+    mo3.close()
+    m = axons_fw[:]
+    maskA = m > 0
+    m[~maskA] = svoxs_fw[~maskA]
+    mo = LabelImage(outputpath, **props)
+    mo.create()
+    mo.write(m)
+    mo.close()
+
+h52nii '' "${dataset_ds}" "${opf}" "${ods}" '' '' '-i zyx -o xyz -d uint16'
+h52nii '' "${dataset_ds}" "${opf}" "${ods}_axons" '' '' '-i zyx -o xyz -d uint16'
+h52nii '' "${dataset_ds}" "${opf}" "${ods}_svoxs" '' '' '-i zyx -o xyz -d uint16'
+h52nii '' "${dataset_ds}" "${opf}" "${ods}_svoxs_stitched" '' '' '-i zyx -o xyz -d uint16'
+
+
+def fill_connected_labels():
+    import os
+    from wmem import utils, LabelImage, merge_labels
+    import numpy as np
+    from skimage.measure import label, regionprops
+    from skimage.morphology import watershed
+    import glob
+    import pickle
+    datadir = '/Users/michielk/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00'
+
+    h5_fname = 'B-NT-S10-2f_ROI_00ds7_labels_labelMA_comb.h5'
+    h5_dset = 'labelMA_nt_probMA_eed_thr0.5_labeled_svoxs_stitched'
+    h5_path = os.path.join(datadir, h5_fname, h5_dset)
+    svoxs = utils.get_image(h5_path, imtype='Label')
+
+    h5_fname = 'B-NT-S10-2f_ROI_00ds7_labels_labelMA_comb.h5'
+    h5_dset = 'labelMA_nt_probMA_eed_thr0.5_labeled_axons'
+    h5_path = os.path.join(datadir, h5_fname, h5_dset)
+    # axons = utils.get_image(h5_path, imtype='Label')
+    # FIXME: not sure I want to use this
+    axons = None
+
+    h5_fname = 'B-NT-S10-2f_ROI_00ds7.h5'
+    h5_dset = 'data'
+    h5_path = os.path.join(datadir, h5_fname, h5_dset)
+    data = utils.get_image(h5_path)
+
+    h5_fname = 'B-NT-S10-2f_ROI_00ds7_masks_maskMM.h5'
+    h5_dset = 'maskMM_PP'
+    h5_path = os.path.join(datadir, h5_fname, h5_dset)
+    mask = utils.get_image(h5_path, imtype='Mask')
+
+    h5_fname = 'B-NT-S10-2f_ROI_00ds7_labels_labelMA_comb.h5'
+    h5_dset = 'labelMA_nt_probMA_eed_thr0.5_labeled_svoxs_stitched_filled'
+    outputpath = os.path.join(datadir, h5_fname, h5_dset)
+    props = svoxs.get_props(protective=False)
+
+    mo = LabelImage(outputpath, **props)
+    mo.create()
+    mo.ds[:] = np.copy(svoxs.ds[:])
+
+    searchradius = [20, 20, 20]
+    rp_main = regionprops(svoxs.ds)
+    for prop in rp_main:
+        merge_labels.connect_split_label(prop, mo, data, mask, axons, searchradius)
+
+    mo.close()
+    svoxs.close()
+    data.close()
+    mask.close()
+
+fill_connected_labels(datadir='/Users/michielk/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00',
+                      dataset='B-NT-S10-2f_ROI_00ds7',
+                      h5_dset_in='labelMA_nt_probMA_eed_thr0.5_labeled_svoxs_stitched',
+                      searchradius=[40, 10, 10], use_axons=True,
+                      between=True, to_border=True)
+
+opf='_labels_labelMA_comb' ods="labelMA_nt_probMA_eed_thr0.5_labeled_svoxs_stitched_filled"
+h52nii '' "${dataset_ds}" "${opf}" "${ods}" '' '' '-i zyx -o xyz -d uint16'
+
+
+
+ipf='_labels_labelMA_comb' ids="labelMA_nt_probMA_eed_thr0.5_labeled_svoxs_stitched_filled"
+opf='_labels_labelMA_comb' ods="labelMA_nt_probMA_eed_thr0.5_labeled_svoxs_stitched_filled_NoR"
+python -W ignore $scriptdir/wmem/nodes_of_ranvier.py -S \
+$datadir/${dataset_ds}${ipf}.h5/${ids} \
+$datadir/${dataset_ds}${opf}.h5/${ods} \
+--boundarymask $datadir/${dataset_ds}_masks_maskDS.h5/maskDS
+#number of labels in labelvolume: 4844
+#number of short labels: 0
+#number of large, long labels: 4844
+#number of large, long in-volume labels: 4439
+#number of large, long through-volume labels: 405
+h52nii '' "${dataset_ds}" "${opf}" "${ods}_steps/labels_tv" '' '' '-i zyx -o xyz -d uint16'
+h52nii '' "${dataset_ds}" "${opf}" "${ods}_steps/labels_nt" '' '' '-i zyx -o xyz -d uint16'  # strange that maxlabel is 32148??
+
+
+
+### TODO: test watershed merge
+ipf='_labels_labelMA_comb' ids="labelMA_nt"
+opf='_labels_labelMA_comb' ods="${ids}_ws"
+# ipf='_labels_labelMA_comb' ids="labelMA_nt_probMA_eed_thr0.5_labeled"
+# ipf='_labels_labelMA_comb' ids="labelMA_nt_probMA_eed_thr0.5_labeled_svoxs"
+# ipf='_labels_labelMA_comb' ids="labelMA_nt_probMA_eed_thr0.5_labeled_svoxs_stitched_filled_NoR_steps/labels_nt"
+dpf='' dds='data'  #dpf='_probs1_eed2' dds='probs_eed'  #
+mpf='_masks_maskMM' mds='maskMM_PP'
+# opf='_labels_labelMA_comb' ods="labelMA_nt_probMA_nt_wsmerge_${dds}_${mds}_test"
+mpiexec -n 6 python -W ignore $scriptdir/wmem/merge_labels.py -S \
+$datadir/${dataset_ds}${ipf}.h5/${ids} \
+$datadir/${dataset_ds}${opf}.h5/${ods} \
+--data $datadir/${dataset_ds}${dpf}.h5/${dds} \
+--maskMM $datadir/${dataset_ds}${mpf}.h5/${mds} \
+-m 'watershed' -r 40 10 10 -M
+h52nii '' "$dataset_ds" "${opf}" "${ods}" '' '' '-i zyx -o xyz -d uint16'
+h52nii '' "$dataset_ds" "${opf}" "${ods}_steps/stitched" '' '' '-i zyx -o xyz -d uint16'
+
+fill_connected_labels(datadir='/Users/michielk/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00',
+                      dataset='B-NT-S10-2f_ROI_00ds7',
+                      h5_dset_in='labelMA_nt_ws',
+                      searchradius=[40, 10, 10], use_axons=False,
+                      between=True, to_border=True)
+
+opf='_labels_labelMA_comb' ods="labelMA_nt_ws_filled"
+h52nii '' "$dataset_ds" "${opf}" "${ods}" '' '' '-i zyx -o xyz -d uint16'
+
+ipf='_labels_labelMA_comb' ids="labelMA_nt_ws_filled"
+opf='_labels_labelMA_comb' ods="${ids}_NoR"
+python -W ignore $scriptdir/wmem/nodes_of_ranvier.py -S \
+$datadir/${dataset_ds}${ipf}.h5/${ids} \
+$datadir/${dataset_ds}${opf}.h5/${ods} \
+--boundarymask $datadir/${dataset_ds}_masks_maskDS.h5/maskDS
+h52nii '' "${dataset_ds}" "${opf}" "${ods}_steps/labels_tv" '' '' '-i zyx -o xyz -d uint16'
+h52nii '' "${dataset_ds}" "${opf}" "${ods}_steps/labels_nt" '' '' '-i zyx -o xyz -d uint16'
 
 
 
 
-### try a 3D watershed again with present labels added to maskMM
+
+
+
+fill_connected_labels(datadir='/Users/michielk/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00',
+                      dataset='B-NT-S10-2f_ROI_00ds7',
+                      h5_dset_in='labelMA_nt_probMA_nt_wsmerge_data_maskMM_PP_test_steps/stitched',
+                      searchradius=[40, 10, 10], use_axons=False)
+
+h52nii '' "$dataset_ds" "${opf}" "${ods}_steps/stitched_filled" '' '' '-i zyx -o xyz -d uint16'
+
+fill_connected_labels(datadir='/Users/michielk/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00',
+                      dataset='B-NT-S10-2f_ROI_00ds7',
+                      h5_dset_in='labelMA_nt_ws',
+                      searchradius=[40, 10, 10], use_axons=False)
+
+
 
 import os
-from wmem import parse, utils, Image, MaskImage, LabelImage
+from wmem import utils, LabelImage, merge_labels
+import numpy as np
+from skimage.measure import label, regionprops
+from skimage.morphology import watershed
+import glob
+import pickle
 datadir = '/Users/michielk/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00'
-h5path_in = os.path.join(datadir, 'B-NT-S10-2f_ROI_00ds7_masks_maskMM.h5/maskMM_PP')
-im1 = MaskImage(h5path_in)
-im1.load()
-h5path_in = os.path.join(datadir, 'B-NT-S10-2f_ROI_00ds7_labels_labelMA_core3D.h5/labelMA_core3D_proofread_NoR_steps/labels_tv')
-im2 = MaskImage(h5path_in)
-im2.load()
-h5path_in = os.path.join(datadir, 'B-NT-S10-2f_ROI_00ds7_labels_labelMA_comb.h5/labelMA_nt_ns_closed_ns')
-im3 = MaskImage(h5path_in)
-im3.load()
-h5path_out = os.path.join(datadir, 'B-NT-S10-2f_ROI_00ds7_masks_maskTMP.h5/maskTMP')
-mo = MaskImage(h5path_out, shape=im1.dims, elsize=im1.elsize, axlab=im1.axlab, dtype=im1.dtype, protective=False)
-mo.create()
-data = (im1.ds[:] + im2.ds[:] + im3.ds[:]) > 0
-mo.write(data=data)
-mo.close()
-im3.close()
-im2.close()
-im1.close()
 
-h52nii '' $dataset_ds '_masks_maskTMP' 'maskTMP' '' '' '-i zyx -o xyz -d uint8'
+h5_fname = 'B-NT-S10-2f_ROI_00ds7_labels_labelMA_comb.h5'
+h5_dset = "labelMA_nt_probMA_eed_thr0.5_labeled_svoxs_stitched_filled_NoR_steps/labels_nt"
+h5_path = os.path.join(datadir, h5_fname, h5_dset)
+im = utils.get_image(h5_path, imtype='Label')
 
+h5_fname = 'B-NT-S10-2f_ROI_00ds7_labels_labelMA_comb.h5'
+h5_dset = 'labelMA_nt_probMA_nt_wsmerge_data_maskMM_PP'
+outputpath = os.path.join(datadir, h5_fname, h5_dset)
+
+merge_labels.map_labels(im, None, None, outputpath, True, False)
+
+im.close()
+
+opf='_labels_labelMA_comb' ods="labelMA_nt_probMA_nt_wsmerge_data_maskMM_PP"
+h52nii '' "$dataset_ds" "${opf}" "${ods}" '' '' '-i zyx -o xyz -d uint16'
+h52nii '' "$dataset_ds" "${opf}" "${ods}_steps/stitched" '' '' '-i zyx -o xyz -d uint16'
+
+# TODO: connect split labels
+# TODO: combine with probMA axons (there are some axons not connected after watershed fill)
+
+
+
+
+
+
+
+
+
+# fill holes in MA axons
+def make_maskMMplus():
+    import os
+    from wmem import parse, utils, Image, MaskImage, LabelImage
+    datadir = '/Users/michielk/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00'
+    # TODO: consider a more strict mask here
+    h5path_in = os.path.join(datadir, 'B-NT-S10-2f_ROI_00ds7_masks_maskMM.h5/maskMM_PP')
+    im1 = MaskImage(h5path_in)
+    im1.load()
+    h5path_in = os.path.join(datadir, 'B-NT-S10-2f_ROI_00ds7_labels_labelMA_core3D.h5/labelMA_core3D_proofread_NoR_steps/labels_tv')
+    im2 = MaskImage(h5path_in)
+    im2.load()
+    h5path_in = os.path.join(datadir, 'B-NT-S10-2f_ROI_00ds7_labels_labelMA_comb.h5/labelMA_nt')
+    im3 = MaskImage(h5path_in)
+    im3.load()
+    h5path_out = os.path.join(datadir, 'B-NT-S10-2f_ROI_00ds7_masks_maskMM.h5/maskMM_PP_MA')
+    mo = MaskImage(h5path_out, shape=im1.dims, elsize=im1.elsize, axlab=im1.axlab, dtype=im1.dtype, protective=False)
+    mo.create()
+    data = (im1.ds[:] + im2.ds[:] + im3.ds[:]) > 0
+    mo.write(data=data)
+    mo.close()
+    im3.close()
+    im2.close()
+    im1.close()
+
+h52nii '' $dataset_ds '_masks_maskMM' 'maskMM_PP_MA' '' '' '-i zyx -o xyz -d uint8'
+
+ipf='_masks_maskMM' ids='maskMM_PP_MA'
+opf='_labels_labelMA_comb' ods='labelMA_aux3D'
 python $scriptdir/wmem/connected_components.py \
-$datadir/${dataset_ds}_masks_maskTMP.h5/maskTMP \
-$datadir/${dataset_ds}_labels_labelMA_comb.h5/labelMA_aux3D \
+$datadir/${dataset_ds}${ipf}.h5/${ids} \
+$datadir/${dataset_ds}${opf}.h5/${ods} \
 -m '3D' -q 5000 -a 50
-h52nii '' $dataset_ds '_labels_labelMA_comb' 'labelMA_aux3D' '' '' '-i zyx -o xyz -d uint16'
+h52nii '' "${dataset_ds}" "${opf}" "${ods}" '' '' '-i zyx -o xyz -d uint16'
+
+### FIXME: too many faulty labels outside MA
+
+### merge labelMA_aux3D_relabeled into labelMA_nt
+def merge_aux3D():
+    import os
+    from wmem import utils, LabelImage
+    import numpy as np
+    datadir = '/Users/michielk/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00'
+    h5_fname = 'B-NT-S10-2f_ROI_00ds7_labels_labelMA_comb.h5'
+    h5_dset = 'labelMA_nt'
+    h5_path = os.path.join(datadir, h5_fname, h5_dset)
+    im1 = LabelImage(h5_path)
+    im1.load()
+    # 23142 labels (max: 832496) in volume /Users/michielk/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00/B-NT-S10-2f_ROI_00ds7_labels_labelMA_comb.h5/labelMA_nt
+    h5_fname = 'B-NT-S10-2f_ROI_00ds7_labels_labelMA_comb.h5'
+    h5_dset = 'labelMA_aux3D'
+    h5_path = os.path.join(datadir, h5_fname, h5_dset)
+    im2 = LabelImage(h5_path)
+    im2.load()
+    # 6791 labels (max: 6791) in volume /Users/michielk/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00/B-NT-S10-2f_ROI_00ds7_labels_labelMA_comb.h5/labelMA_aux3D
+    h5_fname = 'B-NT-S10-2f_ROI_00ds7_labels_labelMA_comb.h5'
+    h5_dset = 'labelMA_nt_aux3D'
+    h5_path = os.path.join(datadir, h5_fname, h5_dset)
+    mo = LabelImage(h5_path, **im1.get_props())
+    mo.create()
+    relabel_from = im1.maxlabel + 1
+    aux = im2.ds[:]
+    auxmask = aux != 0
+    aux[auxmask] += relabel_from
+    mo.ds[:] = im1.ds[:] + aux
+    mo.close()
+    im1.close()
+    im2.close()
+
+h52nii '' $dataset_ds '_labels_labelMA_comb' 'labelMA_nt_aux3D' '' '' '-i zyx -o xyz -d uint16'
+
+# # this is just playing to see how much was gained
+# python -W ignore $scriptdir/wmem/connected_components.py -S \
+# $datadir/${dataset_ds}_labels_labelMA_comb.h5/labelMA_nt_ns_closed_ns_aux3D \
+# $datadir/${dataset_ds}_labels_labelMA_comb.h5/labelMA_nt_ns_closed_ns_aux3D_3Dlabeled \
+# -m '2Dto3D' -d 0
+# h52nii '' $dataset_ds '_labels_labelMA_comb' 'labelMA_nt_ns_closed_ns_aux3D_3Dlabeled' '' '' '-i zyx -o xyz -d uint16'
+# mpiexec -n 6 python -W ignore $scriptdir/wmem/merge_labels.py -S -M \
+# $datadir/${dataset_ds}_labels_labelMA_comb.h5/labelMA_nt_ns_closed_ns_aux3D_3Dlabeled \
+# $datadir/${dataset_ds}_labels_labelMA_comb.h5/labelMA_nt_ns_closed_ns_aux3D_3Dlabeled_ws_maskMM \
+# --data $datadir/${dataset_ds}_probs1_eed2.h5/probs_eed \
+# --maskMM $datadir/${dataset_ds}_masks_maskMM.h5/maskMM_PP \
+# -m 'watershed'
+# h52nii '' $dataset_ds '_labels_labelMA_comb' "labelMA_nt_ns_closed_ns_aux3D_3Dlabeled_ws_maskMM" '' '' '-i zyx -o xyz -d uint16'
+# h52nii '' $dataset_ds '_labels_labelMA_comb' "labelMA_nt_ns_closed_ns_aux3D_3Dlabeled_ws_maskMM_steps/stitched" '' '' '-i zyx -o xyz -d uint16'
+# h52nii '' $dataset_ds '_labels_labelMA_comb' "labelMA_nt_ns_closed_ns_aux3D_3Dlabeled_ws_maskMM_steps/filled" '' '' '-i zyx -o xyz -d uint16'
+# python -W ignore $scriptdir/wmem/nodes_of_ranvier.py -S \
+# $datadir/${dataset_ds}_labels_labelMA_comb.h5/labelMA_nt_ns_closed_ns_aux3D_3Dlabeled \
+# $datadir/${dataset_ds}_labels_labelMA_comb.h5/labelMA_nt_ns_closed_ns_aux3D_3Dlabeled_NoR \
+# --boundarymask $datadir/${dataset_ds}_masks_maskDS.h5/maskDS
+# #number of labels in labelvolume: 7961
+# #number of short labels: 0
+# #number of large, long labels: 7961
+# #number of large, long in-volume labels: 7298
+# #number of large, long through-volume labels: 663
+# h52nii '' $dataset_ds '_labels_labelMA_comb' "labelMA_nt_ns_closed_ns_aux3D_3Dlabeled_NoR_steps/labels_tv" '' '' '-i zyx -o xyz -d uint16'
+# h52nii '' $dataset_ds '_labels_labelMA_comb' "labelMA_nt_ns_closed_ns_aux3D_3Dlabeled_NoR_steps/labels_nt" '' '' '-i zyx -o xyz -d uint16'
+# mpiexec -n 6 python -W ignore $scriptdir/wmem/merge_labels.py -S -M \
+# $datadir/${dataset_ds}_labels_labelMA_comb.h5/labelMA_nt_ns_closed_ns_aux3D_3Dlabeled_NoR_steps/labels_tv \
+# $datadir/${dataset_ds}_labels_labelMA_comb.h5/labelMA_nt_ns_closed_ns_aux3D_3Dlabeled_NoR_steps_tv_ws_maskMM \
+# --data $datadir/${dataset_ds}_probs1_eed2.h5/probs_eed \
+# --maskMM $datadir/${dataset_ds}_masks_maskMM.h5/maskMM_PP \
+# -m 'watershed'
+# h52nii '' $dataset_ds '_labels_labelMA_comb' "labelMA_nt_ns_closed_ns_aux3D_3Dlabeled_NoR_steps_tv_ws_maskMM" '' '' '-i zyx -o xyz -d uint16'
+# h52nii '' $dataset_ds '_labels_labelMA_comb' "labelMA_nt_ns_closed_ns_aux3D_3Dlabeled_NoR_steps_tv_ws_maskMM_steps/stitched" '' '' '-i zyx -o xyz -d uint16'
+# h52nii '' $dataset_ds '_labels_labelMA_comb' "labelMA_nt_ns_closed_ns_aux3D_3Dlabeled_NoR_steps_tv_ws_maskMM_steps/filled" '' '' '-i zyx -o xyz -d uint16'
+
+
+
+
+
+
+
+
+
+
+ipf='_labels_labelMA_comb' ids="${sds}_${ids}"
+opf='_labels_labelMA_comb' ods="${sds}_${ids}_NoR"
+python -W ignore $scriptdir/wmem/nodes_of_ranvier.py -S \
+$datadir/${dataset_ds}${ipf}.h5/${ids} \
+$datadir/${dataset_ds}${opf}.h5/${ods} \
+--boundarymask $datadir/${dataset_ds}_masks_maskDS.h5/maskDS
+h52nii '' "${dataset_ds}" "${opf}" "${ods}_steps/labels_tv" '' '' '-i zyx -o xyz -d uint16'
+h52nii '' "${dataset_ds}" "${opf}" "${ods}_steps/labels_nt" '' '' '-i zyx -o xyz -d uint16'
+
+### TODO: fill label gaps
+# -- on high-res to fill thin axon segments
+### TODO: connect nt
+
+# TODO: investigate the (now filled) gaps in the 2D labels to extract the NoR
+# - consider gap length, surrounding myelin, ...
+# - handle spilling (project a centreline/cylinder from end to end)
+
+ipf='_labels_labelMA_comb' ids="labelMA_nt_aux3D_probMA_eed_thr0.5_labeled"
+opf='_labels_labelMA_comb' ods="labelMA_nt_aux3D_probMA_eed_thr0.5_labeled_wsmerge"
+mpiexec -n 6 python -W ignore $scriptdir/wmem/merge_labels.py -S -M \
+$datadir/${dataset_ds}${ipf}.h5/${ids} \
+$datadir/${dataset_ds}${opf}.h5/${ods} \
+--data $datadir/${dataset_ds}_probs1_eed2.h5/probs_eed \
+--maskMM $datadir/${dataset_ds}_masks_maskMM.h5/maskMM_PP \
+-m 'watershed'
+h52nii '' "$dataset_ds" "${opf}" "${ods}" '' '' '-i zyx -o xyz -d uint16'
+h52nii '' "$dataset_ds" "${opf}" "${ods}_steps/stitched" '' '' '-i zyx -o xyz -d uint16'
+h52nii '' "$dataset_ds" "${opf}" "${ods}_steps/filled" '' '' '-i zyx -o xyz -d uint16'
+
+
+
+
+
+
+
+def label_comb():
+    import os
+    import numpy as np
+    from wmem import utils, LabelImage
+    datadir = '/Users/michielk/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00'
+    dataset = 'B-NT-S10-2f_ROI_00ds7'
+    ipf, ids ='_labels_labelMA_core3D', "labelMA_core3D_proofread_NoR_steps/labels_tv"
+    im1 = LabelImage(os.path.join(datadir, '{}{}.h5/{}'.format(dataset, ipf, ids)))
+    im1.load()
+    im1ds = im1.ds[:]
+    im1.close()
+    ipf, ids ='_labels_labelMA_comb', "labelMA_nt_aux3D_probMA_eed_thr0.5_labeled"
+    im2 = LabelImage(os.path.join(datadir, '{}{}.h5/{}'.format(dataset, ipf, ids)))
+    im2.load()
+    im2ds = im2.ds[:]
+    im2.close()
+    opf, ods = '_labels_labelMA_comb', 'all_labels'
+    outputpath = os.path.join(datadir, '{}{}.h5/{}'.format(dataset, opf, ods))
+    all_labels = im1ds + im2ds
+    mo = LabelImage(outputpath, **im1.get_props(dtype='uint32'))
+    mo.create()
+    mo.write(all_labels)
+    mo.close()
+
+opf='_labels_labelMA_comb' ods='all_labels'
+h52nii '' "${dataset_ds}" "${opf}" "${ods}" '' '' '-i zyx -o xyz -d uint16'
+
+def label_comb():
+    import os
+    import numpy as np
+    from skimage.measure import label
+    from wmem import utils, LabelImage
+    datadir = '/Users/michielk/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00'
+    dataset = 'B-NT-S10-2f_ROI_00ds7'
+    ipf, ids ='_labels_labelMA_comb', "all_labels"
+    im2 = LabelImage(os.path.join(datadir, '{}{}.h5/{}'.format(dataset, ipf, ids)))
+    im2.load()
+    im2ds = im2.ds[:]
+    im2.close()
+    opf, ods = '_labels_labelMA_comb', 'all_labels'
+    outputpath = os.path.join(datadir, '{}{}.h5/{}'.format(dataset, opf, ods))
+    mask = im2ds > 0
+    labels = label(mask)
+    mo = LabelImage(outputpath, **im2.get_props(dtype='uint32'))
+    mo.create()
+    mo.write(labels)
+    mo.close()
+
+opf='_labels_labelMA_comb' ods='all_labels'
+h52nii '' "${dataset_ds}" "${opf}" "${ods}" '' '' '-i zyx -o xyz -d uint16'
+
+ipf='_labels_labelMA_comb' ids="all_labels"
+opf='_labels_labelMA_comb' ods="all_labels_NoR"
+python -W ignore $scriptdir/wmem/nodes_of_ranvier.py -S \
+$datadir/${dataset_ds}${ipf}.h5/${ids} \
+$datadir/${dataset_ds}${opf}.h5/${ods} \
+--boundarymask $datadir/${dataset_ds}_masks_maskDS.h5/maskDS
+h52nii '' "${dataset_ds}" "${opf}" "${ods}_steps/labels_tv" '' '' '-i zyx -o xyz -d uint16'
+h52nii '' "${dataset_ds}" "${opf}" "${ods}_steps/labels_nt" '' '' '-i zyx -o xyz -d uint16'
+
+
+ipf='_labels_labelMA_comb' ids="all_labels"
+opf='_labels_labelMA_comb' ods="all_labels_filledm2"
+q=2; o=0.50; methods='2'
+python $scriptdir/wmem/fill_holes.py -S \
+$datadir/${dataset_ds}${ipf}.h5/${ids} \
+$datadir/${dataset_ds}${opf}.h5/${ods} \
+-m ${methods} -s 9 9 9
+h52nii '' $dataset_ds ${opf} ${ods} '' '' '-i zyx -o xyz -d uint16'
+
+
+
+
+
+
+
+
+
+
+
+
 
 #python $scriptdir/wmem/merge_slicelabels.py -S \
 #$datadir/${dataset_ds}_labels_labelMA_comb.h5/labelMA_aux3D \
@@ -555,81 +1182,9 @@ h52nii '' $dataset_ds '_labels_labelMA_comb' 'labelMA_aux3D' '' '' '-i zyx -o xy
 #-M -m 'MAfilter' -r 26114
 #h52nii '' $dataset_ds '_labels_labelMA_comb' 'labelMA_aux3D_relabeled' '' '' '-i zyx -o xyz -d uint16'
 
-### merge labelMA_aux3D_relabeled into labelMA_nt_ns_closed_ns
-import os
-from wmem import utils, LabelImage
-import numpy as np
-datadir = '/Users/michielk/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00'
 
-h5_fname = 'B-NT-S10-2f_ROI_00ds7_labels_labelMA_comb.h5'
-h5_dset = 'labelMA_nt_ns_closed_ns'
-h5_path = os.path.join(datadir, h5_fname, h5_dset)
-im1 = LabelImage(h5_path)
-im1.load()
 
-h5_fname = 'B-NT-S10-2f_ROI_00ds7_labels_labelMA_comb.h5'
-h5_dset = 'labelMA_aux3D'
-h5_path = os.path.join(datadir, h5_fname, h5_dset)
-im2 = LabelImage(h5_path)
-im2.load()
 
-h5_fname = 'B-NT-S10-2f_ROI_00ds7_labels_labelMA_comb.h5'
-h5_dset = 'labelMA_nt_ns_closed_ns_aux3D'
-h5_path = os.path.join(datadir, h5_fname, h5_dset)
-mo = LabelImage(h5_path,
-                shape=im1.dims,
-                elsize=im1.elsize,
-                axlab=im1.axlab,
-                chunks=im1.chunks,
-                dtype=im1.dtype,
-                protective=False)
-mo.create()
-relabel_from = 26114
-aux = np.copy(im2.ds[:])
-auxmask = aux != 0
-aux[auxmask] += relabel_from
-mo.ds[:] = im1.ds[:] + aux
-mo.close()
-im1.close()
-im2.close()
-
-h52nii '' $dataset_ds '_labels_labelMA_comb' 'labelMA_nt_ns_closed_ns_aux3D' '' '' '-i zyx -o xyz -d uint16'
-
-# this is just playing to see how much was gained
-python -W ignore $scriptdir/wmem/connected_components.py -S \
-$datadir/${dataset_ds}_labels_labelMA_comb.h5/labelMA_nt_ns_closed_ns_aux3D \
-$datadir/${dataset_ds}_labels_labelMA_comb.h5/labelMA_nt_ns_closed_ns_aux3D_3Dlabeled \
--m '2Dto3D' -d 0
-h52nii '' $dataset_ds '_labels_labelMA_comb' 'labelMA_nt_ns_closed_ns_aux3D_3Dlabeled' '' '' '-i zyx -o xyz -d uint16'
-mpiexec -n 6 python -W ignore $scriptdir/wmem/merge_labels.py -S -M \
-$datadir/${dataset_ds}_labels_labelMA_comb.h5/labelMA_nt_ns_closed_ns_aux3D_3Dlabeled \
-$datadir/${dataset_ds}_labels_labelMA_comb.h5/labelMA_nt_ns_closed_ns_aux3D_3Dlabeled_ws_maskMM \
---data $datadir/${dataset_ds}_probs1_eed2.h5/probs_eed \
---maskMM $datadir/${dataset_ds}_masks_maskMM.h5/maskMM_PP \
--m 'watershed'
-h52nii '' $dataset_ds '_labels_labelMA_comb' "labelMA_nt_ns_closed_ns_aux3D_3Dlabeled_ws_maskMM" '' '' '-i zyx -o xyz -d uint16'
-h52nii '' $dataset_ds '_labels_labelMA_comb' "labelMA_nt_ns_closed_ns_aux3D_3Dlabeled_ws_maskMM_steps/stitched" '' '' '-i zyx -o xyz -d uint16'
-h52nii '' $dataset_ds '_labels_labelMA_comb' "labelMA_nt_ns_closed_ns_aux3D_3Dlabeled_ws_maskMM_steps/filled" '' '' '-i zyx -o xyz -d uint16'
-python -W ignore $scriptdir/wmem/nodes_of_ranvier.py -S \
-$datadir/${dataset_ds}_labels_labelMA_comb.h5/labelMA_nt_ns_closed_ns_aux3D_3Dlabeled \
-$datadir/${dataset_ds}_labels_labelMA_comb.h5/labelMA_nt_ns_closed_ns_aux3D_3Dlabeled_NoR \
---boundarymask $datadir/${dataset_ds}_masks_maskDS.h5/maskDS
-#number of labels in labelvolume: 7961
-#number of short labels: 0
-#number of large, long labels: 7961
-#number of large, long in-volume labels: 7298
-#number of large, long through-volume labels: 663
-h52nii '' $dataset_ds '_labels_labelMA_comb' "labelMA_nt_ns_closed_ns_aux3D_3Dlabeled_NoR_steps/labels_tv" '' '' '-i zyx -o xyz -d uint16'
-h52nii '' $dataset_ds '_labels_labelMA_comb' "labelMA_nt_ns_closed_ns_aux3D_3Dlabeled_NoR_steps/labels_nt" '' '' '-i zyx -o xyz -d uint16'
-mpiexec -n 6 python -W ignore $scriptdir/wmem/merge_labels.py -S -M \
-$datadir/${dataset_ds}_labels_labelMA_comb.h5/labelMA_nt_ns_closed_ns_aux3D_3Dlabeled_NoR_steps/labels_tv \
-$datadir/${dataset_ds}_labels_labelMA_comb.h5/labelMA_nt_ns_closed_ns_aux3D_3Dlabeled_NoR_steps_tv_ws_maskMM \
---data $datadir/${dataset_ds}_probs1_eed2.h5/probs_eed \
---maskMM $datadir/${dataset_ds}_masks_maskMM.h5/maskMM_PP \
--m 'watershed'
-h52nii '' $dataset_ds '_labels_labelMA_comb' "labelMA_nt_ns_closed_ns_aux3D_3Dlabeled_NoR_steps_tv_ws_maskMM" '' '' '-i zyx -o xyz -d uint16'
-h52nii '' $dataset_ds '_labels_labelMA_comb' "labelMA_nt_ns_closed_ns_aux3D_3Dlabeled_NoR_steps_tv_ws_maskMM_steps/stitched" '' '' '-i zyx -o xyz -d uint16'
-h52nii '' $dataset_ds '_labels_labelMA_comb' "labelMA_nt_ns_closed_ns_aux3D_3Dlabeled_NoR_steps_tv_ws_maskMM_steps/filled" '' '' '-i zyx -o xyz -d uint16'
 
 
 
