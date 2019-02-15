@@ -804,7 +804,8 @@ def parse_separate_sheaths(parser):
     parser.add_argument(
         '-d', '--dilation_iterations',
         type=int,
-        default=0,
+        nargs=3,
+        default=[1, 7, 7],
         help="""number of iterations for binary dilation
                 of the myelinated axon compartment
                 (as derived from inputfile):
@@ -837,6 +838,11 @@ def parse_separate_sheaths(parser):
         default=50,
         help="""margin of the box used when calculating
                 the sigmoid-weighted distance map"""
+        )
+    parser.add_argument(
+        '--medwidth_file',
+        default='',
+        help="""pickle of dictionary with median widths {label: medwidth}"""
         )
 
     return parser
