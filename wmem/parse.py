@@ -1326,3 +1326,27 @@ def parse_slicvoxels(parser):
 
     return parser
 
+
+def parse_image_ops(parser):
+
+    parser.add_argument(
+        'inputfile',
+        help="""path to hdf5 dataset <filepath>.h5/<...>/<dataset>:
+                """
+        )
+    parser.add_argument(
+        'outputfile',
+        default='',
+        help="""path to hdf5 dataset <filepath>.h5/<...>/<dataset>:
+                """
+        )
+
+    parser.add_argument(
+        '-s', '--sigma',
+        nargs='*',
+        type=float,
+        default=[0.0],
+        help='Gaussian smoothing sigma (in um)',
+        )
+
+    return parser
