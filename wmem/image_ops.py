@@ -72,8 +72,8 @@ def image_ops(
         im.slices = mo.slices = block['slices']
         data = im.slice_dataset()
 
-        if sigma.any():
-            data = smooth(data)
+        if any(sigma):
+            data = smooth(data, sigma, im.elsize)
 
         mo.write(data)
 
