@@ -1350,3 +1350,29 @@ def parse_image_ops(parser):
         )
 
     return parser
+
+
+def parse_combine_labels(parser):
+
+    parser.add_argument(
+        'inputfile1',
+        help="""path to hdf5 dataset <filepath>.h5/<...>/<dataset>:
+                """
+        )
+    parser.add_argument(
+        'inputfile2',
+        help="""path to hdf5 dataset <filepath>.h5/<...>/<dataset>:
+                """
+        )
+    parser.add_argument(
+        '-m', '--method',
+        help="""add/subtract/merge/..."""
+        )
+    parser.add_argument(
+        'outputfile',
+        default='',
+        help="""path to hdf5 dataset <filepath>.h5/<...>/<dataset>:
+                """
+        )
+
+    return parser

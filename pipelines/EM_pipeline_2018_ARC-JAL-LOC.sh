@@ -483,48 +483,26 @@ h52nii '' "$dataset_ds" "${opf}" "${ods}" '' '' '-i zyx -o xyz -d uint16'
 
 # FIXME 1?: how did I get to labelMA_pred_nocore3D (were 2D labels relabeled from maxlabel_3D+1?); see scratchEM8.py: PROBABLY NOT!
 # FIXME 2: probably not used the proofread version of '_labels_labelMA_core3D.h5/labelMA_core3D'; see scratchEM8.py
+# FIX 2 DONE
 
 ### mask the predicted 2D labels with finished 3D labels
-# FIX 2 DONE
-def delete_core3D_from_pred2D():
-    import os
-    from wmem import utils, LabelImage
-    import numpy as np
-    from skimage.segmentation import relabel_sequential
-    datadir = '/Users/michielk/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00'
-    # load the 3D labels
-    h5_fname = 'B-NT-S10-2f_ROI_00ds7_labels_labelMA_core3D.h5'
-    h5_dset = 'labelMA_core3D_proofread'
-    h5_path = os.path.join(datadir, h5_fname, h5_dset)
-    core3D = LabelImage(h5_path)
-    core3D.load()  #1
-    # load the 2D labels
-    h5_fname = 'B-NT-S10-2f_ROI_00ds7_labels_labelMA.h5'
-    h5_dset = 'labelMA_pred'
-    h5_path = os.path.join(datadir, h5_fname, h5_dset)
-    pred2D = LabelImage(h5_path)
-    pred2D.load()  #2
-    # prepare the output file
-    h5_fname = 'B-NT-S10-2f_ROI_00ds7_labels_labelMA_core2D.h5'
-    h5_dset = 'labelMA_pred_nocore3D'
-    h5_path = os.path.join(datadir, h5_fname, h5_dset)
-    mo = LabelImage(h5_path, **pred2D.get_props())
-    mo.create()
-    # set the 2D labels within the mask of 3D labels to 0
-    labels_3D = core3D.ds[:]
-    labels_2D = pred2D.ds[:]
-    mask_3D = core3D.ds[:].astype('bool')
-    labels_2D[mask_3D] = 0
-    mo.write(labels_2D)
-    # close files
-    mo.close()
-    core3D.close()
-    pred2D.close()
-
-opf='_labels_labelMA_core2D' ods='labelMA_pred_nocore3D'
+ipf1='_labels_labelMA' ids1='labelMA_pred'
+ipf2='_labels_labelMA_core3D' ids2='labelMA_core3D_proofread'
+opf='_labels_labelMA_core2D_testmask' ods='labelMA_pred_nocore3D'
+python $scriptdir/wmem/combine_labels.py \
+    "$datadir/${dataset_ds}${ipf1}.h5/${ids1}" \
+    "$datadir/${dataset_ds}${ipf2}.h5/${ids2}" \
+    "$datadir/${dataset_ds}${opf}.h5/${ods}" -m 'mask'
+opf='_labels_labelMA_core2D_testmask' ods='labelMA_pred_nocore3D'
 h52nii '' "${dataset_ds}" "${opf}" "${ods}" '' '' '-i zyx -o xyz -d uint16'
 
 # fslmaths B-NT-S10-2f_ROI_00ds7_labels_labelMA_core2D_labelMA_pred_nocore3D_nii_delete.nii.gz -add B-NT-S10-2f_ROI_00ds7_labels_labelMA_core2D_labelMA_pred_nocore3D_delete_OLDNAME.nii.gz -bin B-NT-S10-2f_ROI_00ds7_labels_labelMA_core2D_labelMA_pred_nocore3D_nii_delete_new.nii.gz
+
+ipf='_labels_labelMA_core2D' ids='labelMA_pred_nocore3D_nii_delete'
+opf='_labels_labelMA_core2D' ods='labelMA_pred_nocore3D_nii_delete'
+python $scriptdir/wmem/stack2stack.py \
+    "$datadir/${dataset_ds}${ipf}_${ids}.nii.gz" \
+    "$datadir/${dataset_ds}${opf}.h5/${ods}" -i xyz -o zyx -d uint8
 
 def delete_nii():
     import os
@@ -541,14 +519,17 @@ def delete_nii():
     nii_path = os.path.join(datadir, '{}_{}.nii.gz'.format(nii_fname, nii_dset))
     mask = MaskImage(nii_path)
     mask.load()
+
     m = np.transpose(mask.ds[:].astype('bool'))
     labs = pred2D.ds[:]
     labs_masked = labs[m]
     labels = np.unique(labs_masked)
     labelsets = {0: set(list(labels))}
+
     comps = pred2D.split_path()
     lsroot = '{}_{}_nii_delete'.format(comps['base'], comps['dset'])
     utils.write_labelsets(labelsets, lsroot, ['pickle', 'txt'])
+
     pred2D.close()
     mask.close()
 
