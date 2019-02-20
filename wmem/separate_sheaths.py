@@ -314,9 +314,10 @@ def distance_transform_sw(labelMA, labelMM, weight=1, margin=50, medwidth_file='
         mask[z:Z, y:Y, x:X] = mask_region
 
         # add the weighted distance map
-        w = weight * mw
-        dist *= 1/w
-        wdist = 2 * (expit(x) - 0.5)
+        wdist = 2 * (expit(dist / (weight * mw)) - 0.5)
+#         w = weight * mw
+#         dist *= 1/w
+#         wdist = 2 * (expit(x) - 0.5)
         distsum_region = np.minimum(distsum_region, wdist)
         distsum[z:Z, y:Y, x:X] = distsum_region
 
