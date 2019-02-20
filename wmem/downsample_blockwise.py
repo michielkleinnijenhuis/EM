@@ -63,7 +63,7 @@ def downsample_blockwise(
         outsize = [int(np.ceil(float(d) / b))
                    for d, b in zip(slicedshape, blockreduce)]
         elsize = [float(e) * b
-                  for e, b in zip(elsize, blockreduce)]
+                  for e, b in zip(im.elsize, blockreduce)]
 
     # Open the outputfile for writing and create the dataset or output array.
     mo = Image(outputpath,
