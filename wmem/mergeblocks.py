@@ -64,7 +64,7 @@ def main(argv):
 
 
 def mergeblocks(
-        image_in,
+        images_in,
         dataslices=None,
         blocksize=[],
         blockmargin=[],
@@ -87,10 +87,9 @@ def mergeblocks(
 
     mpi = wmeMPI(usempi)
 
-    im = utils.get_image(image_in, comm=mpi.comm)
+    im = utils.get_image(images_in[0], comm=mpi.comm)
     props = im.get_props(protective=protective, squeeze=True)
     ndim = im.get_ndim()
-    im.close()
 
     props['dtype'] = datatype or props['dtype']
     props['chunks'] = props['chunks'] or None
@@ -112,7 +111,8 @@ def mergeblocks(
     mo = LabelImage(outputpath, **props)
     mo.create(comm=mpi.comm)
 
-    mpi.set_blocks(im, blocksize, blockmargin, blockrange)
+    mpi.blocks = [{'path': image_in for image_in in images_in}]
+    mpi.nblocks = len(images_in)
     mpi.scatter_series()
 
     # merge the datasets
@@ -121,7 +121,8 @@ def mergeblocks(
         block = mpi.blocks[i]
         try:
             maxlabel = process_block(block['path'], ndim, blockreduce, func,
-                                     blockoffset, blocksize, blockmargin, fullsize,
+                                     blockoffset, blocksize, blockmargin,
+                                     fullsize,
                                      mo.ds,
                                      is_labelimage, relabel,
                                      neighbourmerge, save_fwmap,
@@ -131,6 +132,7 @@ def mergeblocks(
             print('failed block {:03d}: {}'.format(i, block['path']))
             print(e)
 
+    im.close()
     mo.close()
 
 
