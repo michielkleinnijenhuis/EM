@@ -27,6 +27,7 @@ except:
     print("mpi4py could not be loaded")
 
 from wmem import parse, utils, downsample_blockwise
+from wmem import wmeMPI, Image, MaskImage, LabelImage
 
 
 def main(argv):
@@ -42,9 +43,11 @@ def main(argv):
 
     mergeblocks(
         args.inputfiles,
-        args.blockoffset,
+        args.dataslices,
         args.blocksize,
-        args.margin,
+        args.blockmargin,
+        args.blockrange,
+        args.blockoffset,
         args.fullsize,
         args.is_labelimage,
         args.relabel,
@@ -61,10 +64,12 @@ def main(argv):
 
 
 def mergeblocks(
-        h5paths_in,
-        blockoffset=[0, 0, 0],
+        image_in,
+        dataslices=None,
         blocksize=[],
-        margin=[0, 0, 0],
+        blockmargin=[],
+        blockrange=[],
+        blockoffset=[0, 0, 0],
         fullsize=[],
         is_labelimage=False,
         relabel=False,
@@ -74,32 +79,21 @@ def mergeblocks(
         func='np.amax',
         datatype='',
         usempi=False,
-        h5path_out='',
+        outputpath='',
         save_steps=False,
         protective=False,
         ):
     """Merge blocks of data into a single hdf5 file."""
 
-    # prepare mpi
-    mpi_info = utils.get_mpi_info(usempi)
-    series = np.array(range(0, len(h5paths_in)), dtype=int)
-    if mpi_info['enabled']:
-        series = utils.scatter_series(mpi_info, len(series))[0]
+    mpi = wmeMPI(usempi)
 
-    # TODO: save_steps
-    # check output paths
-    outpaths = {'out': h5path_out}
-    status = utils.output_check(outpaths, save_steps, protective)
-    if status == "CANCELLED":
-        return
+    im = utils.get_image(image_in, comm=mpi.comm)
+    props = im.get_props(protective=protective, squeeze=True)
+    ndim = im.get_ndim()
+    im.close()
 
-    # open data for reading
-    h5file_in, ds_in, elsize, axlab = utils.h5_load(h5paths_in[0],
-                                                    comm=mpi_info['comm'])
-    try:
-        ndim = ds_in.ndim
-    except AttributeError:
-        ndim = len(ds_in.dims)
+    props['dtype'] = datatype or props['dtype']
+    props['chunks'] = props['chunks'] or None
 
     # get the size of the outputfile
     # TODO: option to derive fullsize from dset_names?
@@ -107,58 +101,44 @@ def mergeblocks(
         datasize = np.subtract(fullsize, blockoffset)
         outsize = [int(np.ceil(d/np.float(b)))
                    for d, b in zip(datasize, blockreduce)]
-        elsize = [e*b for e, b in zip(elsize, blockreduce)]
+        props['elsize'] = [e*b for e, b in zip(im.elsize, blockreduce)]
     else:  # FIXME: 'zyx(c)' stack assumed
         outsize = np.subtract(fullsize, blockoffset)
 
     if ndim == 4:
-        outsize = list(outsize) + [ds_in.shape[3]]  # TODO: flexible insert
+        outsize = list(outsize) + [im.ds.shape[3]]  # TODO: flexible insert
 
-    datatype = datatype or ds_in.dtype
-    chunks = ds_in.chunks or None
+    props['shape'] = outsize
+    mo = LabelImage(outputpath, **props)
+    mo.create(comm=mpi.comm)
 
-    h5file_in.close()
-
-    # open data for writing
-    h5file_out, ds_out = utils.h5_write(
-        data=None,
-        shape=outsize,
-        dtype=datatype,
-        h5path_full=h5path_out,
-        chunks=chunks,
-        element_size_um=elsize,
-        axislabels=axlab,
-        comm=mpi_info['comm']
-        )
+    mpi.set_blocks(im, blocksize, blockmargin, blockrange)
+    mpi.scatter_series()
 
     # merge the datasets
     maxlabel = 0
-    for i in series:
-        h5path_in = h5paths_in[i]
+    for i in mpi.series:
+        block = mpi.blocks[i]
         try:
-            maxlabel = process_block(h5path_in, ndim, blockreduce, func,
-                                     blockoffset, blocksize, margin, fullsize,
-                                     ds_out,
+            maxlabel = process_block(block['path'], ndim, blockreduce, func,
+                                     blockoffset, blocksize, blockmargin, fullsize,
+                                     mo.ds,
                                      is_labelimage, relabel,
                                      neighbourmerge, save_fwmap,
-                                     maxlabel, usempi, mpi_info)
-            print('processed block {:03d}: {}'.format(i, h5path_in))
+                                     maxlabel, mpi)
+            print('processed block {:03d}: {}'.format(i, block['path']))
         except Exception as e:
-            print('failed block {:03d}: {}'.format(i, h5path_in))
+            print('failed block {:03d}: {}'.format(i, block['path']))
             print(e)
 
-    # close and return
-    try:
-        h5file_out.close()
-    except (ValueError, AttributeError):
-        return ds_out
+    mo.close()
 
 
 def process_block(h5path_in, ndim, blockreduce, func,
                   blockoffset, blocksize, margin, fullsize,
                   ds_out,
                   is_labelimage, relabel, neighbourmerge, save_fwmap,
-                  maxlabel, usempi, mpi_info):
+                  maxlabel, mpi):
     """Write a block of data into a hdf5 file."""
 
     # open data for reading
@@ -202,7 +182,7 @@ def process_block(h5path_in, ndim, blockreduce, func,
 
     # forward map to relabel the blocks in the output
     if relabel:
-        fw, maxlabel = relabel_block(ds_in, maxlabel, mpi_info)
+        fw, maxlabel = relabel_block(ds_in, maxlabel, mpi)
         if save_fwmap:
             root = os.path.splitext(h5file_in.filename)[0]
             fpath = '{}_{}.npy'.format(root, ds_in.name[1:])
@@ -237,7 +217,7 @@ def process_block(h5path_in, ndim, blockreduce, func,
     h5file_in.close()
 
 
-def relabel_block(ds_in, maxlabel, mpi_info=None):
+def relabel_block(ds_in, maxlabel, mpi=None):
     """Relabel the labelvolume with consecutive labels."""
 
     """NOTE:
@@ -245,25 +225,22 @@ def relabel_block(ds_in, maxlabel, mpi_info=None):
     """
     fw = relabel_sequential(ds_in[:])[1]
 
-    if mpi_info['enabled']:
+    if mpi.enabled:
         # FIXME: only terminates properly when: nblocks % size = 0
-        comm = mpi_info['comm']
-        rank = mpi_info['rank']
-        size = mpi_info['size']
 
         num_labels = np.amax(fw)
-        num_labels = comm.gather(num_labels, root=0)
+        num_labels = mpi.comm.gather(num_labels, root=0)
 
-        if rank == 0:
+        if mpi.rank == 0:
             add_labels = [maxlabel + np.sum(num_labels[:i])
-                          for i in range(1, size)]
+                          for i in range(1, mpi.size)]
             add_labels = np.array([maxlabel] + add_labels, dtype='i')
             maxlabel = maxlabel + np.sum(num_labels)
         else:
-            add_labels = np.empty(size)
+            add_labels = np.empty(mpi.size)
 
-        add_labels = comm.bcast(add_labels, root=0)
-        fw[1:] += add_labels[rank]
+        add_labels = mpi.comm.bcast(add_labels, root=0)
+        fw[1:] += add_labels[mpi.rank]
 
     else:
 

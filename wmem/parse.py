@@ -298,20 +298,6 @@ def parse_mergeblocks(parser):
         help='offset of the datablock'
         )
     parser.add_argument(
-        '-p', '--blocksize',
-        nargs=3,
-        type=int,
-        default=[0, 0, 0],
-        help='size of the datablock'
-        )
-    parser.add_argument(
-        '-q', '--margin',
-        nargs=3,
-        type=int,
-        default=[0, 0, 0],
-        help='the datablock overlap used'
-        )
-    parser.add_argument(
         '-s', '--fullsize',
         nargs=3,
         type=int,
