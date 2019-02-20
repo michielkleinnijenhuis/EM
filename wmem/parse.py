@@ -385,6 +385,14 @@ def parse_downsample_blockwise(parser):
         help='the function to use for blockwise reduction'
         )
 
+    parser.add_argument(
+        '-s', '--fullsize',
+        nargs=3,
+        type=int,
+        default=[],
+        help='the size of the full dataset'
+        )
+
     return parser
 
 

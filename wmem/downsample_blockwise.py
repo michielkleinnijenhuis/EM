@@ -30,6 +30,7 @@ def main(argv):
         args.dataslices,
         args.blockreduce,
         args.func,
+        args.fullsize,
         args.outputpath,
         args.save_steps,
         args.protective,
@@ -41,6 +42,7 @@ def downsample_blockwise(
         dataslices=None,
         blockreduce=[3, 3, 3],
         func='np.amax',
+        fullsize=[],
         outputpath='',
         save_steps=False,
         protective=False,
@@ -51,8 +53,17 @@ def downsample_blockwise(
     im = utils.get_image(image_in, dataslices=dataslices)
 
     # Get the matrix size and resolution of the outputdata.
-    slicedshape = list(im.slices2shape())
-    outsize, elsize = get_new_sizes(func, blockreduce, slicedshape, im.elsize)
+    if func == 'expand':
+        outsize = [min(slc.stop * b, f) - slc.start * b
+                   for slc, b, f in zip(im.slices, blockreduce, fullsize)]
+        elsize = [float(e) / b
+                  for e, b in zip(im.elsize, blockreduce)]
+    else:
+        slicedshape = list(im.slices2shape())
+        outsize = [int(np.ceil(float(d) / b))
+                   for d, b in zip(slicedshape, blockreduce)]
+        elsize = [float(e) * b
+                  for e, b in zip(elsize, blockreduce)]
 
     # Open the outputfile for writing and create the dataset or output array.
     mo = Image(outputpath,
@@ -68,7 +79,9 @@ def downsample_blockwise(
         out = im.ds[im.slices[0], im.slices[1], im.slices[2]]  # FIXME: 4D
         for axis in range(0, mo.get_ndim()):
             out = np.repeat(out, blockreduce[axis], axis=axis)
-        mo.ds[mo.slices[0], ...] = out
+        mo.ds[mo.slices[0], ...] = out[mo.slices[0],
+                                       mo.slices[1],
+                                       mo.slices[2]]
     else:
         """ TODO: flexible mapping from in to out
         now:
@@ -85,22 +98,6 @@ def downsample_blockwise(
     mo.close()
 
     return mo
-
-
-def get_new_sizes(func, blockreduce, dssize, elsize):
-    """Calculate the reduced dataset size and voxelsize."""
-
-    if func == 'expand':
-        fun_dssize = lambda d, b: int(np.ceil(float(d) * b))
-        fun_elsize = lambda e, b: float(e) / b
-    else:
-        fun_dssize = lambda d, b: int(np.ceil(float(d) / b))
-        fun_elsize = lambda e, b: float(e) * b
-
-    dssize = [fun_dssize(d, b) for d, b in zip(dssize, blockreduce)]
-    elsize = [fun_elsize(e, b) for e, b in zip(elsize, blockreduce)]
-
-    return dssize, elsize
 
 
 # NOTE: adapted version of scikit-image-dev0.13 block_reduce
