@@ -612,7 +612,7 @@ function get_cmd_mergeblocks {
         $datadir/$dataset$opf.h5/$ods \
         -b $zo $yo $xo \
         --blocksize $zs $ys $xs \
-        -q $zm $ym $xm \
+        --blockmargin $zm $ym $xm \
         -s $zmax $ymax $xmax \
         $args
 
