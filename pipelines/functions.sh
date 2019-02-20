@@ -842,3 +842,14 @@ function get_cmd_upsample_blocks {
 
 }
 
+
+function get_cmd_fill_holes {
+    # Get the command for .
+
+    echo python $scriptdir/wmem/fill_holes.py -S \
+        $datadir/blocks_$bs/$datastem$ipf.h5/$ids \
+        $datadir/blocks_$bs/$datastem$opf.h5/$ods \
+        $args
+
+}
+
