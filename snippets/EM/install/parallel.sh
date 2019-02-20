@@ -20,6 +20,7 @@ conda create --name parallel python=2.7 mpi4py unittest2 numpy scipy scikit-imag
 source activate parallel
 
 # parallel hdf5 build
+cd /data/ndcn-fmrib-water-brain/ndcn0180/workspace/hdf5-1.10.1
 ./configure --enable-parallel --prefix=$HDF5_PREFIX
 make
 make check

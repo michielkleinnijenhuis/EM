@@ -153,6 +153,62 @@ function datastems_blocks {
 }
 
 
+function datastem2coords {
+    #
+
+    CO=${datastem#"$dataset"}
+    x=${CO:1:5}; x=$(strip_leading_zeroes $x);
+    X=${CO:7:5}; X=$(strip_leading_zeroes $X);
+    y=${CO:13:5}; y=$(strip_leading_zeroes $y);
+    Y=${CO:19:5}; Y=$(strip_leading_zeroes $Y);
+    z=${CO:25:5}; z=$(strip_leading_zeroes $z);
+    Z=${CO:31:5}; Z=$(strip_leading_zeroes $Z);
+
+    echo $x $X $y $Y $z $Z
+
+}
+
+
+function downsampled_coords {
+
+    #echo "$(( $1 / ds)) $(( $2 / ds)) $(( $3 / ds)) $(( $4 / ds)) $5 $6"
+    k=$(( ds - 1 ))
+    echo "$(( ($1 + k) / ds)) $(( ($2 + k) / ds)) $(( ($3 + k) / ds)) $(( ($4 + k) / ds)) $5 $6"
+
+
+}
+
+
+function coordsXYZ_to_slicesZYX {
+
+    local start_x=$1
+    local stop_x=$2
+    local start_y=$3
+    local stop_y=$4
+    local start_z=$5
+    local stop_z=$6
+
+    k=$(( ds - 1 ))
+    [[ "$stop_x" -eq "$(( ($xmax + k) / ds ))" ]] && stop_x=0
+    [[ "$stop_y" -eq "$(( ($ymax + k) / ds ))" ]] && stop_y=0
+    [[ "$stop_z" -eq "$zmax" ]] && stop_z=0
+
+    echo "$start_z $stop_z 1 $start_y $stop_y 1 $start_x $stop_x"
+
+}
+
+
+function strip_leading_zeroes {
+    #
+
+    local num=$1
+
+    num=${num#"${num%%[!0]*}"}
+    [[ ! -z "$num" ]] && echo "$num" || echo "0"
+
+}
+
+
 function get_coords_upper {
     # Get upper coordinate of the block.
     # Adds the blocksize and margin to lower coordinate,
@@ -555,7 +611,7 @@ function get_cmd_mergeblocks {
         "${infiles[@]}" \
         $datadir/$dataset$opf.h5/$ods \
         -b $zo $yo $xo \
-        -p $zs $ys $xs \
+        --blocksize $zs $ys $xs \
         -q $zm $ym $xm \
         -s $zmax $ymax $xmax \
         $args
@@ -733,6 +789,56 @@ function get_cmd_s2s {
     echo python -W ignore $scriptdir/wmem/stack2stack.py \
         $datadir/$dataroot$ipf.h5/$ids \
         $datadir/$dataroot$opf.h5/$ods $args
+
+}
+
+
+function get_cmd_smooth {
+    # Get the command for .
+
+    echo python -W ignore $scriptdir/wmem/image_ops.py \
+        $datadir/blocks_$bs/$datastem$ipf.h5/$ids \
+        $datadir/blocks_$bs/$datastem$opf.h5/$ods \
+        $args
+
+}
+
+
+function get_cmd_watershed_ics {
+    # Get the command for .
+
+    echo python -W ignore $scriptdir/wmem/watershed_ics.py \
+        $datadir/blocks_$bs/$datastem$ipf.h5/$ids \
+        $datadir/blocks_$bs/$datastem$opf.h5/$ods \
+        --masks NOT $datadir/blocks_$bs/$datastem$mpf.h5/$mds \
+        $args
+
+}
+
+
+function get_cmd_agglo_mask {
+    # Get the command for .
+
+    echo python -W ignore $scriptdir/wmem/agglo_from_labelmask.py \
+        $datadir/blocks_$bs/$datastem$lpf.h5/$lds \
+        $datadir/blocks_$bs/$datastem$ipf.h5/$ids \
+        $datadir/blocks_$bs/$datastem$opf.h5/$ods \
+        $args
+
+}
+
+
+function get_cmd_upsample_blocks {
+    # Get the command for .
+
+    coords=$( datastem2coords ${datastem} )
+    coords_ds=$( downsampled_coords $coords )
+    dataslices=$( coordsXYZ_to_slicesZYX $coords_ds )
+
+    echo python -W ignore $scriptdir/wmem/downsample_blockwise.py \
+        $datadir/${dataset_ds}${ipf}.h5/${ids} \
+        $datadir/blocks_$bs/$datastem$opf.h5/$ods \
+        -D "$dataslices" 1 -B 1 $ds $ds -f 'expand' -s $zmax $ymax $xmax
 
 }
 

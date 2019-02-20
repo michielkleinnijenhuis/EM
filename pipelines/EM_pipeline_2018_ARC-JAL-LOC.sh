@@ -28,6 +28,7 @@ bs='0500' && prep_dataset $dataset $bs && echo ${#datastems[@]}
 
 export LC_ALL=en_US.UTF-8
 export LANG=en_US.UTF-8
+
 source activate scikit-image-devel_0.13
 
 

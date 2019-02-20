@@ -344,7 +344,7 @@ function conda_directives {
 
     if [[ $additions == *"conda"* ]]
     then
-      echo "export PATH=$CONDA_PATH:\$PATH"
+      echo "export PATH=$( conda info --root ):\$PATH"
       echo "source activate $CONDA_ENV"
     fi
 
@@ -1055,15 +1055,10 @@ function prob2mask_datastems {
     n=${#datastems[@]}
 
     jobname="p2m_dstems_$ods"
-    additions='conda'
-    CONDA_ENV='root'
-
-    fun=get_cmd_prob2mask_datastems
-    get_command_array_datastems $fun
 
     if [[ "$compute_env" == *"ARC"* ]]; then
 
-        additions+='-array'
+        additions='array'
 
         nodes=1
         memcpu=30000
@@ -1071,19 +1066,29 @@ function prob2mask_datastems {
         tasks=16
         njobs=$(( (n + tasks - 1) / tasks ))
 
+        fun=get_cmd_prob2mask_datastems
+        get_command_array_datastems $fun
         unset JOBS && declare -a JOBS
         array_job $njobs $tasks
 
     elif [ "$compute_env" == "JAL" ]; then
 
+	    additions='conda'
+	    CONDA_ENV='root'
+        fun=get_cmd_prob2mask_datastems
+        get_command_array_datastems $fun
         cmd=$( IFS=$'\n'; echo "${cmdarray[*]}" )
         single_job "$cmd"
 
     elif [ "$compute_env" == "LOCAL" ]; then
 
+        additions='conda'
+        CONDA_ENV='root'
         tasks=$n
         njobs=1
 
+        fun=get_cmd_prob2mask_datastems
+        get_command_array_datastems $fun
         unset JOBS && declare -a JOBS
         array_job $njobs $tasks
 
@@ -1319,6 +1324,224 @@ function slicvoxels {
 
     fi
 
+    unset JOBS && declare -a JOBS
+    array_job $njobs $tasks
+
+}
+
+
+function smoothdata {
+    #
+
+    local jobname additions CONDA_ENV njobs nodes tasks memcpu wtime
+    local fun nstems
+
+    local q=$1
+
+    local stemsmode=$2
+
+    local ipf=$3
+    local ids=$4
+    local opf=$5
+    local ods=$6
+    shift 6
+    local args=$*
+
+    set_datastems $stemsmode
+    n=${#datastems[@]}
+
+    jobname="smooth_$ods"
+    additions='conda'
+    CONDA_ENV='root'
+
+    if [[ "$compute_env" == *"ARC"* ]]; then
+
+        additions+='-array'
+
+        nodes=1
+        memcpu=125000; wtime='00:30:00';
+
+        tasks=16
+        njobs=$(( (n + tasks - 1) / tasks ))
+
+    elif [ "$compute_env" == "JAL" ]; then
+
+        additions+='-array'
+        tasks=$n
+        njobs=1
+
+    elif [ "$compute_env" == "LOCAL" ]; then
+
+        tasks=$n
+        njobs=1
+
+    fi
+
+    local fun=get_cmd_smooth
+    get_command_array_datastems $fun
+    unset JOBS && declare -a JOBS
+    array_job $njobs $tasks
+
+}
+
+
+function watershed_ics {
+    #
+
+    local jobname additions CONDA_ENV njobs nodes tasks memcpu wtime
+    local fun nstems
+
+    local q=$1
+
+    local stemsmode=$2
+
+    local ipf=$3
+    local ids=$4
+    local opf=$5
+    local ods=$6
+    local mpf=$7
+    local mds=$8
+    shift 8
+    local args=$*
+
+    set_datastems $stemsmode
+    n=${#datastems[@]}
+
+    jobname="ws_$ods"
+
+    if [[ "$compute_env" == *"ARC"* ]]; then
+
+        additions='array'
+
+        nodes=1
+        # memcpu=125000;
+        wtime='03:10:00';
+        tasks=16
+        njobs=$(( (n + tasks - 1) / tasks ))
+
+    elif [ "$compute_env" == "JAL" ]; then
+
+        additions='array'
+        tasks=$n
+        njobs=1
+
+    elif [ "$compute_env" == "LOCAL" ]; then
+
+        tasks=$n
+        njobs=1
+
+    fi
+
+    local fun=get_cmd_watershed_ics
+    get_command_array_datastems $fun
+    unset JOBS && declare -a JOBS
+    array_job $njobs $tasks
+
+}
+
+
+function agglo_mask {
+    #
+
+    local jobname additions CONDA_ENV njobs nodes tasks memcpu wtime
+    local fun nstems
+
+    local q=$1
+
+    local stemsmode=$2
+
+    local ipf=$3
+    local ids=$4
+    local opf=$5
+    local ods=$6
+    local lpf=$7
+    local lds=$8
+    shift 8
+    local args=$*
+
+    set_datastems $stemsmode
+    n=${#datastems[@]}
+
+    jobname="ws_$ods"
+
+    if [[ "$compute_env" == *"ARC"* ]]; then
+
+        additions='array'
+
+        nodes=1
+        # memcpu=125000;
+        wtime='03:10:00';
+        tasks=16
+        njobs=$(( (n + tasks - 1) / tasks ))
+
+    elif [ "$compute_env" == "JAL" ]; then
+
+        additions='array'
+        tasks=$n
+        njobs=1
+
+    elif [ "$compute_env" == "LOCAL" ]; then
+
+        tasks=$n
+        njobs=1
+
+    fi
+
+    local fun=get_cmd_agglo_mask
+    get_command_array_datastems $fun
+    unset JOBS && declare -a JOBS
+    array_job $njobs $tasks
+
+}
+
+
+function upsample_blocks {
+    #
+
+    local jobname additions CONDA_ENV njobs nodes tasks memcpu wtime
+    local fun nstems
+
+    local q=$1
+
+    local stemsmode=$2
+
+    local ipf=$3
+    local ids=$4
+    local opf=$5
+    local ods=$6
+    shift 6
+    local args=$*
+
+    set_datastems $stemsmode
+    n=${#datastems[@]}
+
+    jobname="us_$ods"
+
+    if [[ "$compute_env" == *"ARC"* ]]; then
+
+        additions='array'
+
+        nodes=1
+        # memcpu=125000;
+        wtime='03:10:00';
+        tasks=16
+        njobs=$(( (n + tasks - 1) / tasks ))
+
+    elif [ "$compute_env" == "JAL" ]; then
+
+        additions='array'
+        tasks=$n
+        njobs=1
+
+    elif [ "$compute_env" == "LOCAL" ]; then
+
+        tasks=$n
+        njobs=1
+
+    fi
+
+    local fun=get_cmd_upsample_blocks
+    get_command_array_datastems $fun
     unset JOBS && declare -a JOBS
     array_job $njobs $tasks
 
