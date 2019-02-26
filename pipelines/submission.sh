@@ -1601,3 +1601,57 @@ function fill_holes {
 }
 
 
+function merge_labels_ws {
+    #
+
+    local jobname additions CONDA_ENV njobs nodes tasks memcpu wtime
+    local cmd
+
+    local q=$1
+
+    local dataroot=$2
+
+    local ipf=$3
+    local ids=$4
+    local opf=$5
+    local ods=$6
+
+    shift 6
+    local args=$*
+
+    jobname="ws"
+    additions='conda'
+    CONDA_ENV='parallel'
+
+    if [[ "$compute_env" == *"ARC"* ]]; then
+
+        additions+='-mpi'
+        mpiflag='-M'
+
+        nodes=4
+        memcpu=60000
+        wtime='05:10:00'
+        tasks=16
+        njobs=1
+
+    elif [ "$compute_env" == "JAL" ]; then
+
+        mpiflag=''
+
+    elif [ "$compute_env" == "LOCAL" ]; then
+
+        additions+='-mpi'  # FIXME: no mpi for 2Dprops
+        mpiflag='-M'
+        tasks=7  # 7 props
+
+        source activate scikit-image-devel_0.13
+
+    fi
+
+    cmd=$( get_cmd_${FUNCNAME[0]} $dataroot )
+
+    single_job "$cmd"
+
+}
+
+

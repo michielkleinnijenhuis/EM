@@ -853,3 +853,16 @@ function get_cmd_fill_holes {
 
 }
 
+
+function get_cmd_merge_labels_ws {
+    # Get the command for .
+
+    dataroot=$1
+
+    echo python $scriptdir/wmem/merge_labels.py -S \
+        $datadir/$dataroot$ipf.h5/$ids \
+        $datadir/$dataroot$opf.h5/$ods \
+        $args
+
+}
+
