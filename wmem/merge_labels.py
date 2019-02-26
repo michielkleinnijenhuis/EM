@@ -155,13 +155,16 @@ def merge_labels_by_method(merge_method, mpi, labels,
 
         data = utils.get_image(h5path_data,
                                comm=mpi.comm, slices=labels.slices)
-        maskMM = utils.get_image(h5path_mmm, imtype='Mask',
-                                 comm=mpi.comm, slices=labels.slices)
-#         maskDS = utils.get_image(h5path_mds, imtype='Mask',
-#                                  comm=mpi.comm, slices=labels.slices)
-#         maskDS[:4, :, :] = 0
-#         maskDS[-4:, :, :] = 0
-        maskDS = None
+        if h5path_mmm:
+            maskMM = utils.get_image(h5path_mmm, imtype='Mask',
+                                     comm=mpi.comm, slices=labels.slices)
+        else:
+            maskMM = None
+        if h5path_mds:
+            maskDS = utils.get_image(h5path_mds, imtype='Mask',
+                                     comm=mpi.comm, slices=labels.slices)
+        else:
+            maskDS = None
 
         labelsets = evaluate_labels(merge_method, mpi, labels, None,
                                     data=data,
@@ -349,19 +352,17 @@ def merge_watershed(labels, rp_map, prop, labelsets={},
         if maskMM is not None:
             maskMM.slices = slices
             maskMM_ds = maskMM.slice_dataset(squeeze=False)
-        else:
-            maskMM_ds = None
-        if maskDS is not None:
+            mask = ~maskMM_ds.astype('bool')
+        elif maskDS is not None:
             maskDS.slices = slices
             maskDS_ds = maskDS.slice_dataset(squeeze=False)
+            mask = maskDS_ds.astype('bool')
         else:
-            maskDS_ds = None
+            mask = np.ones_like(labels_ds[:], dtype='bool')
 
         if len(np.unique(labels_ds)) < 2:
             continue  # label 0 and prop.label assumed to be there
 
-        # NOTE: maskMM assumed
-        mask = ~maskMM_ds.astype('bool')
         # TODO: erode maskMM? doesn't help much;
         # actually loses quite some fills, but haven't dilated the borderslice label
 #         mask = binary_dilation(~maskMM_ds.astype('bool'))
@@ -398,7 +399,7 @@ def find_candidate_ws(direction, labelsets, rp_map, prop, imregion, ws,
         counts = np.bincount(prop_ws.intensity_image[prop_ws.image])
         # mark anything other than zero's in the region
         candidate_labels = list(np.argwhere(counts[1:]) + 1)
-        print(candidate_labels)
+#         print(candidate_labels)
 
         if not candidate_labels:
             return labelsets
@@ -589,8 +590,10 @@ def connect_to_borders(prop, im, mo, data=None, maskMM=None, maskDS=None,
         if maskMM is not None:
             maskMM.slices = slices
             maskMM_ds = maskMM.slice_dataset(squeeze=False)
+#             mask = binary_dilation(~maskMM_ds.astype('bool'))
+            mask = ~maskMM_ds.astype('bool')
         else:
-            maskMM_ds = None
+            mask = np.ones_like(mo.ds[:], dtype='bool')
         if maskDS is not None:
             maskDS.slices = slices
             maskDS_ds = maskDS.slice_dataset(squeeze=False)
@@ -600,9 +603,7 @@ def connect_to_borders(prop, im, mo, data=None, maskMM=None, maskDS=None,
         if len(np.unique(labels_ds)) < 2:
             continue  # label 0 and prop.label assumed to be there
 
-        mask = ~maskMM_ds.astype('bool')
-#         mask = binary_dilation(~maskMM_ds.astype('bool'))
-        seeds = create_seeds(labels_ds, prop.label, prop.label, cylinder=1, labval=prop.label)
+        seeds = create_seeds(labels_ds, prop.label, prop.label, cylinder=2, labval=prop.label)
         ws = watershed(-data_ds, seeds, mask=mask)
 
         mask_label = ws == prop.label
