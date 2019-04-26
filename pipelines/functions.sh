@@ -10,9 +10,11 @@ function prep_environment {
     # for easy rsyncing between systems
     host_jal=michielk@jalapeno.fmrib.ox.ac.uk
     host_arc=ndcn0180@arcus-b.arc.ox.ac.uk
-    scriptdir_loc='/Users/michielk/workspace/EM'
+	host_pmc=mkleinnijenhuis@processed.pmc_research.op.umcutrecht.nl
+    scriptdir_loc="$HOME/workspace/EM"
     scriptdir_jal='/home/fs0/michielk/workspace/EM'
     scriptdir_arc='/home/ndcn0180/workspace/EM'
+    scriptdir_pmc='/home/pmc_research/mkleinnijenhuis/workspace/EM'
 
     if [ "$compute_env" == "ARCB" ]
     then
@@ -87,6 +89,25 @@ function prep_environment {
         eed_script="$scriptdir/wmem/EM_eed_simple.m"
         [ ! -f "$eed_tgtdir/EM_eed_simple.app/Contents/MacOS/EM_eed_simple" ] &&
             deployed_eed "$eed_tgtdir" "$eed_tbxdir" "$eed_script"
+
+    elif [ "$compute_env" == "RIOS013" ]
+    then
+        DATA="$HOME/oxdata/P01"
+        PATH="${HOME}/anaconda2/bin:$PATH"
+        CONDA_PATH="$( conda info --root )"
+        PYTHONPATH="$scriptdir"
+        PYTHONPATH="$PYTHONPATH:$HOME/workspace/pyDM3reader"
+        imagej='/Applications/Fiji.app/Contents/MacOS/ImageJ-macosx'
+        ilastik='/Applications/ilastik-1.2.2post1-OSX.app/Contents/MacOS/ilastik'
+
+        eed_tgtdir="$scriptdir/bin"
+        eed_tbxdir="$HOME/workspace/matlab/toolboxes/coherencefilter_version5b"
+        eed_script="$scriptdir/wmem/EM_eed_simple.m"
+        [ ! -f "$eed_tgtdir/EM_eed_simple.app/Contents/MacOS/EM_eed_simple" ] &&
+            deployed_eed "$eed_tgtdir" "$eed_tbxdir" "$eed_script"
+
+#    elif [ "$compute_env" == "UBC" ]
+#    then
 
     fi
 
