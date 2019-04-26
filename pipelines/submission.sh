@@ -1640,7 +1640,7 @@ function merge_labels_ws {
 
     elif [ "$compute_env" == "LOCAL" ]; then
 
-        additions+='-mpi'  # FIXME: no mpi for 2Dprops
+        additions+='-mpi'
         mpiflag='-M'
         tasks=7  # 7 props
 
