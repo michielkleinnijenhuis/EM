@@ -462,6 +462,7 @@ def merge_overlapping_labels():
 
 def connect_split_label(prop, im, mo, data, mask, axons, searchradius):
 
+    print(prop.label)
     labels_split = label(prop.image)
 
     try:
@@ -571,7 +572,7 @@ def connect_to_borders(prop, im, mo, data=None, maskMM=None, maskDS=None,
 
         slices = get_region_slices_projected(direction, im, prop,
                                              searchradius,
-                                             z_extent=searchradius[0])[0]
+                                             z_extent=10)[0]  # z_extent=searchradius[0]
 
 #         print(prop.label, direction, slices)
 
@@ -623,13 +624,78 @@ def fill_to_borders(prop, mo, data, mask, axons):
         axons_ds = None
 
     seeds = create_seeds(im_ds, prop.label, prop.label, axons_ds, cylinder=1)
-    ws = watershed(-data_ds, seeds, mask=~mask_ds.astype('bool'))
+    mask = ~mask_ds.astype('bool')
+    # FIXME: add cylinder to mask instead:
+#     maskcyl = create_seeds(im_ds, prop.label, prop.label, axons_ds, cylinder=1)
+#     mask = maskcyl != -1
+#     mask = np.logical_and(~mask_ds.astype('bool'), mask)
+    ws = watershed(-data_ds, seeds, mask=mask)
 
     mask_label = ws == 1
     wsout = im_ds
     wsout[mask_label] = prop.label
 
     return wsout
+
+
+def fill_connected_labels(datadir='/Users/michielk/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00',
+                          dataset='B-NT-S10-2f_ROI_00ds7',
+                          h5_dset_in='labelMA_nt_ws',
+                          searchradius=[10, 10, 10], use_axons=False,
+                          between=True, to_border=True):
+    import os
+
+    h5_fname = '{}_labels_labelMA_comb.h5'.format(dataset)
+    h5_dset = h5_dset_in
+    h5_path = os.path.join(datadir, h5_fname, h5_dset)
+    svoxs = utils.get_image(h5_path, imtype='Label')
+
+    if use_axons:
+        h5_fname = '{}_labels_labelMA_comb.h5'.format(dataset)
+        h5_dset = 'labelMA_nt_probMA_eed_thr0.5_labeled_axons'
+        h5_path = os.path.join(datadir, h5_fname, h5_dset)
+        axons = utils.get_image(h5_path, imtype='Label')
+    else:
+        # FIXME: not sure I want to use this #
+        axons = None
+
+    h5_fname = '{}.h5'.format(dataset)
+    h5_dset = 'data'
+    h5_path = os.path.join(datadir, h5_fname, h5_dset)
+    data = utils.get_image(h5_path)
+
+    h5_fname = '{}_masks_maskMM.h5'.format(dataset)
+    h5_dset = 'maskMM_PP'
+    h5_path = os.path.join(datadir, h5_fname, h5_dset)
+    mask = utils.get_image(h5_path, imtype='Mask')
+
+    h5_fname = h5_fname = '{}_labels_labelMA_comb.h5'.format(dataset)
+    h5_dset = h5_dset_in
+    if between and to_border:
+        h5_dset = h5_dset + '_filled'
+    elif between:
+        h5_dset = h5_dset + '_between'
+    elif to_border:
+        h5_dset = h5_dset + '_toborder'
+    outputpath = os.path.join(datadir, h5_fname, h5_dset)
+    props = svoxs.get_props(protective=False)
+    mo = LabelImage(outputpath, **props)
+    mo.create()
+    mo.ds[:] = np.copy(svoxs.ds[:])
+
+    rp_main = regionprops(svoxs.ds, mask.ds)
+    for prop in rp_main:
+#         if prop.label not in [1517, 1518, 1519]:
+#             continue
+        if between:
+            connect_split_label(prop, svoxs, mo, data, mask, axons, searchradius)
+        if to_border:
+            connect_to_borders(prop, svoxs, mo, data, mask, axons, searchradius)
+
+    mo.close()
+    svoxs.close()
+    data.close()
+    mask.close()
 
 
 def create_seeds(imregion, label_top, label_bot,
@@ -644,6 +710,8 @@ def create_seeds(imregion, label_top, label_bot,
     # label the surround with -1 (and the area to fill with 0)
     if cylinder:
         seeds = create_seeds_cylinder(seeds, mask_bot, mask_top, cylinder)
+        # TODO: is this creating the correct seed in the borderslice
+        # or does it only do the cylinder-surround?
     else:
         # only fill with surround if label is in the top/bot slice
         if np.sum(mask_bot) != 0:
@@ -665,7 +733,9 @@ def create_seeds(imregion, label_top, label_bot,
     return seeds
 
 
-def create_seeds_cylinder(seeds, mask_bot=None, mask_top=None, cylinder_factor=1):
+def create_seeds_cylinder(seeds, mask_bot=None, mask_top=None,
+                          cylinder_factor=1,
+                          fill_centerline=False):
 
     bot = np.sum(mask_bot) == 0
     top = np.sum(mask_top) == 0
@@ -703,7 +773,8 @@ def create_seeds_cylinder(seeds, mask_bot=None, mask_top=None, cylinder_factor=1
         seeds_slc[int(ys[slc]), int(xs[slc])] = 1
         seeds_slc = binary_dilation(seeds_slc, disk_ed).astype('int')
 
-        if ~bot and ~top:  # TODO: only do this for short ranges??
+        if (~bot and ~top) or fill_centerline:
+            # TODO: only do this for short ranges??
             seeds_slc[int(ys[slc]), int(xs[slc])] = 2
 
         seeds[slc, :, :] = seeds_slc
@@ -828,15 +899,18 @@ def get_region_slices_between(im, prop, bot, top, searchradius=[20, 20, 20]):
 def get_region_slices_projected(direction, im, prop,
                                 searchradius=[20, 20, 20], z_extent=10):
 
-    # centroids of borderslice and labelslice
+    # centroids of borderslice and labelslice (i.e. the one *z_extent* sections down/up)
     b_idx = get_borderslice(direction, prop)
     z, Z = get_zZ(direction, im, prop, searchradius)
     l_idx = {'down': b_idx + z_extent,
              'up': b_idx - z_extent}[direction]
 
+#     print(z_extent, b_idx, l_idx, z, Z)
     if (l_idx < 0
-            or l_idx > (im.dims[0] - 1)
-            or (Z-z < z_extent)):
+            or l_idx > (im.dims[0] - 1)):
+#         or (Z-z < z_extent)
+        # FIXME: the final condition only valid if Z-z pertains to box around label
+        print('no projection')
         return get_region_slices(direction, im, prop, searchradius)
 
     b_mask = im.ds[b_idx, :, :] == prop.label
