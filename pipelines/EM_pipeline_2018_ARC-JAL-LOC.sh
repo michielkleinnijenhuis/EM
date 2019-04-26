@@ -661,7 +661,9 @@ opf='_labels_labelMA_comb' ods='labelMA_nt'
 h52nii '' "${dataset_ds}" "${opf}" "${ods}" '' '' '-i zyx -o xyz -d uint16'
 
 
-### select the 3D labels overlapping with probMA_labeled and map them
+###############################################################################
+### select the 3D labels overlapping with probMA_labeled and map them       ###
+###############################################################################
 r=0.00
 ipf='_labels_labelMA_core3D' ids="probMA_eed_thr0.5_labeled"
 spf='_labels_labelMA_comb' sds="labelMA_nt"
@@ -754,57 +756,6 @@ h52nii '' "${dataset_ds}" "${opf}" "${ods}_svoxs" '' '' '-i zyx -o xyz -d uint16
 h52nii '' "${dataset_ds}" "${opf}" "${ods}_svoxs_stitched" '' '' '-i zyx -o xyz -d uint16'
 
 
-def fill_connected_labels():
-    import os
-    from wmem import utils, LabelImage, merge_labels
-    import numpy as np
-    from skimage.measure import label, regionprops
-    from skimage.morphology import watershed
-    import glob
-    import pickle
-    datadir = '/Users/michielk/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00'
-
-    h5_fname = 'B-NT-S10-2f_ROI_00ds7_labels_labelMA_comb.h5'
-    h5_dset = 'labelMA_nt_probMA_eed_thr0.5_labeled_svoxs_stitched'
-    h5_path = os.path.join(datadir, h5_fname, h5_dset)
-    svoxs = utils.get_image(h5_path, imtype='Label')
-
-    h5_fname = 'B-NT-S10-2f_ROI_00ds7_labels_labelMA_comb.h5'
-    h5_dset = 'labelMA_nt_probMA_eed_thr0.5_labeled_axons'
-    h5_path = os.path.join(datadir, h5_fname, h5_dset)
-    # axons = utils.get_image(h5_path, imtype='Label')
-    # FIXME: not sure I want to use this
-    axons = None
-
-    h5_fname = 'B-NT-S10-2f_ROI_00ds7.h5'
-    h5_dset = 'data'
-    h5_path = os.path.join(datadir, h5_fname, h5_dset)
-    data = utils.get_image(h5_path)
-
-    h5_fname = 'B-NT-S10-2f_ROI_00ds7_masks_maskMM.h5'
-    h5_dset = 'maskMM_PP'
-    h5_path = os.path.join(datadir, h5_fname, h5_dset)
-    mask = utils.get_image(h5_path, imtype='Mask')
-
-    h5_fname = 'B-NT-S10-2f_ROI_00ds7_labels_labelMA_comb.h5'
-    h5_dset = 'labelMA_nt_probMA_eed_thr0.5_labeled_svoxs_stitched_filled'
-    outputpath = os.path.join(datadir, h5_fname, h5_dset)
-    props = svoxs.get_props(protective=False)
-
-    mo = LabelImage(outputpath, **props)
-    mo.create()
-    mo.ds[:] = np.copy(svoxs.ds[:])
-
-    searchradius = [20, 20, 20]
-    rp_main = regionprops(svoxs.ds)
-    for prop in rp_main:
-        merge_labels.connect_split_label(prop, mo, data, mask, axons, searchradius)
-
-    mo.close()
-    svoxs.close()
-    data.close()
-    mask.close()
-
 fill_connected_labels(datadir='/Users/michielk/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00',
                       dataset='B-NT-S10-2f_ROI_00ds7',
                       h5_dset_in='labelMA_nt_probMA_eed_thr0.5_labeled_svoxs_stitched',
@@ -831,35 +782,454 @@ h52nii '' "${dataset_ds}" "${opf}" "${ods}_steps/labels_tv" '' '' '-i zyx -o xyz
 h52nii '' "${dataset_ds}" "${opf}" "${ods}_steps/labels_nt" '' '' '-i zyx -o xyz -d uint16'  # strange that maxlabel is 32148??
 
 
+###############################################################################
+### select the 3D labels overlapping with probMA_labeled and map them END   ###
+###############################################################################
 
-### TODO: test watershed merge
+
+def create_mask(datadir='/Users/michielk/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00'):
+    import os
+    from wmem import utils, LabelImage, MaskImage
+    import numpy as np
+    h5_fname = 'B-NT-S10-2f_ROI_00ds7_labels_labelMA_core3D_tv.h5'
+    h5_dset = 'labelMA_core3D_proofread_NoR_steps/labels_tv'
+    h5_path = os.path.join(datadir, h5_fname, h5_dset)
+    core3D_tv = LabelImage(h5_path)
+    core3D_tv.load()
+    h5_fname = 'B-NT-S10-2f_ROI_00ds7_masks_maskDS.h5'
+    h5_dset = 'maskDS'
+    h5_path = os.path.join(datadir, h5_fname, h5_dset)
+    maskDS = MaskImage(h5_path)
+    maskDS.load()
+    h5_fname = 'B-NT-S10-2f_ROI_00ds7_masks_maskWS.h5'
+    h5_dset = 'maskMM_PP'
+    h5_path = os.path.join(datadir, h5_fname, h5_dset)
+    maskMM = MaskImage(h5_path)
+    maskMM.load()
+    h5_fname = 'B-NT-S10-2f_ROI_00ds7_masks_maskWS.h5'
+    h5_dset = 'maskWS_iter0'
+    h5_path = os.path.join(datadir, h5_fname, h5_dset)
+    mo = MaskImage(h5_path, **maskDS.get_props())
+    mo.create()
+    mask = maskDS.ds[:, :, :]
+    mask[core3D_tv.ds[:,:,:] != 0] = 0
+    mask[maskMM.ds[:,:,:] == 1] = 0
+    mo.write(mask)
+    mo.close()
+    core3D_tv.close()
+    maskDS.close()
+create_mask()
+# create_mask('/data/ndcn-fmrib-water-brain/ndcn0180/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00')
+
+opf='_masks_maskWS' ods='maskWS_iter0'
+h52nii '' "$dataset_ds" "${opf}" "${ods}" '' '' '-i zyx -o xyz -d uint8'
+
+### watershed merge
+# ipf='_labels_labelMA_comb' ids="labelMA_nt"
+# opf='_labels_labelMA_comb' ods="${ids}_ws10"
+# dpf='' dds='data'  #dpf='_probs1_eed2' dds='probs_eed'  #
+# # mpf='_masks_maskMM' mds='maskMM_PP'
+# mpf='_masks_maskWS' mds='maskWS'
+# # opf='_labels_labelMA_comb' ods="labelMA_nt_probMA_nt_wsmerge_${dds}_${mds}_test"
+# mpiexec -n 6 python -W ignore $scriptdir/wmem/merge_labels.py -S \
+# $datadir/${dataset_ds}${ipf}.h5/${ids} \
+# $datadir/${dataset_ds}${opf}.h5/${ods} \
+# --data $datadir/${dataset_ds}${dpf}.h5/${dds} \
+# --maskDS $datadir/${dataset_ds}${mpf}.h5/${mds} \
+# -m 'watershed' -r 10 10 10 -M
+
 ipf='_labels_labelMA_comb' ids="labelMA_nt"
-opf='_labels_labelMA_comb' ods="${ids}_ws"
-# ipf='_labels_labelMA_comb' ids="labelMA_nt_probMA_eed_thr0.5_labeled"
-# ipf='_labels_labelMA_comb' ids="labelMA_nt_probMA_eed_thr0.5_labeled_svoxs"
-# ipf='_labels_labelMA_comb' ids="labelMA_nt_probMA_eed_thr0.5_labeled_svoxs_stitched_filled_NoR_steps/labels_nt"
-dpf='' dds='data'  #dpf='_probs1_eed2' dds='probs_eed'  #
-mpf='_masks_maskMM' mds='maskMM_PP'
-# opf='_labels_labelMA_comb' ods="labelMA_nt_probMA_nt_wsmerge_${dds}_${mds}_test"
-mpiexec -n 6 python -W ignore $scriptdir/wmem/merge_labels.py -S \
-$datadir/${dataset_ds}${ipf}.h5/${ids} \
-$datadir/${dataset_ds}${opf}.h5/${ods} \
---data $datadir/${dataset_ds}${dpf}.h5/${dds} \
---maskMM $datadir/${dataset_ds}${mpf}.h5/${mds} \
--m 'watershed' -r 40 10 10 -M
+opf='_labels_labelMA_comb' ods="${ids}_ws10"
+dpf='' dds='data'
+mpf='_masks_maskWS' mds='maskWS'
+args="--data $datadir/${dataset_ds}${dpf}.h5/${dds} --maskDS $datadir/${dataset_ds}${mpf}.h5/${mds} -m 'watershed' -r 10 10 10 -M"
+scriptfile=$( merge_labels_ws 'h' $dataset_ds $ipf $ids $opf $ods $args )
 h52nii '' "$dataset_ds" "${opf}" "${ods}" '' '' '-i zyx -o xyz -d uint16'
 h52nii '' "$dataset_ds" "${opf}" "${ods}_steps/stitched" '' '' '-i zyx -o xyz -d uint16'
+
+
+from wmem import merge_labels
+merge_labels.fill_connected_labels(datadir='/Users/michielk/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00',
+                                   dataset='B-NT-S10-2f_ROI_00ds7',
+                                   h5_dset_in='labelMA_nt_ws10',
+                                   searchradius=[10, 10, 10], use_axons=False,
+                                   between=True, to_border=False)
+
+opf='_labels_labelMA_comb' ods="labelMA_nt_ws10_between"
+h52nii '' "$dataset_ds" "${opf}" "${ods}" '' '' '-i zyx -o xyz -d uint16'
+
+ipf='_labels_labelMA_comb' ids='labelMA_nt_ws10_between'
+opf='_labels_labelMA_comb' ods="${ids}_NoR"
+python -W ignore $scriptdir/wmem/nodes_of_ranvier.py -S \
+$datadir/${dataset_ds}${ipf}.h5/${ids} \
+$datadir/${dataset_ds}${opf}.h5/${ods} \
+--boundarymask $datadir/${dataset_ds}_masks_maskDS.h5/maskDS -s 500 -R
+h52nii '' "${dataset_ds}" "${opf}" "${ods}_steps/labels_tv" '' '' '-i zyx -o xyz -d uint16'
+h52nii '' "${dataset_ds}" "${opf}" "${ods}_steps/labels_nt" '' '' '-i zyx -o xyz -d uint16'
+h52nii '' "${dataset_ds}" "${opf}" "${ods}_steps/smalllabelmask" '' '' '-i zyx -o xyz -d uint8'
+# number of labels in labelvolume: 5700
+# number of small labels: 2190
+# number of short labels: 0
+# number of large, long labels: 3510
+# number of large, long in-volume labels: 2985
+# number of large, long through-volume labels: 525
+
+# FIXME: quick run-through of finished label from ws10: 10min
+# label 3588 spills over much of it's length: why? (co=191,855,51)
+# label 2469 failed to fill (co=62,1000,151)
+# small bit of label 1489 (co=413,323,68) also at (co=518,308,86)
+# label 1522 weirdly traverses: (co=603,436,58)
+# label 1237 (co=794,315,53) spills weirdly
+# remove partial border label at (co=547,39,165)
+# border label 26 at (co=550,15,18) is partial
+# border label 3.2xxx at (co=819,33,91) is partial
+# border label 92 at (co=1056,37,54) is partial
+# border label 4770 at (co=1115,1144,20) is partial
+# border label 6234 at (co=1177,357,7) is partial
+# border label 9114 at (co=1177,1037,7) is partial
+
+
+def create_mask(datadir='/Users/michielk/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00',
+                dataset='B-NT-S10-2f_ROI_00ds7',
+                h5_dset_in='labelMA_nt_ws10_between'):
+    import os
+    from wmem import utils, LabelImage, MaskImage
+    import numpy as np
+    h5_fname = '{}_{}.h5'.format(dataset, 'labels_labelMA_comb')
+    h5_dset = '{}_NoR_steps/labels_tv'.format(h5_dset_in)
+    h5_path = os.path.join(datadir, h5_fname, h5_dset)
+    tv = LabelImage(h5_path)
+    tv.load()
+    h5_fname = 'B-NT-S10-2f_ROI_00ds7_masks_maskWS.h5'
+    h5_dset = 'maskWS_iter0'
+    h5_path = os.path.join(datadir, h5_fname, h5_dset)
+    maskWS = MaskImage(h5_path)
+    maskWS.load()
+    h5_fname = 'B-NT-S10-2f_ROI_00ds7_masks_maskWS.h5'
+    h5_dset = 'maskWS_iter1'
+    h5_path = os.path.join(datadir, h5_fname, h5_dset)
+    mo = MaskImage(h5_path, **maskWS.get_props())
+    mo.create()
+    mask = maskWS.ds[:, :, :]
+    mask[tv.ds[:,:,:] != 0] = 0
+    mo.write(mask)
+    mo.close()
+    tv.close()
+    maskWS.close()
+create_mask()
+
+opf='_masks_maskWS' ods='maskWS_iter1'
+h52nii '' "$dataset_ds" "${opf}" "${ods}" '' '' '-i zyx -o xyz -d uint8'
+
+srz=40
+ipf='_labels_labelMA_comb' ids="labelMA_nt_ws10_between_NoR_steps/labels_nt"
+opf='_labels_labelMA_comb' ods="labelMA_nt_ws$srz"
+dpf='' dds='data'
+mpf='_masks_maskWS' mds='maskWS_iter1'
+args="--data $datadir/${dataset_ds}${dpf}.h5/${dds} --maskDS $datadir/${dataset_ds}${mpf}.h5/${mds} -m 'watershed' -r $srz 10 10 -M"
+scriptfile=$( merge_labels_ws 'h' $dataset_ds $ipf $ids $opf $ods $args )
+h52nii '' "$dataset_ds" "${opf}" "${ods}" '' '' '-i zyx -o xyz -d uint16'
+h52nii '' "$dataset_ds" "${opf}" "${ods}_steps/stitched" '' '' '-i zyx -o xyz -d uint16'
+
+from wmem import merge_labels
+merge_labels.fill_connected_labels(datadir='/Users/michielk/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00',
+                                   dataset='B-NT-S10-2f_ROI_00ds7',
+                                   h5_dset_in='labelMA_nt_ws40',
+                                   searchradius=[40, 10, 10], use_axons=False,
+                                   between=True, to_border=False)
+
+opf='_labels_labelMA_comb' ods="labelMA_nt_ws40_between"
+h52nii '' "$dataset_ds" "${opf}" "${ods}" '' '' '-i zyx -o xyz -d uint16'
+
+ipf='_labels_labelMA_comb' ids='labelMA_nt_ws40_between'
+opf='_labels_labelMA_comb' ods="${ids}_NoR"
+python -W ignore $scriptdir/wmem/nodes_of_ranvier.py -S \
+$datadir/${dataset_ds}${ipf}.h5/${ids} \
+$datadir/${dataset_ds}${opf}.h5/${ods} \
+--boundarymask $datadir/${dataset_ds}_masks_maskDS.h5/maskDS -s 500 -R
+h52nii '' "${dataset_ds}" "${opf}" "${ods}_steps/labels_tv" '' '' '-i zyx -o xyz -d uint16'
+h52nii '' "${dataset_ds}" "${opf}" "${ods}_steps/labels_nt" '' '' '-i zyx -o xyz -d uint16'
+h52nii '' "${dataset_ds}" "${opf}" "${ods}_steps/smalllabelmask" '' '' '-i zyx -o xyz -d uint8'
+# number of labels in labelvolume: 1991
+# number of small labels: 0
+# number of short labels: 0
+# number of large, long labels: 1991
+# number of large, long in-volume labels: 1555
+# number of large, long through-volume labels: 436
+
+# FIXME: quick run-through of finished label from ws40: 20min
+# label 5.4xxx at (co=208,222,28) not well filled
+# label 572 at (co=261,229,166) spills a bit
+#! label 1221 at (co=268,317,32) connects through UA space
+#! label 2918 at (co=415,686,114) connects to multiple segments
+# label 2429 at (co=471,577,114) has a poorly filled NoR
+# label 1833 at (co=467,438,60) has a poorly filled NoR
+# label 633 includes 2D labels outside of MA space at (co=496,141,139)
+# label 1606 at (co=595,371,55) connects to the wrong segment
+# label 567 at (co=745,109,89) merge and spills badly
+# label 690 at (co=841,171,90) connects to the wrong segment
+# label 2474 includes 2D labels outside of MA space at (co=966,620,179)
+# label 222 includes 2D labels outside of MA space at (co=980,83,150)
+# label 2488 at (co=1100,656,133) connects to the wrong segment
+
+def create_mask(datadir='/Users/michielk/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00',
+                dataset='B-NT-S10-2f_ROI_00ds7',
+                h5_dset_in='labelMA_nt_ws40_between'):
+    import os
+    from wmem import utils, LabelImage, MaskImage
+    import numpy as np
+    h5_fname = '{}_{}.h5'.format(dataset, 'labels_labelMA_comb')
+    h5_dset = '{}_NoR_steps/labels_tv'.format(h5_dset_in)
+    h5_path = os.path.join(datadir, h5_fname, h5_dset)
+    tv = LabelImage(h5_path)
+    tv.load()
+    h5_fname = 'B-NT-S10-2f_ROI_00ds7_masks_maskWS.h5'
+    h5_dset = 'maskWS_iter1'
+    h5_path = os.path.join(datadir, h5_fname, h5_dset)
+    maskWS = MaskImage(h5_path)
+    maskWS.load()
+    h5_fname = 'B-NT-S10-2f_ROI_00ds7_masks_maskWS.h5'
+    h5_dset = 'maskWS_iter2'
+    h5_path = os.path.join(datadir, h5_fname, h5_dset)
+    mo = MaskImage(h5_path, **maskWS.get_props())
+    mo.create()
+    mask = maskWS.ds[:, :, :]
+    mask[tv.ds[:,:,:] != 0] = 0
+    mo.write(mask)
+    mo.close()
+    tv.close()
+    maskWS.close()
+create_mask()
+
+opf='_masks_maskWS' ods='maskWS_iter2'
+h52nii '' "$dataset_ds" "${opf}" "${ods}" '' '' '-i zyx -o xyz -d uint8'
+
+
+srz=80
+ipf='_labels_labelMA_comb' ids="labelMA_nt_ws40_between_NoR_steps/labels_nt"
+opf='_labels_labelMA_comb' ods="labelMA_nt_ws$srz"
+dpf='' dds='data'
+mpf='_masks_maskWS' mds='maskWS_iter2'
+args="--data $datadir/${dataset_ds}${dpf}.h5/${dds} --maskDS $datadir/${dataset_ds}${mpf}.h5/${mds} -m 'watershed' -r $srz 10 10 -M"
+scriptfile=$( merge_labels_ws 'h' $dataset_ds $ipf $ids $opf $ods $args )
+h52nii '' "$dataset_ds" "${opf}" "${ods}" '' '' '-i zyx -o xyz -d uint16'
+h52nii '' "$dataset_ds" "${opf}" "${ods}_steps/stitched" '' '' '-i zyx -o xyz -d uint16'
+
+from wmem import merge_labels
+merge_labels.fill_connected_labels(datadir='/Users/michielk/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00',
+                                   dataset='B-NT-S10-2f_ROI_00ds7',
+                                   h5_dset_in='labelMA_nt_ws80',
+                                   searchradius=[80, 10, 10], use_axons=False,
+                                   between=True, to_border=False)
+
+opf='_labels_labelMA_comb' ods="labelMA_nt_ws80_between"
+h52nii '' "$dataset_ds" "${opf}" "${ods}" '' '' '-i zyx -o xyz -d uint16'
+
+ipf='_labels_labelMA_comb' ids='labelMA_nt_ws80_between'
+opf='_labels_labelMA_comb' ods="${ids}_NoR"
+python -W ignore $scriptdir/wmem/nodes_of_ranvier.py -S \
+$datadir/${dataset_ds}${ipf}.h5/${ids} \
+$datadir/${dataset_ds}${opf}.h5/${ods} \
+--boundarymask $datadir/${dataset_ds}_masks_maskDS.h5/maskDS -s 500 -R
+h52nii '' "${dataset_ds}" "${opf}" "${ods}_steps/labels_tv" '' '' '-i zyx -o xyz -d uint16'
+h52nii '' "${dataset_ds}" "${opf}" "${ods}_steps/labels_nt" '' '' '-i zyx -o xyz -d uint16'
+h52nii '' "${dataset_ds}" "${opf}" "${ods}_steps/smalllabelmask" '' '' '-i zyx -o xyz -d uint8'
+# number of labels in labelvolume: 1419
+# number of small labels: 0
+# number of short labels: 0
+# number of large, long labels: 1419
+# number of large, long in-volume labels: 1367
+# number of large, long through-volume labels: 52
+
+# FIXME: quick run-through of finished label from ws80: 20min
+# label 1778 connects through UA space at (co=115,440,20)
+# label 3233 connects through UA space at (co=340,797,29)
+# label 3.6xxx connects badly at (co=466,1030,89)
+# border label 204 is not filled and is partial at (co=514,69,164)
+# label 3.5xxx connects through UA space at (co=777,502,87)
+# label 2.5xxx as badly doubly connected at (co=914,1039,106)
+# label 639 spills at (co=916,179,180)
+# label 1998 is messily connected at (co=1154,422,75)
+
+
+
+
+# TODO: perhaps first remove labels that can be filled to border etc.; or do it from iter0...
+# from wmem import merge_labels
+# merge_labels.fill_connected_labels(datadir='/Users/michielk/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00',
+#                                    dataset='B-NT-S10-2f_ROI_00ds7',
+#                                    h5_dset_in='labelMA_nt_ws80',
+#                                    searchradius=[80, 10, 10], use_axons=False,
+#                                    between=False, to_border=True)
+
+
+
+def create_mask(datadir='/Users/michielk/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00',
+                dataset='B-NT-S10-2f_ROI_00ds7',
+                h5_dset_in='labelMA_nt_ws80_between'):
+    import os
+    from wmem import utils, LabelImage, MaskImage
+    import numpy as np
+    h5_fname = '{}_{}.h5'.format(dataset, 'labels_labelMA_comb')
+    h5_dset = '{}_NoR_steps/labels_tv'.format(h5_dset_in)
+    h5_path = os.path.join(datadir, h5_fname, h5_dset)
+    tv = LabelImage(h5_path)
+    tv.load()
+    h5_fname = 'B-NT-S10-2f_ROI_00ds7_masks_maskWS.h5'
+    h5_dset = 'maskWS_iter2'
+    h5_path = os.path.join(datadir, h5_fname, h5_dset)
+    maskWS = MaskImage(h5_path)
+    maskWS.load()
+    h5_fname = 'B-NT-S10-2f_ROI_00ds7_masks_maskWS.h5'
+    h5_dset = 'maskWS_iter3'
+    h5_path = os.path.join(datadir, h5_fname, h5_dset)
+    mo = MaskImage(h5_path, **maskWS.get_props())
+    mo.create()
+    mask = maskWS.ds[:, :, :]
+    mask[tv.ds[:,:,:] != 0] = 0
+    mo.write(mask)
+    mo.close()
+    tv.close()
+    maskWS.close()
+create_mask()
+
+opf='_masks_maskWS' ods='maskWS_iter3'
+h52nii '' "$dataset_ds" "${opf}" "${ods}" '' '' '-i zyx -o xyz -d uint8'
+
+# FIXME: the maskless merge needs an adaptation (e.g. restrict z-range to 40?) or a manual check: erroneous merges
+srz=81
+ipf='_labels_labelMA_comb' ids="labelMA_nt_ws80_between_NoR_steps/labels_nt"
+opf='_labels_labelMA_comb' ods="labelMA_nt_ws$srz"
+dpf='' dds='data'
+mpf='_masks_maskWS' mds='maskWS_iter3'
+args="--data $datadir/${dataset_ds}${dpf}.h5/${dds} -m 'watershed' -r $srz 10 10 -M"
+scriptfile=$( merge_labels_ws 'h' $dataset_ds $ipf $ids $opf $ods $args )
+h52nii '' "$dataset_ds" "${opf}" "${ods}" '' '' '-i zyx -o xyz -d uint16'
+h52nii '' "$dataset_ds" "${opf}" "${ods}_steps/stitched" '' '' '-i zyx -o xyz -d uint16'
+
+from wmem import merge_labels
+merge_labels.fill_connected_labels(datadir='/Users/michielk/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00',
+                                   dataset='B-NT-S10-2f_ROI_00ds7',
+                                   h5_dset_in='labelMA_nt_ws81',
+                                   searchradius=[81, 10, 10], use_axons=False,
+                                   between=True, to_border=False)
+
+opf='_labels_labelMA_comb' ods="labelMA_nt_ws81_between"
+h52nii '' "$dataset_ds" "${opf}" "${ods}" '' '' '-i zyx -o xyz -d uint16'
+
+ipf='_labels_labelMA_comb' ids='labelMA_nt_ws81_between'
+opf='_labels_labelMA_comb' ods="${ids}_NoR"
+python -W ignore $scriptdir/wmem/nodes_of_ranvier.py -S \
+$datadir/${dataset_ds}${ipf}.h5/${ids} \
+$datadir/${dataset_ds}${opf}.h5/${ods} \
+--boundarymask $datadir/${dataset_ds}_masks_maskDS.h5/maskDS -s 500 -R
+h52nii '' "${dataset_ds}" "${opf}" "${ods}_steps/labels_tv" '' '' '-i zyx -o xyz -d uint16'
+h52nii '' "${dataset_ds}" "${opf}" "${ods}_steps/labels_nt" '' '' '-i zyx -o xyz -d uint16'
+h52nii '' "${dataset_ds}" "${opf}" "${ods}_steps/smalllabelmask" '' '' '-i zyx -o xyz -d uint8'
+# number of labels in labelvolume: 1171
+# number of small labels: 0
+# number of short labels: 0
+# number of large, long labels: 1171
+# number of large, long in-volume labels: 1098
+# number of large, long through-volume labels: 73
+
+
+
+
+# FIXME: this doesn't go well yet; doesn't use cylinder
+## test on 1518:
+from wmem import merge_labels
+merge_labels.fill_connected_labels(datadir='/Users/michielk/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00',
+                                   dataset='B-NT-S10-2f_ROI_00ds7',
+                                   h5_dset_in='labelMA_nt_ws81_between',
+                                   searchradius=[81, 30, 30], use_axons=False,
+                                   between=False, to_border=True)
+
+opf='_labels_labelMA_comb' ods="labelMA_nt_ws81_between_toborder"
+h52nii '' "$dataset_ds" "${opf}" "${ods}" '' '' '-i zyx -o xyz -d uint16'
+
+ipf='_labels_labelMA_comb' ids="labelMA_nt_ws81_between_toborder"
+opf='_labels_labelMA_comb' ods="${ids}_NoR"
+python -W ignore $scriptdir/wmem/nodes_of_ranvier.py -S \
+$datadir/${dataset_ds}${ipf}.h5/${ids} \
+$datadir/${dataset_ds}${opf}.h5/${ods} \
+--boundarymask $datadir/${dataset_ds}_masks_maskDS.h5/maskDS -s 500 -R
+h52nii '' "${dataset_ds}" "${opf}" "${ods}_steps/labels_tv" '' '' '-i zyx -o xyz -d uint16'
+h52nii '' "${dataset_ds}" "${opf}" "${ods}_steps/labels_nt" '' '' '-i zyx -o xyz -d uint16'
+h52nii '' "${dataset_ds}" "${opf}" "${ods}_steps/smalllabelmask" '' '' '-i zyx -o xyz -d uint8'
+# NEW :(
+# number of labels in labelvolume: 1171
+# number of small labels: 0
+# number of short labels: 0
+# number of large, long labels: 1171
+# number of large, long in-volume labels: 937
+# number of large, long through-volume labels: 234
+
+# number of labels in labelvolume: 1171
+# number of small labels: 0
+# number of short labels: 0
+# number of large, long labels: 1171
+# number of large, long in-volume labels: 654
+# number of large, long through-volume labels: 517
+
+
+
+
+
+ipf1='_labels_labelMA_core3D' ids1='labelMA_core3D_proofread_NoR_steps/labels_tv' ipf2='_labels_labelMA_comb' ids2='labelMA_nt_ws10_between_NoR_steps/labels_tv'
+ipf1='_labels_labelMA_2D3D' ids1='labelMA_tv' ipf2='_labels_labelMA_comb' ids2='labelMA_nt_ws40_between_NoR_steps/labels_tv'
+ipf1='_labels_labelMA_2D3D' ids1='labelMA_tv' ipf2='_labels_labelMA_comb' ids2='labelMA_nt_ws80_between_NoR_steps/labels_tv'
+ipf1='_labels_labelMA_2D3D' ids1='labelMA_tv' ipf2='_labels_labelMA_comb' ids2='labelMA_nt_ws81_between_toborder_NoR_steps/labels_tv'
+opf='_labels_labelMA_2D3D' ods='labelMA_tv'
+python $scriptdir/wmem/combine_labels.py \
+"${datadir}/${dataset_ds}${ipf1}.h5/${ids1}" \
+"${datadir}/${dataset_ds}${ipf2}.h5/${ids2}" \
+"${datadir}/${dataset_ds}${opf}.h5/${ods}" -m 'add'
+h52nii '' "${dataset_ds}" "${opf}" "${ods}" '' '' '-i zyx -o xyz -d uint16'
+
+
+
+### using searchregion of z=40
+# number of labels in labelvolume: 4441
+# number of short labels: 0
+# number of large, long labels: 4441
+# number of large, long in-volume labels: 3550
+# number of large, long through-volume labels: 891
+# number of labels in labelvolume: 4441
+# number of small labels: 1932
+# number of short labels: 0
+# number of large, long labels: 2509
+# number of large, long in-volume labels: 1637
+# number of large, long through-volume labels: 872
+
+
+# FIXME: there seem to be many labels that are done not marked by nodes_of_ranvier code; or that are not finished by fill_connected_labels => connect_to_border while they could/should; this is probably due to conservative nature of having the cylinder surround as negative label for nodes of ranvier that overlap the border; this fill the axon just part-way
+# TODO: force-fill option?
+# TODO: remove small labels
+# notice label 1324 is a doubly connected (Y-shaped) label
+
 
 fill_connected_labels(datadir='/Users/michielk/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00',
                       dataset='B-NT-S10-2f_ROI_00ds7',
                       h5_dset_in='labelMA_nt_ws',
                       searchradius=[40, 10, 10], use_axons=False,
-                      between=True, to_border=True)
+                      between=True, to_border=False)
+fill_connected_labels(datadir='/Users/michielk/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00',
+                      dataset='B-NT-S10-2f_ROI_00ds7',
+                      h5_dset_in='labelMA_nt_ws_between',
+                      searchradius=[40, 30, 30], use_axons=False,
+                      between=False, to_border=True)
 
-opf='_labels_labelMA_comb' ods="labelMA_nt_ws_filled"
+opf='_labels_labelMA_comb' ods="labelMA_nt_ws_between"
+h52nii '' "$dataset_ds" "${opf}" "${ods}" '' '' '-i zyx -o xyz -d uint16'
+opf='_labels_labelMA_comb' ods="labelMA_nt_ws_between_toborder"
 h52nii '' "$dataset_ds" "${opf}" "${ods}" '' '' '-i zyx -o xyz -d uint16'
 
-ipf='_labels_labelMA_comb' ids="labelMA_nt_ws_filled"
+
+
+### iteration 2: first identify, then watershed merge not using mask! works quite well...
+# ipf='_labels_labelMA_comb' ids="labelMA_nt_ws_filled"
+ipf='_labels_labelMA_comb' ids='labelMA_nt_ws_between_toborder'
 opf='_labels_labelMA_comb' ods="${ids}_NoR"
 python -W ignore $scriptdir/wmem/nodes_of_ranvier.py -S \
 $datadir/${dataset_ds}${ipf}.h5/${ids} \
@@ -868,6 +1238,189 @@ $datadir/${dataset_ds}${opf}.h5/${ods} \
 h52nii '' "${dataset_ds}" "${opf}" "${ods}_steps/labels_tv" '' '' '-i zyx -o xyz -d uint16'
 h52nii '' "${dataset_ds}" "${opf}" "${ods}_steps/labels_nt" '' '' '-i zyx -o xyz -d uint16'
 
+ipf='_labels_labelMA_comb' ids="labelMA_nt_ws_between_toborder_NoR_steps/labels_nt"
+opf='_labels_labelMA_comb' ods="${ids}_ws"
+dpf='' dds='data'  #dpf='_probs1_eed2' dds='probs_eed'  #
+mpf='_masks_maskMM' mds='maskMM_PP'
+mpiexec -n 6 python -W ignore $scriptdir/wmem/merge_labels.py -S \
+$datadir/${dataset_ds}${ipf}.h5/${ids} \
+$datadir/${dataset_ds}${opf}.h5/${ods} \
+--data $datadir/${dataset_ds}${dpf}.h5/${dds} \
+--maskMM $datadir/${dataset_ds}${mpf}.h5/${mds} \
+-m 'watershed' -r 80 10 10 -M
+h52nii '' "$dataset_ds" "${opf}" "${ods}" '' '' '-i zyx -o xyz -d uint16'
+h52nii '' "$dataset_ds" "${opf}" "${ods}_steps/stitched" '' '' '-i zyx -o xyz -d uint16'
+
+# TODO: maybe not use mask here
+fill_connected_labels(datadir='/Users/michielk/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00',
+                      dataset='B-NT-S10-2f_ROI_00ds7',
+                      h5_dset_in='labelMA_nt_ws_between_toborder_NoR_steps/labels_nt_ws',
+                      searchradius=[80, 10, 10], use_axons=False,
+                      between=True, to_border=False)
+fill_connected_labels(datadir='/Users/michielk/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00',
+                      dataset='B-NT-S10-2f_ROI_00ds7',
+                      h5_dset_in='labelMA_nt_ws_between_toborder_NoR_steps/labels_nt_ws_between',
+                      searchradius=[80, 30, 30], use_axons=False,
+                      between=False, to_border=True)
+
+opf='_labels_labelMA_comb' ods='labelMA_nt_ws_between_toborder_NoR_steps/labels_nt_ws_between_toborder'
+h52nii '' "$dataset_ds" "${opf}" "${ods}" '' '' '-i zyx -o xyz -d uint16'
+
+
+# quick manual copy to THIS ids:
+ipf='_labels_labelMA_comb' ids='labels_nt_ws_filled'
+opf='_labels_labelMA_comb' ods="${ids}_NoR"
+python -W ignore $scriptdir/wmem/nodes_of_ranvier.py -S \
+$datadir/${dataset_ds}${ipf}.h5/${ids} \
+$datadir/${dataset_ds}${opf}.h5/${ods} \
+--boundarymask $datadir/${dataset_ds}_masks_maskDS.h5/maskDS
+h52nii '' "${dataset_ds}" "${opf}" "${ods}_steps/labels_tv" '' '' '-i zyx -o xyz -d uint16'
+h52nii '' "${dataset_ds}" "${opf}" "${ods}_steps/labels_nt" '' '' '-i zyx -o xyz -d uint16'
+
+
+# testing fill_centerline for to_border: doesn't fly
+fill_connected_labels(datadir='/Users/michielk/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00',
+                      dataset='B-NT-S10-2f_ROI_00ds7',
+                      h5_dset_in='labels_nt_ws_filled',
+                      searchradius=[40, 10, 10], use_axons=False,
+                      between=False, to_border=True)
+
+opf='_labels_labelMA_comb' ods='labels_nt_ws_filled_filled'
+h52nii '' "$dataset_ds" "${opf}" "${ods}" '' '' '-i zyx -o xyz -d uint16'
+
+
+# quick manual copy to THIS ids:
+ipf='_labels_labelMA_comb' ids='labels_nt_ws_filled_filled'
+opf='_labels_labelMA_comb' ods="${ids}_NoR"
+python -W ignore $scriptdir/wmem/nodes_of_ranvier.py -S \
+$datadir/${dataset_ds}${ipf}.h5/${ids} \
+$datadir/${dataset_ds}${opf}.h5/${ods} \
+--boundarymask $datadir/${dataset_ds}_masks_maskDS.h5/maskDS -s 500 -R
+h52nii '' "${dataset_ds}" "${opf}" "${ods}_steps/labels_tv" '' '' '-i zyx -o xyz -d uint16'
+h52nii '' "${dataset_ds}" "${opf}" "${ods}_steps/labels_nt" '' '' '-i zyx -o xyz -d uint16'
+
+## without removing small
+# number of labels in labelvolume: 1939
+# number of short labels: 0
+# number of large, long labels: 1939
+# number of large, long in-volume labels: 1694
+# number of large, long through-volume labels: 245
+## removing small
+# number of labels in labelvolume: 1939
+# number of small labels: 1027
+# number of short labels: 0
+# number of large, long labels: 912
+# number of large, long in-volume labels: 667
+# number of large, long through-volume labels: 245
+## removing small from filled_filled (force fill to border)
+# number of labels in labelvolume: 1933
+# number of small labels: 988
+# number of short labels: 0
+# number of large, long labels: 945
+# number of large, long in-volume labels: 475
+# number of large, long through-volume labels: 470
+
+
+
+
+# r=0.00
+# ipf='_labels_labelMA_core3D' ids="probMA_eed_thr0.5_labeled"
+# spf='_labels_labelMA_comb' sds="labelMA_nt_ws_filled_NoR_steps/labels_nt"
+# opf='_labels_labelMA_comb' ods="labelMA_nt_ws_filled_NoR_nt_probMA"
+# python $scriptdir/wmem/agglo_from_labelmask.py \
+# "${dataset_ds}${ipf}.h5/${ids}" \
+# "${dataset_ds}${spf}.h5/${sds}" \
+# "${dataset_ds}${opf}.h5/${ods}" \
+# -r $r
+#
+#
+#
+# import os
+# from wmem import utils, LabelImage
+# import numpy as np
+# import glob
+# import pickle
+# def map_axons(datadir='/Users/michielk/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00',
+#               h5_dset_in='labelMA_nt_ws_filled_NoR_nt_probMA'):
+#     h5_fname = 'B-NT-S10-2f_ROI_00ds7_labels_labelMA_core3D.h5'
+#     h5_dset = 'probMA_eed_thr0.5_labeled'
+#     h5_path = os.path.join(datadir, h5_fname, h5_dset)
+#     axons = utils.get_image(h5_path, imtype='Label')
+#     h5_fname = 'B-NT-S10-2f_ROI_00ds7_labels_labelMA_comb.h5'
+#     # h5_dset = 'labelMA_nt'
+#     h5_path = os.path.join(datadir, h5_fname, h5_dset_in)
+#     svoxs = utils.get_image(h5_path, imtype='Label')
+#     h5_fname = 'B-NT-S10-2f_ROI_00ds7_labels_labelMA_comb.h5'
+#     h5_dset_out = '{}_labeled'.format(h5_dset_in)
+#     outputpath = os.path.join(datadir, h5_fname, h5_dset_out)
+#     props = svoxs.get_props(protective=False)
+#
+#     def invert_labelsets(labelsets):
+#         labelsets_inv = {}  # key_svox: {set_axon} (one-to-one mapping when labelsets_new has no doubles)
+#         for lsk in sorted(labelsets.iterkeys()):
+#             lsv = labelsets[lsk]
+#             for l in lsv:
+#                 if l in labelsets_inv.keys():
+#                     labelsets_inv[l].add(lsk)
+#                 else:
+#                     labelsets_inv[l] = set([lsk])
+#         return labelsets_inv
+#
+#     # FIXME: handle doubles better (now mapped to lowest axon label)
+#     comps = svoxs.split_path()
+#     lsfile = '{}_{}_host-MKMBPr.local_rank-00.pickle'.format(comps['base'], comps['dset'])
+#     # lsfile = os.path.join(datadir, 'B-NT-S10-2f_ROI_00ds7_labels_labelMA_comb_{}_host-MKMBPr.local_rank-00.pickle'.format(h5_dset_out))
+#     labelsets = svoxs.read_labelsets(lsfile)  # key_axon: {set_svoxs} (contains double svoxs in values)
+#     labelsets_inv = invert_labelsets(labelsets)  # key_svox: {set_axons} (contains double axons in values)
+#
+#     # axon mapping (any axons that has doubles needs to be mapped to the lowest-labeled)
+#     labelsets_inv_nodoubles = {}
+#     for lsk in sorted(labelsets_inv.iterkeys()):
+#         labelsets_inv_nodoubles = utils.classify_label_set(labelsets_inv_nodoubles, labelsets_inv[lsk], lsk)
+#         axonmapping = {}  # key_axon-first: {set_axons}
+#     for lsk, lsv in labelsets_inv_nodoubles.items():
+#         lsvlist = sorted(list(lsv))
+#         axonmapping[lsvlist[0]] = set(lsvlist)
+#
+#     # svoxs mapping
+#     labelsets_nodoubles = {}  # key_axon: {set_svoxs} (no doubles, labelset with double integrated to lowest-labeled axon)
+#     for lsk in sorted(labelsets.iterkeys()):
+#         labelset = labelsets[lsk]
+#         labelsets_nodoubles = utils.classify_label_set(labelsets_nodoubles, labelset, lsk)
+#
+#     svoxs_fw = svoxs.forward_map(labelsets=labelsets_nodoubles, from_empty=False)
+#     mo2 = LabelImage(outputpath + '_svoxs', **props)
+#     mo2.create()
+#     mo2.write(svoxs_fw)
+#     mo2.close()
+#     svoxs_fw = svoxs.forward_map(labelsets=labelsets_nodoubles, from_empty=True)
+#     mo4 = LabelImage(outputpath + '_svoxs_stitched', **props)
+#     mo4.create()
+#     mo4.write(svoxs_fw)
+#     mo4.close()
+#     axons_fw = axons.forward_map(labelsets=axonmapping, from_empty=True)
+#     mo3 = LabelImage(outputpath + '_axons', **props)
+#     mo3.create()
+#     mo3.write(axons_fw)
+#     mo3.close()
+#     m = axons_fw[:]
+#     maskA = m > 0
+#     m[~maskA] = svoxs_fw[~maskA]
+#     mo = LabelImage(outputpath, **props)
+#     mo.create()
+#     mo.write(m)
+#     mo.close()
+#
+# map_axons(datadir='/Users/michielk/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00',
+#           h5_dset_in='labelMA_nt_ws_filled_NoR_nt_probMA')
+#
+# h52nii '' "${dataset_ds}" "${opf}" "${ods}" '' '' '-i zyx -o xyz -d uint16'
+# h52nii '' "${dataset_ds}" "${opf}" "${ods}_axons" '' '' '-i zyx -o xyz -d uint16'
+# h52nii '' "${dataset_ds}" "${opf}" "${ods}_svoxs" '' '' '-i zyx -o xyz -d uint16'
+# h52nii '' "${dataset_ds}" "${opf}" "${ods}_svoxs_stitched" '' '' '-i zyx -o xyz -d uint16'
+
+
+total = core3D_tv +
 
 
 
@@ -1837,6 +2390,9 @@ done
 ###=========================================================================###
 ### TODO: Neuroproof training
 ###=========================================================================###
+PREFIX="${CONDA_PATH}/envs/neuroproof-test"
+NPdir="${HOME}/workspace/Neuroproof_minimal"
+datadir="${DATA}/EM/Neuroproof/M3_S1_GNU_NP" && cd $datadir
 
 
 ###=========================================================================###
