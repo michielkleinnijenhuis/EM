@@ -5,13 +5,14 @@ scriptdir=$HOME/workspace/EM
 source $scriptdir/pipelines/datasets.sh
 source $scriptdir/pipelines/functions.sh
 source $scriptdir/pipelines/submission.sh
-export PYTHONPATH=$PYTHONPATH:/Users/michielk/workspace/pyDM3reader  # FIXME
-export PYTHONPATH=$PYTHONPATH:/Users/michielk/workspace/maskSLIC  # FIXME
+export PYTHONPATH=$PYTHONPATH:$HOME/workspace/pyDM3reader  # FIXME
+export PYTHONPATH=$PYTHONPATH:$HOME/workspace/maskSLIC  # FIXME
 
 #compute_env='JAL'
 #compute_env='ARC'
-compute_env='LOCAL'
 #compute_env='ARCB'
+# compute_env='LOCAL'
+compute_env='RIOS013'
 prep_environment $scriptdir $compute_env
 
 # dataset='M3S1GNU'
@@ -820,6 +821,7 @@ def create_mask(datadir='/Users/michielk/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f
     maskDS.close()
 create_mask()
 # create_mask('/data/ndcn-fmrib-water-brain/ndcn0180/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00')
+# create_mask('/Users/mkleinnijenhuis/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00')
 
 opf='_masks_maskWS' ods='maskWS_iter0'
 h52nii '' "$dataset_ds" "${opf}" "${ods}" '' '' '-i zyx -o xyz -d uint8'
@@ -839,7 +841,7 @@ h52nii '' "$dataset_ds" "${opf}" "${ods}" '' '' '-i zyx -o xyz -d uint8'
 # -m 'watershed' -r 10 10 10 -M
 
 ipf='_labels_labelMA_comb' ids="labelMA_nt"
-opf='_labels_labelMA_comb' ods="${ids}_ws10"
+opf='_labels_labelMA_comb_test' ods="${ids}_ws10"
 dpf='' dds='data'
 mpf='_masks_maskWS' mds='maskWS'
 args="--data $datadir/${dataset_ds}${dpf}.h5/${dds} --maskDS $datadir/${dataset_ds}${mpf}.h5/${mds} -m 'watershed' -r 10 10 10 -M"
@@ -1102,6 +1104,8 @@ ipf='_labels_labelMA_comb' ids="labelMA_nt_ws80_between_NoR_steps/labels_nt"
 opf='_labels_labelMA_comb' ods="labelMA_nt_ws$srz"
 dpf='' dds='data'
 mpf='_masks_maskWS' mds='maskWS_iter3'
+# NOTE: no maskWS
+# args="--data $datadir/${dataset_ds}${dpf}.h5/${dds} --maskDS $datadir/${dataset_ds}${mpf}.h5/${mds} -m 'watershed' -r $srz 10 10 -M"
 args="--data $datadir/${dataset_ds}${dpf}.h5/${dds} -m 'watershed' -r $srz 10 10 -M"
 scriptfile=$( merge_labels_ws 'h' $dataset_ds $ipf $ids $opf $ods $args )
 h52nii '' "$dataset_ds" "${opf}" "${ods}" '' '' '-i zyx -o xyz -d uint16'
@@ -1117,6 +1121,7 @@ merge_labels.fill_connected_labels(datadir='/Users/michielk/oxdata/P01/EM/Myrf_0
 opf='_labels_labelMA_comb' ods="labelMA_nt_ws81_between"
 h52nii '' "$dataset_ds" "${opf}" "${ods}" '' '' '-i zyx -o xyz -d uint16'
 
+# NOTE: not really used, first fill to border  # CONTINUED scratch_EM.sh
 ipf='_labels_labelMA_comb' ids='labelMA_nt_ws81_between'
 opf='_labels_labelMA_comb' ods="${ids}_NoR"
 python -W ignore $scriptdir/wmem/nodes_of_ranvier.py -S \
@@ -1136,6 +1141,15 @@ h52nii '' "${dataset_ds}" "${opf}" "${ods}_steps/smalllabelmask" '' '' '-i zyx -
 
 
 
+
+
+
+
+
+
+
+
+
 # FIXME: this doesn't go well yet; doesn't use cylinder
 ## test on 1518:
 from wmem import merge_labels
@@ -1149,7 +1163,7 @@ opf='_labels_labelMA_comb' ods="labelMA_nt_ws81_between_toborder"
 h52nii '' "$dataset_ds" "${opf}" "${ods}" '' '' '-i zyx -o xyz -d uint16'
 
 ipf='_labels_labelMA_comb' ids="labelMA_nt_ws81_between_toborder"
-opf='_labels_labelMA_comb' ods="${ids}_NoR"
+opf='_labels_labelMA_comb_test' ods="${ids}_NoR"
 python -W ignore $scriptdir/wmem/nodes_of_ranvier.py -S \
 $datadir/${dataset_ds}${ipf}.h5/${ids} \
 $datadir/${dataset_ds}${opf}.h5/${ods} \
@@ -1176,16 +1190,17 @@ h52nii '' "${dataset_ds}" "${opf}" "${ods}_steps/smalllabelmask" '' '' '-i zyx -
 
 
 
+opf='_labels_labelMA_2D3D' ods='labelMA_tv'
 ipf1='_labels_labelMA_core3D' ids1='labelMA_core3D_proofread_NoR_steps/labels_tv' ipf2='_labels_labelMA_comb' ids2='labelMA_nt_ws10_between_NoR_steps/labels_tv'
 ipf1='_labels_labelMA_2D3D' ids1='labelMA_tv' ipf2='_labels_labelMA_comb' ids2='labelMA_nt_ws40_between_NoR_steps/labels_tv'
 ipf1='_labels_labelMA_2D3D' ids1='labelMA_tv' ipf2='_labels_labelMA_comb' ids2='labelMA_nt_ws80_between_NoR_steps/labels_tv'
 ipf1='_labels_labelMA_2D3D' ids1='labelMA_tv' ipf2='_labels_labelMA_comb' ids2='labelMA_nt_ws81_between_toborder_NoR_steps/labels_tv'
-opf='_labels_labelMA_2D3D' ods='labelMA_tv'
 python $scriptdir/wmem/combine_labels.py \
 "${datadir}/${dataset_ds}${ipf1}.h5/${ids1}" \
 "${datadir}/${dataset_ds}${ipf2}.h5/${ids2}" \
 "${datadir}/${dataset_ds}${opf}.h5/${ods}" -m 'add'
 h52nii '' "${dataset_ds}" "${opf}" "${ods}" '' '' '-i zyx -o xyz -d uint16'
+
 
 
 
@@ -1207,6 +1222,16 @@ h52nii '' "${dataset_ds}" "${opf}" "${ods}" '' '' '-i zyx -o xyz -d uint16'
 # TODO: force-fill option?
 # TODO: remove small labels
 # notice label 1324 is a doubly connected (Y-shaped) label
+
+
+
+
+
+
+
+
+
+
 
 
 fill_connected_labels(datadir='/Users/michielk/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00',

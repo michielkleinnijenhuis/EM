@@ -19,6 +19,9 @@ try:
 except ImportError:
     print("dm3lib could not be loaded")
 
+import bioformats
+import javabridge
+
 
 class Image(object):
     """
@@ -64,6 +67,11 @@ class Image(object):
         for ext in ['.h5', '.nii', '.dm3', '.tif']:
             if ext in path:
                 self.format = ext
+                return
+
+        for ext in ['.czi', '.lif']:  # ETC
+            if ext in path:
+                self.format = '.pbf'
                 return
 
 #         self.format = '.tifs'
@@ -315,6 +323,7 @@ class Image(object):
         formats = {'.h5': self.h5_load,
                    '.nii': self.nii_load,
                    '.dm3': self.dm3_load,
+                   '.pbf': self.pbf_load,
                    '.tif': self.tif_load,
                    '.tifs': self.tifs_load}
 
@@ -372,6 +381,38 @@ class Image(object):
             for fpath in self.file:
                 self.ds.append(self.get_image(fpath))
             self.ds = np.array(self.ds, dtype=self.dtype)
+
+    def pbf_load(self, comm=None, load_data=True):
+        """Load a dataset with python bioformats."""
+    
+        javabridge.start_vm(class_path=bioformats.JARS, run_headless=True)
+
+        series = 0  # TODO: series
+        md = bioformats.OMEXML(bioformats.get_omexml_metadata(self.path))
+        self.file = md.image(index=series)
+        self.ds = self.pbf_load_data(series)
+        self.dims = self.ds.shape
+        self.dtype = self.ds.dtype
+
+        javabridge.kill_vm()
+
+    def pbf_load_data(self, series):
+
+        im = np.empty([0] + self.dims[1:], dtype=self.dtype)
+
+        for z_idx in range(0, self.dims[self.axlab.index('z')]):
+
+            slc = bioformats.load_image(self.path, z=z_idx, series=series, rescale=False)
+
+            slc = np.expand_dims(slc, axis=0)
+            if self.dims[self.axlab.index('c')] == 1:
+                slc = np.expand_dims(slc, axis=3)
+            if self.dims[self.axlab.index('t')] == 1:
+                slc = np.expand_dims(slc, axis=4)
+
+            self.ds = np.append(im, slc, axis=0)
+
+        return im
 
     def dm3_load(self, comm=None, load_data=True):
         """Load a stack of dm3s."""

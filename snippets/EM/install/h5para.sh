@@ -39,3 +39,23 @@ h5file.close()
 
 
 hdf5-parallel/1.8.14_mvapich2
+
+
+
+
+
+### NEW works
+
+export PYTHONPATH=$PYTHONPATH:$HOME/workspace/pyDM3reader  # FIXME
+export PYTHONPATH=$PYTHONPATH:$HOME/workspace/maskSLIC  # FIXME
+export PATH=${DATA}/anaconda2/bin:$PATH
+export CONDA_PATH="$(conda info --root)"
+conda remove -n h5para -all
+conda create -n h5para python=2.7 scikit-image
+source activate h5para
+conda install -c conda-forge h5py=*=mpi_mpich_*
+
+pip install -e ~/workspace/EM
+pip install nibabel
+
+mpiexec -n 14 python /Users/mkleinnijenhuis/workspace/EM/wmem/merge_labels.py -S /Users/mkleinnijenhuis/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00/B-NT-S10-2f_ROI_00ds7_labels_labelMA_comb.h5/labelMA_nt /Users/mkleinnijenhuis/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00/B-NT-S10-2f_ROI_00ds7_labels_labelMA_comb_testmpi.h5/labelMA_nt_ws10 --data /Users/mkleinnijenhuis/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00/B-NT-S10-2f_ROI_00ds7.h5/data --maskDS /Users/mkleinnijenhuis/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00/B-NT-S10-2f_ROI_00ds7_masks_maskWS.h5/maskWS_iter0 -m 'watershed' -r 10 10 10 -M

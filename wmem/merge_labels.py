@@ -12,7 +12,7 @@ import numpy as np
 from skimage.measure import label, regionprops
 from skimage.morphology import binary_dilation, binary_erosion, watershed, disk
 
-from wmem import parse, utils, wmeMPI, LabelImage
+from wmem import parse, utils, wmeMPI, LabelImage, MaskImage
 
 
 def main(argv):
@@ -417,6 +417,8 @@ def find_candidate_ws(direction, labelsets, rp_map, prop, imregion, ws,
                 candidate_labels.remove(c)
                 counts[c] = 0
             # reject candidates with overlap in z-range
+            # FIXME: it's still possible to have overlap if connecting more than 2 labels as the label is not updated after connection
+            # possibly pop a label from a list of candidate connections when it has been connected for a certain direction???
             elif direction == 'up' and prop.bbox[3] > candidate.bbox[0]:
                 candidate_labels.remove(c)
                 counts[c] = 0
@@ -460,10 +462,9 @@ def merge_overlapping_labels():
 #             # TODO: include boundary as possible candidate
 
 
-def connect_split_label(prop, im, mo, data, mask, axons, searchradius):
+def split_label(image):
 
-    print(prop.label)
-    labels_split = label(prop.image)
+    labels_split = label(image)
 
     try:
         rp = regionprops(labels_split)  # TypeError: Only 2-D and 3-D images supported.
@@ -471,8 +472,76 @@ def connect_split_label(prop, im, mo, data, mask, axons, searchradius):
         # e.g. project centreline, do slicewise labeling over the gap and see 
         # if the label that includes the centreline touched the boundary of the slice/cylinder
         # to identify the z-range of the NoR (if detected)
-    except TypeError:
-        print(prop.label, labels_split.shape)
+        return labels_split, rp
+    except TypeError:  # TODO: delete single-voxel labels?
+        return None, None
+
+
+def check_split_label(prop, mo, checkonly=False):
+    
+    labels_split, rp = split_label(prop.image)
+    
+    if rp is None:
+        print('single voxel: {}'.format(prop.label))
+        delete_single_voxel(prop, mo)
+    elif len(rp) == 1:
+        pass
+    else:
+        print('split label: {} {}'.format(prop.label, len(rp)))
+        if checkonly:
+            for p in rp:
+                print(p.bbox, p.area, prop.centroid)
+        else:
+            correct_split_label(prop, mo, rp, labels_split)
+
+
+def delete_single_voxel(prop, mo):
+
+    z, y, x, Z, Y, X = prop.bbox
+    dataslices = [z, Z, 1, y, Y, 1, x, X, 1]
+    mo.slices = mo.get_slice_objects(dataslices)
+    out = mo.slice_dataset(squeeze=False)
+
+    mask = out == prop.label
+    out[mask] = 0
+
+    mo.write(out)
+
+
+def correct_split_label(prop, mo, rp, labels_split):
+
+    z, y, x, Z, Y, X = prop.bbox
+    dataslices = [z, Z, 1, y, Y, 1, x, X, 1]
+    mo.slices = mo.get_slice_objects(dataslices)
+    out = mo.slice_dataset(squeeze=False)
+
+    out, mo.maxlabel = split_label_corr(labels_split, rp, mo.maxlabel, out)
+
+    mo.write(out)
+
+
+def split_label_corr(labels_split, rp, maxlabel, out):
+
+    rp = sort_rp_on_size(rp)
+    for p in rp[1:]:
+        mask = labels_split == p.label
+        if p.area > 10:
+            maxlabel += 1
+            newval = maxlabel
+        else:
+            newval = 0
+        out[mask] = newval
+        print(p.label, maxlabel, p.area, newval)
+
+    return out, maxlabel
+
+
+def connect_split_label(prop, im, mo, data, mask, searchradius, axons=None):
+
+#     print(prop.label)
+    labels_split, rp = split_label(prop.image)
+
+    if rp is None:
         return
 
     if len(rp) >= 2:
@@ -492,8 +561,7 @@ def connect_split_label(prop, im, mo, data, mask, axons, searchradius):
             if axons is not None:
                 axons.slices = slices
 
-            wsout = fill_between_labels(prop, mo, data, mask, axons)
-            mo.write(wsout)
+            fill_between_labels(prop, mo, data, mask, axons)
 
 
 def fill_between_labels(prop, mo, data, mask, axons):
@@ -507,31 +575,26 @@ def fill_between_labels(prop, mo, data, mask, axons):
         axons_ds = None
 
     mask = ~mask_ds.astype('bool')
-#     mask = binary_dilation(~mask_ds.astype('bool'))
 
     seeds = create_seeds(im_ds, prop.label, prop.label, axons_ds, cylinder=1)
 
-#     if axons_ds is not None:
-#         seeds_NoR = create_seeds(im_ds, prop.label, prop.label, axons_ds=None, cylinder=1)
-#     else:
-#         seeds_NoR = seeds
-#     NoR_zrange = detect_NoR(seeds_NoR, 1, mask_ds)
-#     print(prop.label, mo.slices)
-#     if NoR_zrange:
-#         print(NoR_zrange, len(NoR_zrange))
-#         print(NoR_zrange[0] + mo.slices[0].start,
-#               NoR_zrange[-1] + mo.slices[0].start)
-#     else:
-#         print('not a NoR')
-
     ws = watershed(-data_ds, seeds, mask=mask)
-#     ws = seeds
 
     mask_label = ws == 1
     wsout = im_ds
     wsout[mask_label] = prop.label
 
-    return wsout
+#     # make sure resulting label is contiguous; split if not
+#     labels_split, rp = split_label(mask_label)
+#     if rp is None:
+#         print('single voxel: {}'.format(prop.label))
+#     elif len(rp) == 1:
+#         pass
+#     else:
+#         print('split label: {} {}'.format(prop.label, len(rp)))
+#         wsout, mo.maxlabel = split_label_corr(labels_split, rp, mo.maxlabel, wsout)
+
+    mo.write(wsout)
 
 
 def detect_NoR(seeds, seedlabel, maskMM):
@@ -565,8 +628,8 @@ def detect_NoR_from_labels(prop):
     return slc_idxs
 
 
-def connect_to_borders(prop, im, mo, data=None, maskMM=None, maskDS=None,
-                       searchradius=[100, 30, 30]):
+def connect_to_borders(prop, im, mo, data=None, maskMM=None,
+                       searchradius=[100, 30, 30], maskDS=None):
 
     for direction in ['down', 'up']:
 
@@ -574,15 +637,17 @@ def connect_to_borders(prop, im, mo, data=None, maskMM=None, maskDS=None,
                                              searchradius,
                                              z_extent=10)[0]  # z_extent=searchradius[0]
 
-#         print(prop.label, direction, slices)
+        print(prop.label, direction, slices)
 
         # continue if borderslice is already top/bottom
         if (direction == 'down' and (slices[0].stop == 1) or
-                direction == 'up' and (slices[0].start == mo.dims[0] - 1)):
+                direction == 'up' and (slices[0].start == mo.dims[0] - 1)):  # i.e. b_idx == dims[0] - 1
+            print("continue if borderslice is already top/bottom")
             continue
         # continue if dataset border is outside search region
         if ((direction == 'down' and (slices[0].start != 0)) or
                 (direction == 'up' and (slices[0].stop != mo.dims[0]))):
+            print("continue if dataset border is outside search region")
             continue
 
         mo.slices = data.slices = slices
@@ -602,10 +667,14 @@ def connect_to_borders(prop, im, mo, data=None, maskMM=None, maskDS=None,
             maskDS_ds = None
 
         if len(np.unique(labels_ds)) < 2:
+            print("len(np.unique(labels_ds)) < 2")
             continue  # label 0 and prop.label assumed to be there
 
-        seeds = create_seeds(labels_ds, prop.label, prop.label, cylinder=2, labval=prop.label)
-        ws = watershed(-data_ds, seeds, mask=mask)
+        seeds = create_seeds(labels_ds, prop.label, prop.label, cylinder=2, labval=prop.label)  # cylinder maybe too big
+        if maskMM is not None:
+            ws = watershed(-data_ds, seeds, mask=mask)
+        else:
+            ws = watershed(-data_ds, seeds)
 
         mask_label = ws == prop.label
         wsout = labels_ds
@@ -638,64 +707,56 @@ def fill_to_borders(prop, mo, data, mask, axons):
     return wsout
 
 
-def fill_connected_labels(datadir='/Users/michielk/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00',
-                          dataset='B-NT-S10-2f_ROI_00ds7',
-                          h5_dset_in='labelMA_nt_ws',
-                          searchradius=[10, 10, 10], use_axons=False,
-                          between=True, to_border=True):
-    import os
+def fill_connected_labels(image_in,
+                          data_in='',
+                          maskMM_in='',
+                          searchradius=[10, 10, 10],
+                          check_split=False, checkonly=False,
+                          between=False, to_border=False,
+                          outputpath='',
+                          usempi=False):
 
-    h5_fname = '{}_labels_labelMA_comb.h5'.format(dataset)
-    h5_dset = h5_dset_in
-    h5_path = os.path.join(datadir, h5_fname, h5_dset)
-    svoxs = utils.get_image(h5_path, imtype='Label')
+    mpi = wmeMPI(usempi)
 
-    if use_axons:
-        h5_fname = '{}_labels_labelMA_comb.h5'.format(dataset)
-        h5_dset = 'labelMA_nt_probMA_eed_thr0.5_labeled_axons'
-        h5_path = os.path.join(datadir, h5_fname, h5_dset)
-        axons = utils.get_image(h5_path, imtype='Label')
+    svoxs = utils.get_image(image_in, imtype='Label', comm=mpi.comm)
+
+    if data_in:
+        data = utils.get_image(data_in, comm=mpi.comm)
+ 
+    if maskMM_in:
+        mask = utils.get_image(maskMM_in, imtype='Mask', comm=mpi.comm)
+        maskds = mask.ds
     else:
-        # FIXME: not sure I want to use this #
-        axons = None
+        mask = None
+        maskds = None
 
-    h5_fname = '{}.h5'.format(dataset)
-    h5_dset = 'data'
-    h5_path = os.path.join(datadir, h5_fname, h5_dset)
-    data = utils.get_image(h5_path)
-
-    h5_fname = '{}_masks_maskMM.h5'.format(dataset)
-    h5_dset = 'maskMM_PP'
-    h5_path = os.path.join(datadir, h5_fname, h5_dset)
-    mask = utils.get_image(h5_path, imtype='Mask')
-
-    h5_fname = h5_fname = '{}_labels_labelMA_comb.h5'.format(dataset)
-    h5_dset = h5_dset_in
-    if between and to_border:
-        h5_dset = h5_dset + '_filled'
-    elif between:
-        h5_dset = h5_dset + '_between'
-    elif to_border:
-        h5_dset = h5_dset + '_toborder'
-    outputpath = os.path.join(datadir, h5_fname, h5_dset)
     props = svoxs.get_props(protective=False)
     mo = LabelImage(outputpath, **props)
-    mo.create()
-    mo.ds[:] = np.copy(svoxs.ds[:])
+    mo.create(comm=mpi.comm)
 
-    rp_main = regionprops(svoxs.ds, mask.ds)
-    for prop in rp_main:
-#         if prop.label not in [1517, 1518, 1519]:
-#             continue
+    mo.ds[:] = np.copy(svoxs.ds[:])
+    mo.set_maxlabel()
+
+    rp_main = regionprops(svoxs.ds, maskds)
+    mpi.nblocks = len(rp_main)
+    mpi.scatter_series()  # randomize=True
+
+    for i in mpi.series:
+        prop = rp_main[i]
+
         if between:
-            connect_split_label(prop, svoxs, mo, data, mask, axons, searchradius)
+            connect_split_label(prop, svoxs, mo, data, mask, searchradius, axons=None)
         if to_border:
-            connect_to_borders(prop, svoxs, mo, data, mask, axons, searchradius)
+            connect_to_borders(prop, svoxs, mo, data, mask, searchradius, axons=None)
+        if check_split:
+            check_split_label(prop, mo, checkonly=checkonly)
 
     mo.close()
     svoxs.close()
-    data.close()
-    mask.close()
+    if data_in:
+        data.close()
+    if maskMM_in:
+        mask.close()
 
 
 def create_seeds(imregion, label_top, label_bot,
@@ -794,7 +855,18 @@ def sort_rp_on_z(rp):
     return [rp[i] for i in rp_idxs]
 
 
+def sort_rp_on_size(rp):
+
+    sizes = []
+    for p in rp:
+        sizes.append(p.area)
+    rp_idxs = np.argsort(-np.array(sizes))
+
+    return [rp[i] for i in rp_idxs]
+
+
 def get_borderslice(direction, prop):
+    """Return the index of the top/bottom section of a label."""
 
     if direction == 'down':  # a box below the label bbox
         borderslice = int(prop.bbox[0])
@@ -814,8 +886,8 @@ def get_centroid(mask):
 
 
 def get_zZ(direction, im, prop, searchradius=[20, 20, 20]):
+    """Return the z-range of a box above/below the label's bbox."""
 
-    # get the z-range of a box above/below the label's bbox
     if direction == 'down':  # a box below the label bbox including borderslice
         b_idx = get_borderslice(direction, prop)
         z = max(0, b_idx - searchradius[0])
@@ -843,9 +915,9 @@ def get_xXyY_from_bbox(im, prop, searchradius=[20, 20, 20]):
 
     # get the x,y-range of a box above/below the label's bbox
     y = max(0, int(prop.bbox[1]) - searchradius[1])
-    Y = min(im.dims[1], int(prop.bbox[4]) + searchradius[1] + 1)
+    Y = min(im.dims[1], int(prop.bbox[4]) + searchradius[1])
     x = max(0, int(prop.bbox[2]) - searchradius[2])
-    X = min(im.dims[2], int(prop.bbox[5]) + searchradius[2] + 1)
+    X = min(im.dims[2], int(prop.bbox[5]) + searchradius[2])
 
     return x, X, y, Y
 
@@ -900,23 +972,24 @@ def get_region_slices_projected(direction, im, prop,
                                 searchradius=[20, 20, 20], z_extent=10):
 
     # centroids of borderslice and labelslice (i.e. the one *z_extent* sections down/up)
-    b_idx = get_borderslice(direction, prop)
-    z, Z = get_zZ(direction, im, prop, searchradius)
+    b_idx = get_borderslice(direction, prop)  # border section index
+    z, Z = get_zZ(direction, im, prop, searchradius)  # z and Z for start, stop in slice
     l_idx = {'down': b_idx + z_extent,
              'up': b_idx - z_extent}[direction]
 
-#     print(z_extent, b_idx, l_idx, z, Z)
+    print(z_extent, b_idx, l_idx, z, Z)
     if (l_idx < 0
             or l_idx > (im.dims[0] - 1)):
 #         or (Z-z < z_extent)
         # FIXME: the final condition only valid if Z-z pertains to box around label
-        print('no projection')
+        print('no projection: section at z_extent out of bounds')
         return get_region_slices(direction, im, prop, searchradius)
 
     b_mask = im.ds[b_idx, :, :] == prop.label
     l_mask = im.ds[l_idx, :, :] == prop.label
 
     if np.sum(b_mask) == 0 or np.sum(l_mask) == 0:
+        print('no projection: bordersection or section at z_extent does not contain prop.label')
         return get_region_slices(direction, im, prop, searchradius)
 
 #     print(np.sum(b_mask), np.sum(l_mask))
@@ -937,7 +1010,7 @@ def get_region_slices_projected(direction, im, prop,
         Z = min(int(p_point[0]), im.dims[0])
     elif direction == 'down':
         z = max(0, int(p_point[0]))
-        Z = b_idx
+        Z = b_idx + 1
 
     # get the xy-range for the borderslice and projected point
     x1, X1, y1, Y1 = get_xXyY_from_centroid(im, b_ctr, searchradius)
@@ -948,7 +1021,8 @@ def get_region_slices_projected(direction, im, prop,
     x = min(x1, x2)
     X = max(X1, X2)
 
-    dataslices = [z, Z+1, 1, y, Y+1, 1, x, X+1, 1]  # is this half-open??
+#     dataslices = [z, Z+1, 1, y, Y+1, 1, x, X+1, 1]  # is this half-open?? moved the +1 to 'down only'
+    dataslices = [z, Z, 1, y, Y, 1, x, X, 1]
     slices = im.get_slice_objects(dataslices)
 
     # TODO: cylinder
@@ -958,6 +1032,34 @@ def get_region_slices_projected(direction, im, prop,
 #     ys = np.linspace(x1, x2, n_slices)
 
     return slices, (x, X, y, Y, z, Z)
+
+
+def create_mask(outputpath, image_in, mask_in, mask_ds=''):
+
+    tv = utils.get_image(image_in, imtype='Label')
+    maskWS = utils.get_image(mask_in, imtype='Mask')
+    if mask_ds:
+        maskDS = utils.get_image(mask_ds, imtype='Mask')
+
+    props = maskWS.get_props()
+    mo = MaskImage(outputpath, **props)
+    mo.create()
+
+    if mask_ds:
+        mask = maskDS.ds[:, :, :]
+        mask[tv.ds[:,:,:] != 0] = 0
+        mask[maskWS.ds[:,:,:] == 1] = 0
+    else:
+        mask = maskWS.ds[:, :, :]
+        mask[tv.ds[:,:,:] != 0] = 0
+
+    mo.write(mask)
+
+    mo.close()
+    tv.close()
+    maskWS.close()
+    if mask_ds:
+        maskDS.close()
 
 
 if __name__ == "__main__":

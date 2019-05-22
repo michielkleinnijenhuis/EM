@@ -149,7 +149,8 @@ def ws(outpath, props, mask_ma, seeds, mask_ws, dist):
     label_mm = LabelImage(outpath, **props)
     label_mm.create()
     ws = watershed(img_as_float(dist.ds[:]), seeds, mask=mask_ws.ds[:])
-    ws[mask_ma] = 0
+#     ws[mask_ma] = 0  # insufficient
+    ws[~mask_ws.ds[:]] = 0
     label_mm.write(ws)
 
     return label_mm
