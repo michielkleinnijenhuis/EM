@@ -92,13 +92,9 @@ def nodes_of_ranvier(
     print("number of labels in labelvolume: {}".format(len(labelset)))
 
     # get the labelsets that touch the borders
-#     sidesmask = get_boundarymask(h5path_boundarymask, ('ero', 3))
-#     sidesmask = get_boundarymask(h5path_boundarymask)
-    top_margin=1  # 4 or 14
-    bot_margin=1  # 4
-    sidesmask = get_boundarymask(h5path_boundarymask, ('invdil', 3), top_margin, bot_margin)
-    ls_bot = set(np.unique(labels[:bot_margin, :, :]))
-    ls_top = set(np.unique(labels[-top_margin:, :, :]))
+    sidesmask = get_boundarymask(h5path_boundarymask, 'invdil')
+    ls_bot = set(np.unique(labels[:4, :, :]))
+    ls_top = set(np.unique(labels[-4:, :, :]))
     ls_sides = set(np.unique(labels[sidesmask]))
     ls_border = ls_bot | ls_top | ls_sides
     ls_centre = labelset - ls_border
@@ -141,16 +137,14 @@ def nodes_of_ranvier(
     # automated label merge
     labelsets = {}
 #     min_labelsize = 10
-    if 0:
-        labelsets, filled = merge_labels(labels_nt, labelsets, merge_methods,
-                                         overlap_threshold,
-                                         h5path_data, h5path_mmm,
-                                         min_labelsize,
-                                         searchradius)
-#         fw = np.zeros(maxlabel + 1, dtype='i')
-        ds_out[:] = utils.forward_map(np.array(fw_nt), labels, labelsets)
-    else:
-        filled = None
+    labelsets, filled = merge_labels(labels_nt, labelsets, merge_methods,
+                                     overlap_threshold,
+                                     h5path_data, h5path_mmm,
+                                     min_labelsize,
+                                     searchradius)
+
+#     fw = np.zeros(maxlabel + 1, dtype='i')
+    ds_out[:] = utils.forward_map(np.array(fw_nt), labels, labelsets)
 
     if save_steps:
 
@@ -181,17 +175,16 @@ def nodes_of_ranvier(
         return ds_out
 
 
-def get_boundarymask(h5path_mask, masktype=('invdil', 7),
-                     top_margin=4, bot_margin=4):
+def get_boundarymask(h5path_mask, masktype='invdil'):
     """Load or generate a mask."""
 
     mask = utils.h5_load(h5path_mask, load_data=True, dtype='bool')[0]
-    if masktype[0] == 'ero':
-        mask = binary_erosion(mask, ball(masktype[1]))
-    elif masktype[0] == 'invdil':
-        mask = scipy_binary_dilation(~mask, iterations=masktype[1], border_value=0)
-        mask[:bot_margin, :, :] = False
-        mask[-top_margin:, :, :] = False
+    if masktype == 'ero':
+        mask = binary_erosion(mask, ball(3))
+    elif masktype == 'invdil':
+        mask = scipy_binary_dilation(~mask, iterations=7, border_value=0)
+        mask[:4, :, :] = False
+        mask[-4:, :, :] = False
 
     return mask
 
@@ -280,7 +273,7 @@ def merge_neighbours(labels, labelsets={}, overlap_thr=20):
         # get a mask of voxels adjacent to the label (boundary)
         imregion = labels[z:Z, y:Y, x:X]
         labelmask = imregion == prop.label
-        boundary = np.logical_xor(binary_dilation(labelmask), labelmask)
+        boundary = binary_dilation(labelmask) - labelmask
 
         # evaluate which labels overlap sufficiently with this mask
         # TODO: dice-like overlap?

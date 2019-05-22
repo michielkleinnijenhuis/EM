@@ -798,7 +798,7 @@ def parse_separate_sheaths(parser):
     parser.add_argument(
         '-d', '--dilation_iterations',
         type=int,
-        nargs='*',
+        nargs=3,
         default=[1, 7, 7],
         help="""number of iterations for binary dilation
                 of the myelinated axon compartment
