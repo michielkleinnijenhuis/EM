@@ -17,7 +17,7 @@ except ImportError:
 try:
     import DM3lib as dm3
 except ImportError:
-    raise
+    print("dm3lib could not be loaded")
 
 
 class Image(object):
