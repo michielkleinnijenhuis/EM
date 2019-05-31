@@ -14,6 +14,8 @@ from skimage.morphology import binary_dilation, ball, disk
 
 from wmem import parse, utils, wmeMPI, Image, MaskImage
 
+from skimage.measure import label
+
 
 def main(argv):
     """Create thresholded hard segmentations."""
@@ -187,6 +189,26 @@ def frange(x, y, jump):
     while x < y:
         yield x
         x += jump
+
+
+def preprocess_mask(image_in, outputpath, min_size=1000):
+    """Add a manually-defined set of labels to through-volume and remove from not-through."""
+
+    # read the labelvolume
+    im = utils.get_image(image_in, imtype='Label')
+    comps = im.split_path()
+
+    mo = MaskImage(outputpath, **im.get_props())
+    mo.create()
+
+    if min_size:
+        mask = label(im.ds[:], return_num=False, connectivity=None)
+        remove_small_objects(mask, min_size, in_place=True)
+
+    mo.write(mask)
+
+    im.close()
+    mo.close()
 
 
 if __name__ == "__main__":
