@@ -491,7 +491,8 @@ def correct_NoR(image_in):
 
     for ls_name, ls in zip(['nt', 'tv'], [nt, tv]):
         utils.write_labelsets(ls, '{}_{}'.format(ls_stem, ls_name), filetypes=['txt'])
-        outputpath = '{}_steps/labels_{}'.format(ls_stem, ls_name)
+        dset_out = '{}_NoR_steps/labels_{}'.format(comps['dset'], ls_name)
+        outputpath = os.path.join(comps['file'], dset_out)
         write_vol(outputpath, im, ls)
 
     im.close()
