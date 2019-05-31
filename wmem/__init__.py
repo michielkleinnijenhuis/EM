@@ -7,8 +7,11 @@ import numpy as np
 import nibabel as nib
 from skimage.io import imread, imsave
 
-import javabridge
-import bioformats
+try:
+    import javabridge
+    import bioformats
+except ImportError:
+    print("bioformats could not be loaded")
 
 import errno
 
@@ -324,7 +327,8 @@ class Image(object):
         if not self.path:
             pass
 
-        javabridge.start_vm(class_path=bioformats.JARS, run_headless=True)
+        if self.format == '.pbf':
+            javabridge.start_vm(class_path=bioformats.JARS, run_headless=True)
 
         formats = {'.h5': self.h5_load,
                    '.nii': self.nii_load,
@@ -340,7 +344,8 @@ class Image(object):
         self.elsize = self.get_elsize()
         self.axlab = self.get_axlab()
 
-        javabridge.kill_vm()
+        if self.format == '.pbf':
+            javabridge.kill_vm()
 
     def h5_load(self, comm=None, load_data=True):
         """Load a h5 dataset."""
