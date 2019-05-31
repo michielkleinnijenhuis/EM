@@ -11,7 +11,7 @@ import os
 import numpy as np
 from skimage.measure import label, regionprops
 
-from wmem import parse, utils, LabelImage
+from wmem import parse, utils, LabelImage, MaskImage
 
 
 def main(argv):
@@ -277,6 +277,27 @@ def save_diff(orig_labels, labels, stepname, outpaths, elsize, axlab):
     diffmask = orig_labels != labels
     diff[diffmask] = labels[diffmask]
     utils.save_step(outpaths, stepname, diff, elsize, axlab)
+
+
+def delete_nii(image_in):
+
+    im = utils.get_image(image_in, imtype='Label')
+    comps = im.split_path()
+
+    ls_root = '{}_{}_nii_delete'.format(comps['base'], comps['dset'])
+    mask = MaskImage('{}.nii.gz'.format(ls_root))
+    mask.load()
+
+    m = np.transpose(mask.ds[:].astype('bool'))
+    labs = im.ds[:]
+    labs_masked = labs[m]
+    labels = np.unique(labs_masked)
+    labelsets = {0: set(list(labels))}
+
+    utils.write_labelsets(labelsets, ls_root, ['pickle', 'txt'])
+
+    im.close()
+    mask.close()
 
 
 if __name__ == "__main__":
