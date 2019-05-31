@@ -10,7 +10,7 @@ function prep_environment {
     # for easy rsyncing between systems
     host_jal=michielk@jalapeno.fmrib.ox.ac.uk
     host_arc=ndcn0180@arcus-b.arc.ox.ac.uk
-	host_pmc=mkleinnijenhuis@processed.pmc_research.op.umcutrecht.nl
+    host_pmc=mkleinnijenhuis@processed.pmc_research.op.umcutrecht.nl
     scriptdir_loc="$HOME/workspace/EM"
     scriptdir_jal='/home/fs0/michielk/workspace/EM'
     scriptdir_arc='/home/ndcn0180/workspace/EM'
@@ -18,16 +18,16 @@ function prep_environment {
 
     if [ "$compute_env" == "ARCB" ]
     then
-        PATH="${DATA}/anaconda2/bin:$PATH"
+        PATH="$DATA/anaconda2/bin:$PATH"
         HDF5_PREFIX='/data/ndcn-fmrib-water-brain/ndcn0180/workspace/hdf5'
         PATH="$HDF5_PREFIX/bin:$PATH"
         CONDA_PATH="$( conda info --root )"
-#         PYTHONPATH="$scriptdir"
+        # PYTHONPATH="$scriptdir"
         PYTHONPATH="$PYTHONPATH:$HOME/workspace/pyDM3reader"
         imagej='/system/software/linux-x86_64/fiji/20140602/ImageJ-linux64'
         ilastik="$HOME/workspace/ilastik-1.2.2post1-Linux/run_ilastik.sh"
 
-#         module load hdf5-parallel/1.8.17_mvapich2_gcc
+        # module load hdf5-parallel/1.8.17_mvapich2_gcc
         module load matlab/R2015a
 
         eed_tgtdir="$scriptdir/bin"
@@ -42,9 +42,9 @@ function prep_environment {
         module load python/2.7 mpi4py/1.3.1 hdf5-parallel/1.8.14_mvapich2
         module load matlab/R2015a
 
-        PATH="${DATA}/anaconda2/bin:$PATH"
+        PATH="$DATA/anaconda2/bin:$PATH"
         CONDA_PATH="$( conda info --root )"
-#         PYTHONPATH="$scriptdir:$PYTHONPATH"
+        # PYTHONPATH="$scriptdir:$PYTHONPATH"
         PYTHONPATH="$HOME/workspace/pyDM3reader:$PYTHONPATH"
         imagej='/system/software/linux-x86_64/fiji/20140602/ImageJ-linux64'
         ilastik="$HOME/workspace/ilastik-1.2.2post1-Linux/run_ilastik.sh"
@@ -63,9 +63,9 @@ function prep_environment {
         HDF5_PREFIX='/vols/Data/km/michielk/workspace/hdf5'
         PATH="$HDF5_PREFIX/bin:$PATH"
         CONDA_PATH="$( conda info --root )"
-#         PYTHONPATH="$scriptdir:$PYTHONPATH"
+        # PYTHONPATH="$scriptdir:$PYTHONPATH"
         PYTHONPATH="$HOME/workspace/pyDM3reader:$PYTHONPATH"
-#         imagej=/opt/fmrib/ImageJ  # TODO
+        # imagej=/opt/fmrib/ImageJ  # TODO
         ilastik='/vols/Data/km/michielk/ilastik-1.2.2post1-Linux/run_ilastik.sh'
 
         eed_tgtdir="$scriptdir/bin"
@@ -77,7 +77,7 @@ function prep_environment {
     elif [ "$compute_env" == "LOCAL" ]
     then
         DATA="$HOME/oxdata/P01"
-        PATH="${HOME}/anaconda2/bin:$PATH"
+        PATH="$HOME/anaconda2/bin:$PATH"
         CONDA_PATH="$( conda info --root )"
         PYTHONPATH="$scriptdir"
         PYTHONPATH="$PYTHONPATH:$HOME/workspace/pyDM3reader"
@@ -93,7 +93,7 @@ function prep_environment {
     elif [ "$compute_env" == "RIOS013" ]
     then
         DATA="$HOME/oxdata/P01"
-        PATH="${HOME}/anaconda2/bin:$PATH"
+        PATH="$HOME/anaconda2/bin:$PATH"
         CONDA_PATH="$( conda info --root )"
         PYTHONPATH="$scriptdir"
         PYTHONPATH="$PYTHONPATH:$HOME/workspace/pyDM3reader"
@@ -105,9 +105,6 @@ function prep_environment {
         eed_script="$scriptdir/wmem/EM_eed_simple.m"
         [ ! -f "$eed_tgtdir/EM_eed_simple.app/Contents/MacOS/EM_eed_simple" ] &&
             deployed_eed "$eed_tgtdir" "$eed_tbxdir" "$eed_script"
-
-#    elif [ "$compute_env" == "UBC" ]
-#    then
 
     fi
 
@@ -175,7 +172,7 @@ function datastems_blocks {
 
 
 function datastem2coords {
-    #
+    # Extract start-stop indices from blockname.
 
     CO=${datastem#"$dataset"}
     x=${CO:1:5}; x=$(strip_leading_zeroes $x);
@@ -191,6 +188,7 @@ function datastem2coords {
 
 
 function downsampled_coords {
+    # Find downsampled (x,X,y,Y) coordinates from full coordinates.
 
     #echo "$(( $1 / ds)) $(( $2 / ds)) $(( $3 / ds)) $(( $4 / ds)) $5 $6"
     k=$(( ds - 1 ))
@@ -201,6 +199,7 @@ function downsampled_coords {
 
 
 function coordsXYZ_to_slicesZYX {
+    # Convert coordinate set to python slices form.
 
     local start_x=$1
     local stop_x=$2
@@ -220,7 +219,7 @@ function coordsXYZ_to_slicesZYX {
 
 
 function strip_leading_zeroes {
-    #
+    # Strip leading zeroes from a number.
 
     local num=$1
 
@@ -248,6 +247,7 @@ function get_coords_upper {
     echo "$CO"
 
 }
+
 
 function get_coords_lower {
     # Get lower coordinate of the block.
@@ -289,6 +289,7 @@ function get_datastem {
 
 
 function get_datastem_index {
+    # Locate a block identifier in an array and return it's index.
 
     local datastem=$1
 
@@ -351,7 +352,7 @@ function find_missing_h5 {
 
 
 function set_datastems {
-    # 
+    #
 
     [ ! -z "$stemsmode" ] &&
         datastems_blocks
@@ -471,7 +472,7 @@ function get_cmd_fiji_register {
     # Get the command for registering the slices with Fiji.
 
     echo $imagej --headless $datadir/fiji_register.py  # string var
-#     echo imagej --headless $datadir/fiji_register.py  # alias
+    # echo imagej --headless $datadir/fiji_register.py  # alias
 
 }
 
@@ -524,8 +525,8 @@ function get_cmd_splitblocks_datastem {
 function get_cmd_apply_ilastik {
     # Get the command for applying the ilastik pixel classifier.
 
-#     echo "export LAZYFLOW_THREADS=16;"
-#     echo "export LAZYFLOW_TOTAL_RAM_MB=110000;"
+    # echo "export LAZYFLOW_THREADS=16;"
+    # echo "export LAZYFLOW_TOTAL_RAM_MB=110000;"
     echo "$ilastik --headless \\"
     echo "--preconvert_stacks \\"
     echo "--project=$datadir/$pixprob_trainingset.ilp \\"
@@ -544,20 +545,19 @@ function write_ilastik_correct_attributes {
     local pyfile=$1
 
     echo "import os" > $pyfile
-    echo "import numpy as np" >> $pyfile
-    echo "from wmem import utils" >> $pyfile
+    echo "from wmem import utils, Image, LabelImage" >> $pyfile
     echo "datadir = '$datadir'" >> $pyfile
     echo "dataset = '$dataset'" >> $pyfile
     echo "h5dset_in = dataset + '.h5/data'" >> $pyfile
     echo "h5path_in = os.path.join(datadir, h5dset_in)" >> $pyfile
-    echo "h5_in, ds_in, es, al = utils.h5_load(h5path_in)" >> $pyfile
+    echo "im1 = utils.get_image(h5path_in)" >> $pyfile
     echo "h5dset_out = dataset + '_probs.h5/volume/predictions'" >> $pyfile
     echo "h5path_out = os.path.join(datadir, h5dset_out)" >> $pyfile
-    echo "h5_out, ds_out, _, _ = utils.h5_load(h5path_out)" >> $pyfile
-    echo "es = np.append(ds_in.attrs['element_size_um'], 1)" >> $pyfile
-    echo "utils.h5_write_attributes(ds_out, element_size_um=es)" >> $pyfile
-    echo "h5_in.close()" >> $pyfile
-    echo "h5_out.close()" >> $pyfile
+    echo "im2 = utils.get_image(h5path_out)" >> $pyfile
+    echo "im2.elsize[:3] = im1.elsize[:3]" >> $pyfile
+    echo "im2.h5_write_elsize()" >> $pyfile
+    echo "im1.close()" >> $pyfile
+    echo "im2.close()" >> $pyfile
     chmod u+x $pyfile
 
 }
@@ -577,7 +577,7 @@ function get_cmd_sum_volumes {
 function get_cmd_eed_deployed {
     # Get the command for filtering data with edge-enhancing diffusion.
 
-#     echo $scriptdir/bin/run_EM_eed_simple.sh \  # does not run on ARCUSB
+    # echo $scriptdir/bin/run_EM_eed_simple.sh \  # does not run on ARCUSB
     echo $scriptdir/bin/EM_eed_simple \
         \'$datadir/blocks_${bs}\' \
         \'$datastem$ipf\' \'/$ids\' \
@@ -586,6 +586,7 @@ function get_cmd_eed_deployed {
         \> $datadir/blocks_$bs/${datastem}_$jobname.log
 
 }
+
 
 function get_cmd_eed_matlab {
     # Get the command for filtering data with edge-enhancing diffusion.
@@ -605,7 +606,7 @@ function get_cmd_eed_matlab {
 
 # function get_cmd_eed_matlab {
 #     # Get the command for filtering data with edge-enhancing diffusion.
-# 
+#
 #     local mlcmd
 #     mlcmd+=try\;
 #     mlcmd+=addpath\(\'$scriptdir\'\)\;
@@ -615,18 +616,18 @@ function get_cmd_eed_matlab {
 #     mlcmd+=\'datastem$opf\\',\'/$ods\',
 #     mlcmd+='0,50,1,1\);'
 #     mlcmd+='catch;end;quit;'
-# 
+#
 #     echo matlab -nodesktop -nojvm -r \'"$mlcmd"\'
-# 
+#
 # }
 
 
 function get_cmd_mergeblocks {
     # Get the command for merging blocks of data.
 
-#     unset infiles
-#     declare -a infiles
-#     get_infiles
+    # unset infiles
+    # declare -a infiles
+    # get_infiles
 
     echo python -W ignore $scriptdir/wmem/mergeblocks.py \
         "${infiles[@]}" \
@@ -705,7 +706,21 @@ function get_cmd_h52nii {
 
     echo python -W ignore $scriptdir/wmem/stack2stack.py \
         $datadir/$dataroot$ipf.h5/$ids \
-        $datadir/$dataroot${ipf}_$ods.nii.gz $args
+        $datadir/$dataroot${ipf}_$ods.nii.gz \
+        $args
+
+}
+
+
+function get_cmd_conncomp_3D {
+    # Get the command for .
+
+    dataroot=$1
+
+    echo python -W ignore $scriptdir/wmem/connected_components.py \
+        $datadir/$dataroot$ipf.h5/$ids \
+        $datadir/$dataroot$opf.h5/$ods \
+        -m '3D' "$args"
 
 }
 
@@ -752,6 +767,7 @@ function get_cmd_conncomp_2Dprops {
 
 }
 
+
 function get_cmd_conncomp_2Dto3D {
     # Get the command for .
 
@@ -776,6 +792,7 @@ function get_cmd_conncomp_train {
         -m 'train'  # TODO
 
 }
+
 
 function get_cmd_conncomp_test {
     # Get the command for .
@@ -809,7 +826,8 @@ function get_cmd_s2s {
     dataroot=$1
     echo python -W ignore $scriptdir/wmem/stack2stack.py \
         $datadir/$dataroot$ipf.h5/$ids \
-        $datadir/$dataroot$opf.h5/$ods $args
+        $datadir/$dataroot$opf.h5/$ods \
+        $args
 
 }
 
@@ -867,7 +885,7 @@ function get_cmd_upsample_blocks {
 function get_cmd_fill_holes {
     # Get the command for .
 
-    echo python $scriptdir/wmem/fill_holes.py -S \
+    echo python -W ignore $scriptdir/wmem/fill_holes.py -S \
         $datadir/blocks_$bs/$datastem$ipf.h5/$ids \
         $datadir/blocks_$bs/$datastem$opf.h5/$ods \
         $args
@@ -880,10 +898,75 @@ function get_cmd_merge_labels_ws {
 
     dataroot=$1
 
-    echo python $scriptdir/wmem/merge_labels.py -S \
-        $datadir/$dataroot$ipf.h5/$ids \
-        $datadir/$dataroot$opf.h5/$ods \
-        $args
+    echo python -W ignore "$scriptdir/wmem/merge_labels.py" \
+        "$datadir/$dataroot$ipf.h5/$ids" \
+        "$datadir/$dataroot$opf.h5/$ods" \
+        "$args"
 
 }
 
+
+function get_cmd_NoR {
+    # Get the command for .
+
+    dataroot=$1
+
+    echo python -W ignore "$scriptdir/wmem/nodes_of_ranvier.py" \
+        "$datadir/$dataroot$ipf.h5/$ids" \
+        "$datadir/$dataroot$opf.h5/$ods" \
+        "$args"
+
+}
+
+
+function get_cmd_remap {
+    # Get the command for .
+
+    dataroot=$1
+
+    echo python -W ignore "$scriptdir/wmem/remap_labels.py" \
+        "$datadir/$dataroot$ipf.h5/$ids" \
+        "$datadir/$dataroot$opf.h5/$ods" \
+        "$args"
+
+}
+
+
+function get_cmd_combine_labels {
+    # Get the command for .
+
+    dataroot=$1
+
+    echo python -W ignore "$scriptdir/wmem/combine_labels.py" \
+        "$datadir/${dataroot}${ipf1}.h5/${ids1}" \
+        "$datadir/${dataroot}${ipf2}.h5/${ids2}" \
+        "$datadir/${dataroot}${opf}.h5/${ods}" \
+        "$args"
+
+}
+
+
+function get_cmd_merge_slicelabels_mpi {
+    # Get the command for .
+
+    dataroot="$1"
+
+    echo python -W ignore "$scriptdir/wmem/merge_slicelabels.py" \
+        "$datadir/$dataroot$ipf.h5/$ids" \
+        "$datadir/$dataroot$opf.h5/$ods" \
+        "$args"
+
+}
+
+
+function get_cmd_merge_slicelabels {
+    # Get the command for .
+
+    dataroot="$1"
+
+    echo python -W ignore "$scriptdir/wmem/merge_slicelabels.py" \
+        "$datadir/$dataroot$ipf.h5/$ids" \
+        "$datadir/$dataroot$opf.h5/$ods" \
+        "$args"
+
+}

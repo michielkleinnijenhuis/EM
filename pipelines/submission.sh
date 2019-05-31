@@ -162,7 +162,7 @@ function submit_job {
     then
         subcmd='qsub'
         devq='-q develq'
-        array=''  # TODO: implement array='-t 100-200' 
+        array=''  # TODO: implement array='-t 100-200'
     elif [ "$compute_env" == "JAL" ]
     then
         subcmd='fsl_sub -q long.q'
@@ -194,7 +194,7 @@ function submit_job {
 
 function get_command_array_datastems {
     # Generate an array of commands from a block identifier array.
-        # 
+        #
 
     local cmdfun=$1
     local datastem
@@ -221,7 +221,7 @@ function get_command_array_datastems {
 
 
 function get_command_array_dataslices {
-    # 
+    #
 
     local start=$1
     local stop=$2
@@ -390,7 +390,7 @@ function cmd_prefix_mpi {
     # Prefix the MPI command.
         # The command to execute with MPI is read from the arguments.
         # Switches between Arcus-B (mpirun) and LOCAL (mpiexec).
-    # Echoes the adapted command string. 
+    # Echoes the adapted command string.
 
     local cmd="$*"
 
@@ -400,6 +400,9 @@ function cmd_prefix_mpi {
         then
             cmd="mpirun \$MPI_HOSTS ${cmd}"
         elif [ "$compute_env" == "LOCAL" ]
+        then
+            cmd="mpiexec -n $tasks ${cmd}"
+        elif [ "$compute_env" == "RIOS013" ]
         then
             cmd="mpiexec -n $tasks ${cmd}"
         fi
@@ -414,14 +417,14 @@ function cmd_prefix_mpi {
 #     # Replace all occurences of 'datastem' in a command string.
 #         # Replaced with the block identifier (the first argument).
 #         # The command string is read from the remaining arguments.
-#     # Echoes the adapted command string. 
-# 
+#     # Echoes the adapted command string.
+#
 #     local datastem=$1
 #     shift
 #     local cmd="$*"
-# 
+#
 #     echo "${cmd//datastem/$datastem}"
-# 
+#
 # }
 
 
@@ -689,10 +692,10 @@ function split_blocks {
         memcpu=6000
         nodes=1
 
-#         CONDA_ENV='parallel'
-#         wtime='00:10:00'
-#         tasks=4
-#         njobs=$(( (n + tasks - 1) / tasks ))
+        # CONDA_ENV='parallel'
+        # wtime='00:10:00'
+        # tasks=4
+        # njobs=$(( (n + tasks - 1) / tasks ))
 
         wtime='05:10:00'
         tasks=$n
@@ -785,11 +788,11 @@ function sum_volumes {
     shift 6
     local vols="$@"
 
-#     local ipf='_probs'
-#     local ids='volume/predictions'
-#     local opf='_probs'
-#     local volsns="$( echo -e "${vols}" | tr -d '[:space:]' )"
-#     local ods="sum$volsns"
+    # local ipf='_probs'
+    # local ids='volume/predictions'
+    # local opf='_probs'
+    # local volsns="$( echo -e "${vols}" | tr -d '[:space:]' )"
+    # local ods="sum$volsns"
 
     set_datastems $stemsmode
     n=${#datastems[@]}
@@ -865,8 +868,8 @@ function eed {
         local fun=get_cmd_eed_deployed
         get_command_array_datastems $fun
 
-#         module load hdf5-parallel/1.8.17_mvapich2_gcc
-#         module load matlab/R2015a
+        # module load hdf5-parallel/1.8.17_mvapich2_gcc
+        # module load matlab/R2015a
 
         nodes=1
         memcpu=50000
@@ -895,7 +898,7 @@ function eed {
     elif [ "$compute_env" == "LOCAL" ]
     then
 
-#         local fun=get_cmd_eed_matlab  # TODO
+        # local fun=get_cmd_eed_matlab  # TODO
         local fun=get_cmd_eed_deployed
         get_command_array_datastems $fun
 
@@ -940,7 +943,7 @@ function mergeblocks {
         wtime='03:10:00'
         tasks=16
         njobs=1
-#         args='-B 1 7 7 -f np.mean'
+        # args='-B 1 7 7 -f np.mean'
     elif [ "$compute_env" == "ARC" ]; then
         additions+='-mpi'
         nodes=1
@@ -1027,7 +1030,7 @@ function prob2mask {
 
     fi
 
-#     unset JOBS && declare -a JOBS
+    # unset JOBS && declare -a JOBS
 #     array_job $njobs $tasks
 
 }
@@ -1269,6 +1272,330 @@ function conncomp {
 }
 
 
+function conncomp_3D {
+    #
+
+    local jobname additions CONDA_ENV njobs nodes tasks memcpu wtime
+    local cmd
+
+    local q=$1
+
+    local dataroot=$2
+
+    local ipf=$3
+    local ids=$4
+    local opf=$5
+    local ods=$6
+
+    shift 6
+    local args="$*"
+
+    jobname="cc3D"
+    additions=''
+    CONDA_ENV=''
+
+    if [[ "$compute_env" == *"ARC"* ]]; then
+
+        additions+=''
+        mpiflag=''
+
+        nodes=1
+        memcpu=60000
+        wtime='05:10:00'
+        tasks=1
+        njobs=1
+
+    elif [ "$compute_env" == "JAL" ]; then
+
+        mpiflag=''
+
+    elif [ "$compute_env" == "LOCAL" ]; then
+
+        additions+=''
+        mpiflag=''
+
+        source activate scikit-image-devel_0.13
+
+    fi
+
+    cmd=$( get_cmd_${FUNCNAME[0]} $dataroot "$args")
+
+    single_job "$cmd"
+
+}
+
+
+# function simple {
+#     local q=$1
+#     local dataroot=$2
+#     local ipf=$3
+#     local ids=$4
+#     local opf=$5
+#     local ods=$6
+#     shift 6
+#     local args="$*"
+#     jobname="NoR"
+#     additions=''
+#     CONDA_ENV=''
+#     cmd=$( get_cmd_${FUNCNAME[0]} $dataroot "$args")
+#     single_job "$cmd"
+# }
+# # NoR=$(declare -f simple)  # remap combine_labels
+
+
+function NoR {
+    #
+
+    local jobname additions CONDA_ENV njobs nodes tasks memcpu wtime
+    local cmd
+
+    local q=$1
+
+    local dataroot=$2
+
+    local ipf=$3
+    local ids=$4
+    local opf=$5
+    local ods=$6
+
+    shift 6
+    local args="$*"
+
+    jobname="NoR"
+    additions=''
+    CONDA_ENV=''
+
+    if [[ "$compute_env" == *"ARC"* ]]; then
+
+        additions+=''
+        mpiflag=''
+
+        nodes=1
+        memcpu=60000
+        wtime='05:10:00'
+        tasks=1
+        njobs=1
+
+    elif [ "$compute_env" == "JAL" ]; then
+
+        mpiflag=''
+
+    elif [ "$compute_env" == "LOCAL" ]; then
+
+        additions+=''
+        mpiflag=''
+
+        source activate scikit-image-devel_0.13
+
+    fi
+
+    cmd=$( get_cmd_${FUNCNAME[0]} $dataroot "$args")
+
+    single_job "$cmd"
+
+}
+
+
+function remap {
+    #
+
+    local jobname additions CONDA_ENV njobs nodes tasks memcpu wtime
+    local cmd
+
+    local q=$1
+
+    local dataroot=$2
+
+    local ipf=$3
+    local ids=$4
+    local opf=$5
+    local ods=$6
+
+    shift 6
+    local args="$*"
+
+    jobname="NoR"
+    additions=''
+    CONDA_ENV=''
+
+    if [[ "$compute_env" == *"ARC"* ]]; then
+
+        additions+=''
+        mpiflag=''
+
+        nodes=1
+        memcpu=60000
+        wtime='05:10:00'
+        tasks=1
+        njobs=1
+
+    elif [ "$compute_env" == "JAL" ]; then
+
+        mpiflag=''
+
+    elif [ "$compute_env" == "LOCAL" ]; then
+
+        additions+=''
+        mpiflag=''
+
+        source activate scikit-image-devel_0.13
+
+    fi
+
+    cmd=$( get_cmd_${FUNCNAME[0]} $dataroot "$args")
+
+    single_job "$cmd"
+
+}
+
+
+function combine_labels {
+    #
+
+    local jobname additions CONDA_ENV njobs nodes tasks memcpu wtime
+    local cmd
+
+    local q=$1
+    local dataroot=$2
+    shift 2
+    local args="$*"
+
+    jobname="combine_labels"
+    additions=''
+    CONDA_ENV=''
+
+    if [[ "$compute_env" == *"ARC"* ]]; then
+
+        additions+=''
+        mpiflag=''
+
+        nodes=1
+        memcpu=60000
+        wtime='05:10:00'
+        tasks=1
+        njobs=1
+
+    elif [ "$compute_env" == "JAL" ]; then
+
+        mpiflag=''
+
+    elif [ "$compute_env" == "LOCAL" ]; then
+
+        additions+=''
+        mpiflag=''
+
+        source activate scikit-image-devel_0.13
+
+    fi
+
+    cmd=$( get_cmd_${FUNCNAME[0]} $dataroot "$args")
+
+    single_job "$cmd"
+
+}
+
+
+function merge_slicelabels {
+    #
+
+    local jobname additions CONDA_ENV njobs nodes tasks memcpu wtime
+    local cmd
+
+    local q=$1
+    local dataroot=$2
+    shift 2
+    local args="$*"
+
+    jobname="combine_labels"
+    additions=''
+    CONDA_ENV=''
+
+    if [[ "$compute_env" == *"ARC"* ]]; then
+
+        additions+=''
+        mpiflag=''
+
+        nodes=1
+        memcpu=60000
+        wtime='05:10:00'
+        tasks=1
+        njobs=1
+
+    elif [ "$compute_env" == "JAL" ]; then
+
+        mpiflag=''
+
+    elif [ "$compute_env" == "LOCAL" ]; then
+
+        additions+=''
+        mpiflag=''
+
+        source activate scikit-image-devel_0.13
+
+    fi
+
+    cmd=$( get_cmd_${FUNCNAME[0]} $dataroot "$args")
+
+    single_job "$cmd"
+
+}
+
+
+function merge_slicelabels_mpi {
+    #
+
+    local jobname additions CONDA_ENV njobs nodes tasks memcpu wtime
+    local cmd
+
+    local q=$1
+    local dataroot=$2
+    shift 2
+    local args="$*"
+
+    jobname="merge_slicelabels"
+    additions='conda'
+    CONDA_ENV='parallel'
+
+    if [[ "$compute_env" == *"ARC"* ]]; then
+
+        additions+='-mpi'
+        mpiflag='-M'
+
+        nodes=4
+        memcpu=60000
+        wtime='05:10:00'
+        tasks=16
+        njobs=1
+
+    elif [ "$compute_env" == "JAL" ]; then
+
+        mpiflag=''
+
+    elif [ "$compute_env" == "LOCAL" ]; then
+
+        additions+='-mpi'
+        mpiflag='-M'
+        tasks=7  # 7 props
+
+        source activate scikit-image-devel_0.13
+
+    elif [ "$compute_env" == "RIOS013" ]; then
+
+        additions+='-mpi'
+        mpiflag='-M'
+        tasks=14
+
+        source activate h5para
+
+    fi
+
+    cmd=$( get_cmd_${FUNCNAME[0]} $dataroot "$args")
+
+    single_job "$cmd"
+
+}
+
+
 function slicvoxels {
     #
 
@@ -1305,10 +1632,10 @@ function slicvoxels {
         additions+='-array'
 
         nodes=1
-#         memcpu=60000; wtime='01:10:00';
+        # memcpu=60000; wtime='01:10:00';
         memcpu=125000; wtime='05:10:00';
 
-#         tasks=6  # 8 GB per process for 184x500x500
+        # tasks=6  # 8 GB per process for 184x500x500
         njobs=$(( (n + tasks - 1) / tasks ))
 
     elif [ "$compute_env" == "JAL" ]; then
@@ -1646,6 +1973,12 @@ function merge_labels_ws {
 
         source activate scikit-image-devel_0.13
 
+    elif [ "$compute_env" == "RIOS013" ]; then
+
+        additions+='-mpi'
+        mpiflag='-M'
+        tasks=7  # 7 props
+
     fi
 
     cmd=$( get_cmd_${FUNCNAME[0]} $dataroot )
@@ -1653,5 +1986,3 @@ function merge_labels_ws {
     single_job "$cmd"
 
 }
-
-
