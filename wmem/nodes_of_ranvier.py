@@ -273,7 +273,7 @@ def merge_neighbours(labels, labelsets={}, overlap_thr=20):
         # get a mask of voxels adjacent to the label (boundary)
         imregion = labels[z:Z, y:Y, x:X]
         labelmask = imregion == prop.label
-        boundary = binary_dilation(labelmask) - labelmask
+        boundary = np.logical_xor(binary_dilation(labelmask), labelmask)
 
         # evaluate which labels overlap sufficiently with this mask
         # TODO: dice-like overlap?
@@ -474,14 +474,14 @@ def correct_NoR(image_in):
     comps = im.split_path()
 
     # map and write the nt and tv volumes
-    def write_vol(h5path, im, ls):
-        mo = LabelImage(h5_path, **im.get_props())
+    def write_vol(outputpath, im, ls):
+        mo = LabelImage(outputpath, **im.get_props())
         mo.create()
         mo.write(im.forward_map(labelsets=ls, from_empty=True))
         mo.close()
 
     # pop manual tv-labels from auto-nt; add to auto-tv; write to tv/nt;
-    ls_stem = '{}_proofread_NoR'.format(comps['base'])
+    ls_stem = '{}_{}_NoR'.format(comps['base'], comps['dset'])
     nt = utils.read_labelsets('{}_{}.txt'.format(ls_stem, 'nt_auto'))
     tv = utils.read_labelsets('{}_{}.txt'.format(ls_stem, 'tv_auto'))
     tv_man = utils.read_labelsets('{}_{}.txt'.format(ls_stem, 'tv_manual'))
@@ -490,7 +490,7 @@ def correct_NoR(image_in):
         tv[l] = set([l])
 
     for ls_name, ls in zip(['nt', 'tv'], [nt, tv]):
-        utils.write_labelsets(ls, '{}_{}.txt'.format(ls_stem, ls_name), filetypes=['txt'])
+        utils.write_labelsets(ls, '{}_{}'.format(ls_stem, ls_name), filetypes=['txt'])
         outputpath = '{}_steps/labels_{}'.format(ls_stem, ls_name)
         write_vol(outputpath, im, ls)
 
