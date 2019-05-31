@@ -7,6 +7,9 @@ import numpy as np
 import nibabel as nib
 from skimage.io import imread, imsave
 
+import javabridge
+import bioformats
+
 import errno
 
 try:
@@ -28,7 +31,7 @@ class Image(object):
     def __init__(self, path,
                  elsize=None, axlab=None, dtype='float',
                  shape=None, dataslices=None, slices=None,
-                 chunks=None, compression='gzip',
+                 chunks=None, compression='gzip', series=0,
                  protective=False):
 
         self.path = path
@@ -42,6 +45,7 @@ class Image(object):
             self.slices = self.get_slice_objects(dataslices)
         self.chunks = chunks
         self.compression = compression
+        self.series = series
         self.protective = protective
 
         self.file = None
@@ -54,16 +58,24 @@ class Image(object):
 
         if os.path.isdir(self.path):
             files = sorted(glob.glob(os.path.join(self.path, '*')))
-            path = files[0]
-            if '.tif' in path:
-                self.format = '.tifs'
-                return
+            if files:
+                path = files[0]
+            else:
+                path = self.path
+#             if '.tif' in path:
+            self.format = '.tifs'
+            return
         else:
             path = self.path
 
         for ext in ['.h5', '.nii', '.dm3', '.tif']:
             if ext in path:
                 self.format = ext
+                return
+
+        for ext in ['.czi', '.lif']:  # ETC
+            if ext in path:
+                self.format = '.pbf'
                 return
 
 #         self.format = '.tifs'
@@ -312,9 +324,12 @@ class Image(object):
         if not self.path:
             pass
 
+        javabridge.start_vm(class_path=bioformats.JARS, run_headless=True)
+
         formats = {'.h5': self.h5_load,
                    '.nii': self.nii_load,
                    '.dm3': self.dm3_load,
+                   '.pbf': self.pbf_load,
                    '.tif': self.tif_load,
                    '.tifs': self.tifs_load}
 
@@ -324,6 +339,8 @@ class Image(object):
 
         self.elsize = self.get_elsize()
         self.axlab = self.get_axlab()
+
+        javabridge.kill_vm()
 
     def h5_load(self, comm=None, load_data=True):
         """Load a h5 dataset."""
@@ -373,6 +390,49 @@ class Image(object):
                 self.ds.append(self.get_image(fpath))
             self.ds = np.array(self.ds, dtype=self.dtype)
 
+    def pbf_load(self, comm=None, load_data=True):
+        """Load a dataset with python bioformats."""
+
+        md = bioformats.OMEXML(bioformats.get_omexml_metadata(self.path))
+        self.file = md.image(index=self.series)
+        self.ds = []
+        self.dims = self.pbf_get_dims()
+        self.dtype = self.pbf_load_dtype()
+
+        if load_data:
+            self.pbf_load_data()
+
+    def pbf_load_data(self):
+
+        axlab = 'zyxct'
+
+        self.ds = np.empty([0] + self.dims[1:], dtype=self.dtype)
+
+        for z_idx in range(0, self.dims[axlab.index('z')]):
+
+            slc = bioformats.load_image(self.path, z=z_idx, series=self.series, rescale=False)
+
+            slc = np.expand_dims(slc, axis=0)
+            if self.dims[axlab.index('c')] == 1:
+                slc = np.expand_dims(slc, axis=3)
+            if self.dims[axlab.index('t')] == 1:
+                slc = np.expand_dims(slc, axis=4)
+
+            self.ds = np.append(self.ds, slc, axis=0)
+
+    def pbf_get_dims(self):
+
+        md = bioformats.OMEXML(bioformats.get_omexml_metadata(self.path))
+        pixels = md.image(self.series).Pixels
+
+        z = pixels.SizeZ
+        y = pixels.SizeY
+        x = pixels.SizeX
+        c = pixels.SizeC
+        t = pixels.SizeT
+
+        return [z, y, x, c, t]
+
     def dm3_load(self, comm=None, load_data=True):
         """Load a stack of dm3s."""
 
@@ -408,7 +468,10 @@ class Image(object):
 
         return props
 
-    def squeeze_props(self, props, dim=None):
+    def squeeze_props(self, props=None, dim=None):
+
+        if props is None:
+            props = self.get_props()
 
         if dim is None:
             if 'c' in self.axlab:
@@ -455,6 +518,8 @@ class Image(object):
     def slice_dataset(self, squeeze=True):
 
         ndim = self.get_ndim()
+        if self.slices is None:
+            self.set_slices()
         slices = self.slices
 
         if ndim == 1:
@@ -513,8 +578,10 @@ class Image(object):
         elif self.format == '.tif':
             ndim = self.ds.ndim
         elif self.format == '.tifs':
-            ndim = self.ds.ndim
+            ndim = len(self.dims)
         elif self.format == '.dm3':
+            ndim = len(self.dims)
+        elif self.format == '.pbf':
             ndim = len(self.dims)
         elif self.format == '.dat':
             ndim = self.ds.ndim
@@ -614,6 +681,7 @@ class Image(object):
         formats = {'.h5': self.h5_load_elsize,
                    '.nii': self.nii_load_elsize,
                    '.dm3': self.dm3_load_elsize,
+                   '.pbf': self.pbf_load_elsize,
                    '.tif': self.tif_load_elsize,
                    '.tifs': self.tifs_load_elsize}
         elsize = formats[self.format]()
@@ -658,6 +726,17 @@ class Image(object):
 
         return [elsize_z, elsize_y, elsize_x]
 
+    def pbf_load_elsize(self):
+
+        md = bioformats.OMEXML(bioformats.get_omexml_metadata(self.path))
+        pixels = md.image(self.series).Pixels
+        elsize_x = pixels.PhysicalSizeX  # pixels.PhysicalSizeXUnit
+        elsize_y = pixels.PhysicalSizeY  # pixels.PhysicalSizeYUnit
+        elsize_z = pixels.PhysicalSizeZ  # pixels.PhysicalSizeZUnit
+        # TODO: units
+
+        return [elsize_z, elsize_y, elsize_x, 1 , 1]
+
     def tif_load_elsize(self):
         """Get the element sizes from a dataset."""
 
@@ -684,6 +763,7 @@ class Image(object):
         formats = {'.h5': self.h5_load_axlab,
                    '.nii': self.nii_load_axlab,
                    '.dm3': self.dm3_load_axlab,
+                   '.pbf': self.pbf_load_axlab,
                    '.tif': self.tif_load_axlab,
                    '.tifs': self.tifs_load_axlab}
         axlab = formats[self.format]()
@@ -719,17 +799,26 @@ class Image(object):
 
         return axlab
 
+    def pbf_load_axlab(self):
+
+        md = bioformats.OMEXML(bioformats.get_omexml_metadata(self.path))
+        pixels = md.image(self.series).Pixels
+        axlab = pixels.DimensionOrder.lower()
+        axlab = 'zyxct'  # wmem will read it like this for now 
+
+        return axlab
+
     def tif_load_axlab(self):
         """Get the dimension labels from a dataset."""
 
-        axlab = 'zyxct'[:len(self.get_ndim())]  # FIXME: get from header?
+        axlab = 'zyxct'[:self.get_ndim()]  # FIXME: get from header?
 
         return axlab
 
     def tifs_load_axlab(self):
         """Get the dimension labels from a dataset."""
 
-        axlab = 'zyxct'[:len(self.get_ndim())]  # FIXME: get from header?
+        axlab = 'zyxct'[:self.get_ndim()]  # FIXME: get from header?
 
         return axlab
 
@@ -1143,6 +1232,15 @@ class Image(object):
         id = 'root.ImageList.1.ImageData'
         tag = '{}.DataType'
         datatype = dtypes[int(dm3f.tags.get(tag.format(id)))]
+
+        return datatype
+
+    def pbf_load_dtype(self):
+        """Get the datatype from a czi file."""
+
+        md = bioformats.OMEXML(bioformats.get_omexml_metadata(self.path))
+        pixels = md.image(self.series).Pixels
+        datatype = pixels.PixelType
 
         return datatype
 
