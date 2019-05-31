@@ -1414,7 +1414,7 @@ function remap {
     shift 6
     local args="$*"
 
-    jobname="NoR"
+    jobname="remap"
     additions=''
     CONDA_ENV=''
 
@@ -1585,6 +1585,7 @@ function merge_slicelabels_mpi {
         mpiflag='-M'
         tasks=14
 
+        CONDA_ENV='h5para'
         source activate h5para
 
     fi
@@ -1978,6 +1979,7 @@ function merge_labels_ws {
         additions+='-mpi'
         mpiflag='-M'
         tasks=7  # 7 props
+        CONDA_ENV='h5para'
 
     fi
 
