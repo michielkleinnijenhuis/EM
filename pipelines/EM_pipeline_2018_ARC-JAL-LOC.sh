@@ -5,13 +5,14 @@ scriptdir=$HOME/workspace/EM
 source $scriptdir/pipelines/datasets.sh
 source $scriptdir/pipelines/functions.sh
 source $scriptdir/pipelines/submission.sh
-export PYTHONPATH=$PYTHONPATH:/Users/michielk/workspace/pyDM3reader  # FIXME
-export PYTHONPATH=$PYTHONPATH:/Users/michielk/workspace/maskSLIC  # FIXME
+export PYTHONPATH=$PYTHONPATH:$HOME/workspace/pyDM3reader  # FIXME
+export PYTHONPATH=$PYTHONPATH:$HOME/workspace/maskSLIC  # FIXME
 
 #compute_env='JAL'
 #compute_env='ARC'
-compute_env='LOCAL'
 #compute_env='ARCB'
+# compute_env='LOCAL'
+compute_env='RIOS013'
 prep_environment $scriptdir $compute_env
 
 # dataset='M3S1GNU'
@@ -28,8 +29,6 @@ bs='0500' && prep_dataset $dataset $bs && echo ${#datastems[@]}
 
 export LC_ALL=en_US.UTF-8
 export LANG=en_US.UTF-8
-
-source activate scikit-image-devel_0.13
 
 
 ###=========================================================================###
@@ -274,8 +273,18 @@ jid=$( fsl_sub -q veryshort.q $dep $scriptfile )
 
 
 ###=========================================================================###
-# FIXME: a new maskMM was introduced (insert scratch_EM6.py)
+# FIXME: a new maskMM was introduced (inserted from scratch_EM6.py and scratch_EM9.py)
 ###=========================================================================###
+### generate the raw myelin mask
+declare ipf='' ids='data' opf='_masks_maskMM' ods='maskMM' slab=12 arg='-g -l -1 -u 26000 -d 1'
+scriptfile=$( prob2mask 'h' '' $ids $opf $ods $slab $arg )
+. $scriptfile
+### remove small objects from mask
+ipf='_masks_maskMM' ids='maskMM' opf=$ipf ods="${ids}_PP"
+scriptfile="$datadir/EM_maskMM_PP.py"
+echo "from wmem import prob2mask" > $scriptfile
+echo "prob2mask.preprocess_mask(image_in='$datadir/$dataset_ds$ipf.h5/$ids', outputpath='$datadir/$dataset_ds$opf.h5/$ods', min_size=1000)" >> $scriptfile
+python -W ignore $scriptfile
 
 
 ###=========================================================================###
@@ -324,104 +333,171 @@ jid=$( fsl_sub -q veryshort.q $dep $scriptfile )
 # TODO: might want to keep all this in opf='_labels_labelMA_core2D'; not in '_labels_labelMA'
 
 
-
-
 ###=========================================================================###
 ### 3D labeling
 ###=========================================================================###
+core3D='_labels_labelMA_core3D_test'
 
 ### easy 3D labeling
-ipf='_masks_maskMM' ids='maskMM'
-opf='_labels_labelMA_core3D' ods='labelMA_core3D'
-python $scriptdir/wmem/connected_components.py \
-$datadir/${dataset_ds}${ipf}.h5/${ids} \
-$datadir/${dataset_ds}${opf}.h5/${ods} \
--m '3D' -q 5000 -a 500
-h52nii '' "${dataset_ds}" "${opf}" "${ods}" '' '' '-i zyx -o xyz -d uint16'
+ipf='_masks_maskMM'
+ids='maskMM'
+opf="$core3D"
+ods='labelMA_core3D'
+args='-q 5000 -a 500'
+scriptfile=$( conncomp_3D 'h' $dataset_ds $ipf $ids $opf $ods $args )
+. "$scriptfile"
 
 ### split in the labels that do (tv) and don't traverse the volume (nt)
-ipf='_labels_labelMA_core3D' ids='labelMA_core3D'
-opf='_labels_labelMA_core3D' ods='labelMA_core3D_NoR'
-python -W ignore $scriptdir/wmem/nodes_of_ranvier.py -S \
-$datadir/${dataset_ds}${ipf}.h5/${ids} \
-$datadir/${dataset_ds}${opf}.h5/${ods} \
---boundarymask $datadir/${dataset_ds}_masks_maskDS.h5/maskDS
-#number of labels in labelvolume: 1604
-#number of short labels: 0
-#number of large, long labels: 1604
-#number of large, long in-volume labels: 273
-#number of large, long through-volume labels: 1331
-h52nii '' "${dataset_ds}" "${opf}" "${ods}_steps/labels_tv" '' '' '-i zyx -o xyz -d uint16'
-h52nii '' "${dataset_ds}" "${opf}" "${ods}_steps/labels_nt" '' '' '-i zyx -o xyz -d uint16'
+ipf="$core3D"
+ids='labelMA_core3D'
+opf="$ipf"
+ods="${ids}_NoR"
+args="--boundarymask $datadir/${dataset_ds}_masks_maskDS.h5/maskDS"
+scriptfile=$( NoR 'h' $dataset_ds $ipf $ids $opf $ods $args )
+. "$scriptfile"
 
 ### delete labels from labelMA_core3D through manual proofreading
 # NOTE: PROOFREADING done through labels_nt
-ipf='_labels_labelMA_core3D' ids='labelMA_core3D'
-opf='_labels_labelMA_core3D' ods='labelMA_core3D_proofread'
-python $scriptdir/wmem/remap_labels.py \
-$datadir/${dataset_ds}${ipf}.h5/${ids} \
-$datadir/${dataset_ds}${opf}.h5/${ods} \
--d $datadir/${dataset_ds}${ipf}_${ids}_delete.txt
-h52nii '' "${dataset_ds}" "${opf}" "${ods}" '' '' '-i zyx -o xyz -d uint16'
+ipf="$core3D"
+ids='labelMA_core3D'
+opf="$ipf"
+ods="${ids}_proofread"
+args="-d $datadir/${dataset_ds}${ipf}_${ids}_delete.txt"
+scriptfile=$( remap 'h' $dataset_ds $ipf $ids $opf $ods $args )
+. "$scriptfile"
 
 ### split the proofread volume in labels through-volume (tv) / in-volume (nt)
-ipf='_labels_labelMA_core3D' ids='labelMA_core3D_proofread'
-opf='_labels_labelMA_core3D' ods='labelMA_core3D_proofread_NoR'
-python -W ignore $scriptdir/wmem/nodes_of_ranvier.py \
-$datadir/${dataset_ds}${ipf}.h5/${ids} \
-$datadir/${dataset_ds}${opf}.h5/${ods} \
---boundarymask $datadir/${dataset_ds}_masks_maskDS.h5/maskDS
-#number of labels in labelvolume: 1560
-#number of short labels: 0
-#number of large, long labels: 1560
-#number of large, long in-volume labels: 229
-#number of large, long through-volume labels: 1331
-### NOTE: labels_tv and labels_nt not yet correct:
-# labels_nt has many that are actually traversing
-# TODO: improve nodes_of_ranvier.py module such that this proofreading is unnecessary
-# for now, a proofreading step is done:
-###
-def correct_NoR():
-    import os
-    from wmem import utils, LabelImage
-    import numpy as np
-    datadir = '/Users/michielk/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00'
-    # pop manual tv-labels from auto-nt; add to auto-tv; write to tv/nt;
-    lsfile = 'B-NT-S10-2f_ROI_00ds7_labels_labelMA_core3D_labelMA_core3D_proofread_NoR_{}'
-    lspath = os.path.join(datadir, lsfile)
-    nt = utils.read_labelsets(lspath.format('nt_auto') + '.txt')
-    tv = utils.read_labelsets(lspath.format('tv_auto') + '.txt')
-    tv_man = utils.read_labelsets(lspath.format('tv_manual') + '.txt')
-    for l in tv_man[0]:
-        nt.pop(l)
-        tv[l] = set([l])
-    utils.write_labelsets(nt, lspath.format('nt'), filetypes=['txt'])
-    utils.write_labelsets(tv, lspath.format('tv'), filetypes=['txt'])
-    # read the labelvolume
-    h5_fname = 'B-NT-S10-2f_ROI_00ds7_labels_labelMA_core3D.h5'
-    h5_dset = 'labelMA_core3D_proofread'
-    h5_path = os.path.join(datadir, h5_fname, h5_dset)
-    labels = LabelImage(h5_path)
-    labels.load()
-    # map and write the nt and tv volumes
-    h5_fname = 'B-NT-S10-2f_ROI_00ds7_labels_labelMA_core3D.h5'
-    h5_dset = 'labelMA_core3D_proofread_NoR_steps/labels_nt'
-    h5_path = os.path.join(datadir, h5_fname, h5_dset)
-    mo1 = LabelImage(h5_path, **labels.get_props())
-    mo1.create()
-    mo1.write(labels.forward_map(labelsets=nt, from_empty=True))
-    mo1.close()
-    h5_fname = 'B-NT-S10-2f_ROI_00ds7_labels_labelMA_core3D.h5'
-    h5_dset = 'labelMA_core3D_proofread_NoR_steps/labels_tv'
-    h5_path = os.path.join(datadir, h5_fname, h5_dset)
-    mo2 = LabelImage(h5_path, **labels.get_props())
-    mo2.create()
-    mo2.write(labels.forward_map(labelsets=tv, from_empty=True))
-    mo2.close()
-    labels.close()
+ipf="$core3D"
+ids='labelMA_core3D_proofread'
+opf="$ipf"
+ods="${ids}_NoR"
+args="--boundarymask $datadir/${dataset_ds}_masks_maskDS.h5/maskDS"
+scriptfile=$( NoR 'h' $dataset_ds $ipf $ids $opf $ods $args )
+. "$scriptfile"
 
-h52nii '' "${dataset_ds}" "${opf}" "${ods}_steps/labels_tv" '' '' '-i zyx -o xyz -d uint16'
-h52nii '' "${dataset_ds}" "${opf}" "${ods}_steps/labels_nt" '' '' '-i zyx -o xyz -d uint16'
+### proofreading the through-volume labels
+# NOTE: labels_tv and labels_nt not yet correct: labels_nt has many that are actually traversing
+ipf="$core3D"
+ids='labelMA_core3D_proofread'
+opf="$ipf"
+ods="${ids}_NoR"
+scriptfile="$datadir/EM_corrNoR.py"
+echo "from wmem import nodes_of_ranvier" > $scriptfile
+echo "nodes_of_ranvier.correct_NoR(image_in='$datadir/$dataset_ds$ipf.h5/$ids')" >> $scriptfile
+python -W ignore $scriptfile
+
+# TODO: improve nodes_of_ranvier.py module for splitting tv/nt such that this proofreading is unnecessary
+
+
+###=========================================================================###
+### 2D labeling postprocessing
+###=========================================================================###
+core2D='_labels_labelMA_core2D_test'
+
+### mask the predicted 2D labels with finished 3D labels
+ipf1='_labels_labelMA'
+ids1='labelMA_pred'
+ipf2='_labels_labelMA_core3D'
+ids2='labelMA_core3D_proofread'
+opf="$core2D"
+ods='labelMA_pred_nocore3D'
+args='-m mask'
+scriptfile=$( combine_labels 'h' $dataset_ds $args )
+. "$scriptfile"
+
+### delete 2D labels from volume
+ipf="$core2D"
+ids='labelMA_pred_nocore3D'
+opf="$ipf"
+ods="$ids"
+python $scriptdir/wmem/stack2stack.py \
+    "$datadir/${dataset_ds}${ipf}_${ids}_nii_delete.nii.gz" \
+    "$datadir/${dataset_ds}${opf}.h5/${ods}_nii_delete" -i xyz -o zyx -d uint8
+scriptfile="$datadir/EM_delete_nii.py"
+echo "from wmem import remap_labels" > $scriptfile
+echo "remap_labels.delete_nii(image_in='$datadir/$dataset_ds$ipf.h5/$ids')" >> $scriptfile
+python -W ignore $scriptfile
+# NOTE: volume *_delete_nii.nii.gz not on RIOS013; only in <>_labels_labelMA_core2D.h5
+
+### proofread the 2D labels
+ipf="$core2D"
+ids='labelMA_pred_nocore3D'
+opf="$ipf"
+ods="${ids}_proofread"
+args="-d $datadir/${dataset_ds}${ipf}_${ids}_delete.txt $datadir/${dataset_ds}${ipf}_${ids}_nii_delete.txt"
+scriptfile=$( remap 'h' $dataset_ds $ipf $ids $opf $ods $args )
+. "$scriptfile"
+
+### aggregate 2D labels to 3D labels (merge_slicelabels alternative)
+# TODO: might go for conservative settings of q/o and proofread from there (but with well-proofread 2D labels and q=2 we can relax the o=0.50)
+q=2; o=0.50;
+ipf="$core2D"
+ids='labelMA_pred_nocore3D_proofread'
+opf="$ipf"
+ods="${ids}_2Dmerge_q${q}-o${o}"
+args="-M -m 'MAstitch' -d 0 -q $q -o $o"
+scriptfile=$( merge_slicelabels_mpi 'h' $dataset_ds $args )
+. "$scriptfile"
+
+### map the aggregated 2D labels
+ipf="$core2D"
+ids='labelMA_pred_nocore3D_proofread'
+opf="$ipf"
+ods="${ids}_2Dmerge_q${q}-o${o}"
+args="-m MAfwmap"
+scriptfile=$( merge_slicelabels 'h' $dataset_ds $args )
+. "$scriptfile"
+
+### fill gaps in aggregated labels
+ipf="$core2D"
+ids="labelMA_pred_nocore3D_proofread_2Dmerge_q${q}-o${o}"
+opf="$ipf"
+ods="${ids}_closed"
+args="--maskMM $datadir/${dataset_ds}_masks_maskMM.h5/maskMM_PP -m MAfilter -l 1 0 0 -S"
+scriptfile=$( merge_slicelabels 'h' $dataset_ds $args )
+. "$scriptfile"
+
+### aggregate labels by overlap (threshold_overlap=0.20; offsets=2)
+ipf1="$core2D"
+ids="labelMA_pred_nocore3D_proofread_2Dmerge_q${q}-o${o}_closed"
+opf="$ipf"
+ods="${ids}_ns"
+args="-m 'neighbours_slices' -q 2 -o 0.20 -M -S"
+scriptfile=$( merge_labels_ws 'h' $dataset_ds $ipf $ids $opf $ods $args )
+. "$scriptfile"
+
+### merge aggregated 2D labels with core3D_nt
+ipf1="$core2D"
+ids1="labelMA_pred_nocore3D_proofread_2Dmerge_q${q}-o${o}_closed_ns"
+ipf2="$core3D"
+ids2='labelMA_core3D_proofread_NoR_steps/labels_nt'
+opf='_labels_labelMA_comb_test'
+ods='labelMA_nt'
+args='-m add'
+scriptfile=$( combine_labels 'h' $dataset_ds $args )
+. "$scriptfile"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
