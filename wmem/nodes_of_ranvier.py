@@ -464,5 +464,38 @@ def filter_on_heigth(labels, min_height, ls_short=set([])):
     return ls_short
 
 
+def correct_NoR(image_in):
+    """Add a manually-defined set of labels to through-volume and remove from not-through."""
+
+    from wmem import LabelImage
+
+    # read the labelvolume
+    im = utils.get_image(image_in, imtype='Label')
+    comps = im.split_path()
+
+    # map and write the nt and tv volumes
+    def write_vol(h5path, im, ls):
+        mo = LabelImage(h5_path, **im.get_props())
+        mo.create()
+        mo.write(im.forward_map(labelsets=ls, from_empty=True))
+        mo.close()
+
+    # pop manual tv-labels from auto-nt; add to auto-tv; write to tv/nt;
+    ls_stem = '{}_proofread_NoR'.format(comps['base'])
+    nt = utils.read_labelsets('{}_{}.txt'.format(ls_stem, 'nt_auto'))
+    tv = utils.read_labelsets('{}_{}.txt'.format(ls_stem, 'tv_auto'))
+    tv_man = utils.read_labelsets('{}_{}.txt'.format(ls_stem, 'tv_manual'))
+    for l in tv_man[0]:
+        nt.pop(l)
+        tv[l] = set([l])
+
+    for ls_name, ls in zip(['nt', 'tv'], [nt, tv]):
+        utils.write_labelsets(ls, '{}_{}.txt'.format(ls_stem, ls_name), filetypes=['txt'])
+        outputpath = '{}_steps/labels_{}'.format(ls_stem, ls_name)
+        write_vol(outputpath, im, ls)
+
+    im.close()
+
+
 if __name__ == "__main__":
     main(sys.argv[1:])
