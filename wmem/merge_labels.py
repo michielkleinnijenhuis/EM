@@ -201,12 +201,12 @@ def evaluate_labels(merge_method, mpi, labels, aux, **kwargs):
     for i in mpi.series:
         prop = rp[i]
 
-#         if prop.label not in [1496, 1309, 1190, 7164, 7483]:
-#         if prop.label not in [8819, 8220]:  #7074, 
-#         if prop.label not in [2570]:  #7074, 
-#         if prop.label not in [7160]:
-#             continue
-#         print(prop.label)
+        # if prop.label not in [1496, 1309, 1190, 7164, 7483]:
+        # if prop.label not in [8819, 8220]:  #7074,
+        # if prop.label not in [2570]:  #7074,
+        # if prop.label not in [7160]:
+        #     continue
+        # print(prop.label)
 
         if merge_method == 'neighbours':
             labelsets = merge_neighbours(labels, prop, labelsets,
@@ -305,12 +305,12 @@ def merge_neighbours_from_slices(labelsets, data_section, nb_section,
         mask_nb = nb_section == nb_label
         tp = np.sum(np.logical_and(mask_nb, mask_data))
         dice = tp * 2.0 / (np.sum(mask_nb) + n_data)
-#         n_nb = bins[nb_label]
-#         if float(n_nb) / float(n_data) < threshold_overlap:
+        # n_nb = bins[nb_label]
+        # if float(n_nb) / float(n_data) < threshold_overlap:
         if dice < threshold_overlap:
             continue
 
-#         print(dice)
+        # print(dice)
         labelsets = utils.classify_label_set(labelsets,
                                              set([data_label, nb_label]))
 
@@ -340,10 +340,10 @@ def merge_watershed(labels, rp_map, prop, labelsets={},
         slices = get_region_slices_projected(direction, labels, prop,
                                              searchradius, z_extent=10)[0]
 
-#         print(prop.label, direction, slices)
+        # print(prop.label, direction, slices)
 
         if ((slices[0].start == 0) or (slices[0].start == labels.dims[0] - 1)):
-#             print('skipping', prop.label, direction, slices)
+            # print('skipping', prop.label, direction, slices)
             continue
 
         labels.slices = data.slices = slices
@@ -370,9 +370,9 @@ def merge_watershed(labels, rp_map, prop, labelsets={},
         # TODO: remove mito from maskMM
 
         if maskDS is not None:
-            pass
             # TODO: might mark as separate labelset (with key -1)
-#             imregion_mask = imregion > 0
+            # imregion_mask = imregion > 0
+            pass
 
         seeds = create_seeds(labels_ds, prop.label, prop.label, cylinder=0, labval=prop.label)
         ws = watershed(-data_ds, seeds, mask=mask)
@@ -399,7 +399,7 @@ def find_candidate_ws(direction, labelsets, rp_map, prop, imregion, ws,
         counts = np.bincount(prop_ws.intensity_image[prop_ws.image])
         # mark anything other than zero's in the region
         candidate_labels = list(np.argwhere(counts[1:]) + 1)
-#         print(candidate_labels)
+        # print(candidate_labels)
 
         if not candidate_labels:
             return labelsets
@@ -443,21 +443,21 @@ def find_candidate_ws(direction, labelsets, rp_map, prop, imregion, ws,
 def merge_overlapping_labels():
 
     pass
-#     # get the overlap (voxel count) of labels within the watershed object
-#     counts = np.bincount(imregion[labelmask])
-#     if len(counts) > 1:  # continue if there is anything else than zero's in the region
-#         # select the largest candidate overlapping the watershed
-#         candidate = np.argmax(counts[1:]) + 1
-#         # TODO: improve criteria for accepting candidate
-#         # only select it if the overlap is larger than min_labelsize
-#         if ((counts[candidate] > min_labelsize) and
-#                 (candidate != prop.label)):
-#             # TODO: pop label+direction from list if merged?
-#             print('merging {} and {}'.format(prop.label, candidate))
-#             labelset = set([prop.label, candidate])
-#             labelsets = utils.classify_label_set(labelsets, labelset, prop.label)
-#             # TODO: blocky fills when not enough space around the label for sufficient negative label
-#             # TODO: include boundary as possible candidate
+    # get the overlap (voxel count) of labels within the watershed object
+    # counts = np.bincount(imregion[labelmask])
+    # if len(counts) > 1:  # continue if there is anything else than zero's in the region
+    #     # select the largest candidate overlapping the watershed
+    #     candidate = np.argmax(counts[1:]) + 1
+    #     # TODO: improve criteria for accepting candidate
+    #     # only select it if the overlap is larger than min_labelsize
+    #     if ((counts[candidate] > min_labelsize) and
+    #             (candidate != prop.label)):
+    #         # TODO: pop label+direction from list if merged?
+    #         print('merging {} and {}'.format(prop.label, candidate))
+    #         labelset = set([prop.label, candidate])
+    #         labelsets = utils.classify_label_set(labelsets, labelset, prop.label)
+    #         # TODO: blocky fills when not enough space around the label for sufficient negative label
+    #         # TODO: include boundary as possible candidate
 
 
 def connect_split_label(prop, im, mo, data, mask, axons, searchradius):
@@ -468,7 +468,7 @@ def connect_split_label(prop, im, mo, data, mask, axons, searchradius):
     try:
         rp = regionprops(labels_split)  # TypeError: Only 2-D and 3-D images supported.
         # TODO: identify NoR
-        # e.g. project centreline, do slicewise labeling over the gap and see 
+        # e.g. project centreline, do slicewise labeling over the gap and see
         # if the label that includes the centreline touched the boundary of the slice/cylinder
         # to identify the z-range of the NoR (if detected)
     except TypeError:
@@ -507,25 +507,25 @@ def fill_between_labels(prop, mo, data, mask, axons):
         axons_ds = None
 
     mask = ~mask_ds.astype('bool')
-#     mask = binary_dilation(~mask_ds.astype('bool'))
+    # mask = binary_dilation(~mask_ds.astype('bool'))
 
     seeds = create_seeds(im_ds, prop.label, prop.label, axons_ds, cylinder=1)
 
-#     if axons_ds is not None:
-#         seeds_NoR = create_seeds(im_ds, prop.label, prop.label, axons_ds=None, cylinder=1)
-#     else:
-#         seeds_NoR = seeds
-#     NoR_zrange = detect_NoR(seeds_NoR, 1, mask_ds)
-#     print(prop.label, mo.slices)
-#     if NoR_zrange:
-#         print(NoR_zrange, len(NoR_zrange))
-#         print(NoR_zrange[0] + mo.slices[0].start,
-#               NoR_zrange[-1] + mo.slices[0].start)
-#     else:
-#         print('not a NoR')
+    # if axons_ds is not None:
+    #     seeds_NoR = create_seeds(im_ds, prop.label, prop.label, axons_ds=None, cylinder=1)
+    # else:
+    #     seeds_NoR = seeds
+    # NoR_zrange = detect_NoR(seeds_NoR, 1, mask_ds)
+    # print(prop.label, mo.slices)
+    # if NoR_zrange:
+    #     print(NoR_zrange, len(NoR_zrange))
+    #     print(NoR_zrange[0] + mo.slices[0].start,
+    #           NoR_zrange[-1] + mo.slices[0].start)
+    # else:
+    #     print('not a NoR')
 
     ws = watershed(-data_ds, seeds, mask=mask)
-#     ws = seeds
+    # ws = seeds
 
     mask_label = ws == 1
     wsout = im_ds
@@ -546,9 +546,9 @@ def detect_NoR(seeds, seedlabel, maskMM):
         mask_cyl = seeds_slc != -1
         ulabels_outside = set(labels[~mask_cyl].ravel()) - set([0])
         if ulabels:
-#             print(ulabels, ulabels_outside)
+            # print(ulabels, ulabels_outside)
             if list(ulabels)[0] in ulabels_outside:
-    #             slc_idx does not have closed sheath
+                # slc_idx does not have closed sheath
                 slc_idxs.append(slc_idx)
 
     return slc_idxs
@@ -574,7 +574,7 @@ def connect_to_borders(prop, im, mo, data=None, maskMM=None, maskDS=None,
                                              searchradius,
                                              z_extent=10)[0]  # z_extent=searchradius[0]
 
-#         print(prop.label, direction, slices)
+        # print(prop.label, direction, slices)
 
         # continue if borderslice is already top/bottom
         if (direction == 'down' and (slices[0].stop == 1) or
@@ -591,7 +591,7 @@ def connect_to_borders(prop, im, mo, data=None, maskMM=None, maskDS=None,
         if maskMM is not None:
             maskMM.slices = slices
             maskMM_ds = maskMM.slice_dataset(squeeze=False)
-#             mask = binary_dilation(~maskMM_ds.astype('bool'))
+            # mask = binary_dilation(~maskMM_ds.astype('bool'))
             mask = ~maskMM_ds.astype('bool')
         else:
             mask = np.ones_like(mo.ds[:], dtype='bool')
@@ -626,9 +626,9 @@ def fill_to_borders(prop, mo, data, mask, axons):
     seeds = create_seeds(im_ds, prop.label, prop.label, axons_ds, cylinder=1)
     mask = ~mask_ds.astype('bool')
     # FIXME: add cylinder to mask instead:
-#     maskcyl = create_seeds(im_ds, prop.label, prop.label, axons_ds, cylinder=1)
-#     mask = maskcyl != -1
-#     mask = np.logical_and(~mask_ds.astype('bool'), mask)
+    # maskcyl = create_seeds(im_ds, prop.label, prop.label, axons_ds, cylinder=1)
+    # mask = maskcyl != -1
+    # mask = np.logical_and(~mask_ds.astype('bool'), mask)
     ws = watershed(-data_ds, seeds, mask=mask)
 
     mask_label = ws == 1
@@ -685,8 +685,8 @@ def fill_connected_labels(datadir='/Users/michielk/oxdata/P01/EM/Myrf_01/SET-B/B
 
     rp_main = regionprops(svoxs.ds, mask.ds)
     for prop in rp_main:
-#         if prop.label not in [1517, 1518, 1519]:
-#             continue
+        # if prop.label not in [1517, 1518, 1519]:
+        #     continue
         if between:
             connect_split_label(prop, svoxs, mo, data, mask, axons, searchradius)
         if to_border:
@@ -905,10 +905,10 @@ def get_region_slices_projected(direction, im, prop,
     l_idx = {'down': b_idx + z_extent,
              'up': b_idx - z_extent}[direction]
 
-#     print(z_extent, b_idx, l_idx, z, Z)
+    # print(z_extent, b_idx, l_idx, z, Z)
     if (l_idx < 0
             or l_idx > (im.dims[0] - 1)):
-#         or (Z-z < z_extent)
+        # or (Z-z < z_extent)
         # FIXME: the final condition only valid if Z-z pertains to box around label
         print('no projection')
         return get_region_slices(direction, im, prop, searchradius)
@@ -919,7 +919,7 @@ def get_region_slices_projected(direction, im, prop,
     if np.sum(b_mask) == 0 or np.sum(l_mask) == 0:
         return get_region_slices(direction, im, prop, searchradius)
 
-#     print(np.sum(b_mask), np.sum(l_mask))
+    # print(np.sum(b_mask), np.sum(l_mask))
     b_ctr, _ = get_centroid(b_mask)  # coords in full image
     l_ctr, _ = get_centroid(l_mask)
 
@@ -928,7 +928,7 @@ def get_region_slices_projected(direction, im, prop,
     b_point = [b_idx, b_ctr[0], b_ctr[1]]
     l_point = [l_idx, l_ctr[0], l_ctr[1]]
     p_point = [c0 + (c0-c1) * fac for c0, c1 in zip(b_point, l_point)]
-#     print(l_point, b_point, p_point)
+    # print(l_point, b_point, p_point)
     p_ctr = [p_point[1], p_point[2]]
 
     # get the z-range
@@ -952,10 +952,10 @@ def get_region_slices_projected(direction, im, prop,
     slices = im.get_slice_objects(dataslices)
 
     # TODO: cylinder
-#     # project line from one centroid to the other
-#     n_slices = z_extent + searchradius[0]
-#     xs = np.linspace(y1, y2, n_slices)
-#     ys = np.linspace(x1, x2, n_slices)
+    # # project line from one centroid to the other
+    # n_slices = z_extent + searchradius[0]
+    # xs = np.linspace(y1, y2, n_slices)
+    # ys = np.linspace(x1, x2, n_slices)
 
     return slices, (x, X, y, Y, z, Z)
 
