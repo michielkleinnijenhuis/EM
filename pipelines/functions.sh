@@ -11,10 +11,12 @@ function prep_environment {
     host_jal=michielk@jalapeno.fmrib.ox.ac.uk
     host_arc=ndcn0180@arcus-b.arc.ox.ac.uk
     host_pmc=mkleinnijenhuis@processed.pmc_research.op.umcutrecht.nl
+    host_hpc=mkleinnijenhuis@hpcsubmit.op.umcutrecht.nl
     scriptdir_loc="$HOME/workspace/EM"
     scriptdir_jal='/home/fs0/michielk/workspace/EM'
     scriptdir_arc='/home/ndcn0180/workspace/EM'
     scriptdir_pmc='/home/pmc_research/mkleinnijenhuis/workspace/EM'
+    scriptdir_hpc='/home/pmc_research/mkleinnijenhuis/workspace/EM'
 
     if [ "$compute_env" == "ARCB" ]
     then
@@ -104,6 +106,22 @@ function prep_environment {
         eed_tbxdir="$HOME/workspace/matlab/toolboxes/coherencefilter_version5b"
         eed_script="$scriptdir/wmem/EM_eed_simple.m"
         [ ! -f "$eed_tgtdir/EM_eed_simple.app/Contents/MacOS/EM_eed_simple" ] &&
+            deployed_eed "$eed_tgtdir" "$eed_tbxdir" "$eed_script"
+
+    elif [ "$compute_env" == "HPC" ]
+    then
+        DATA="/hpc/pmc_rios/mkleinnijenhuis/oxdata/P01"
+        PATH="/hpc/local/CentOS7/pmc_rios/anaconda3/bin:$PATH"
+        CONDA_PATH="$( conda info --root )"
+        PYTHONPATH="$scriptdir"
+        PYTHONPATH="$PYTHONPATH:$HOME/workspace/pyDM3reader"
+        imagej='/hpc/local/CentOS7/pmc_rios/workspace/Fiji.app/ImageJ-linux64'
+        ilastik='/hpc/local/CentOS7/pmc_rios/workspace/ilastik-1.3.2post1-Linux/run_ilastik.sh'
+
+        eed_tgtdir="$scriptdir/bin"
+        eed_tbxdir="$HOME/workspace/matlab/toolboxes/coherencefilter_version5b"
+        eed_script="$scriptdir/wmem/EM_eed_simple.m"
+        [ ! -f "$eed_tgtdir/EM_eed_simple" ] &&
             deployed_eed "$eed_tgtdir" "$eed_tbxdir" "$eed_script"
 
     fi
