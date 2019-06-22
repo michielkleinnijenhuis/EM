@@ -141,11 +141,16 @@ def nodes_of_ranvier(
     # automated label merge
     labelsets = {}
 #     min_labelsize = 10
-    labelsets, filled = merge_labels(labels_nt, labelsets, merge_methods,
-                                     overlap_threshold,
-                                     h5path_data, h5path_mmm,
-                                     min_labelsize,
-                                     searchradius)
+    if 0:
+        labelsets, filled = merge_labels(labels_nt, labelsets, merge_methods,
+                                         overlap_threshold,
+                                         h5path_data, h5path_mmm,
+                                         min_labelsize,
+                                         searchradius)
+#         fw = np.zeros(maxlabel + 1, dtype='i')
+        ds_out[:] = utils.forward_map(np.array(fw_nt), labels, labelsets)
+    else:
+        filled = None
 
 #     fw = np.zeros(maxlabel + 1, dtype='i')
     ds_out[:] = utils.forward_map(np.array(fw_nt), labels, labelsets)
