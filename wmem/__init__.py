@@ -1020,8 +1020,10 @@ class Image(object):
 
         # TODO: 4D data?
 
-        nzfills = 5
-        ext = '.tif'
+#         nzfills = 5
+#         ext = '.tif'
+        nzfills = 4
+        ext = '.png'
         slicedim = self.axlab.index('z')
         slcoffset = slices[slicedim].start
 
