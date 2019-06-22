@@ -1976,10 +1976,15 @@ function merge_labels_ws {
 
     elif [ "$compute_env" == "RIOS013" ]; then
 
-        additions+='-mpi'
-        mpiflag='-M'
-        tasks=7  # 7 props
-        CONDA_ENV='h5para'
+        # FIXME: suspect bad mpi-implementation of this function
+        # additions+='-mpi'
+        # mpiflag='-M'
+        # tasks=7  # 7 props
+        # CONDA_ENV='h5para'
+        additions+=''
+        mpiflag=''
+        # tasks=7  # 7 props
+        CONDA_ENV=''
 
     fi
 
