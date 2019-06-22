@@ -11,7 +11,7 @@ function prep_environment {
     host_jal=michielk@jalapeno.fmrib.ox.ac.uk
     host_arc=ndcn0180@arcus-b.arc.ox.ac.uk
     host_pmc=mkleinnijenhuis@processed.pmc_research.op.umcutrecht.nl
-    host_hpc=mkleinnijenhuis@hpcsubmit.op.umcutrecht.nl
+    host_hpc=mkleinnijenhuis@hpct01.op.umcutrecht.nl
     scriptdir_loc="$HOME/workspace/EM"
     scriptdir_jal='/home/fs0/michielk/workspace/EM'
     scriptdir_arc='/home/ndcn0180/workspace/EM'
