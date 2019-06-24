@@ -205,12 +205,17 @@ def evaluate_labels(merge_method, mpi, labels, aux, **kwargs):
         mo.create()
         mo.write(labels.ds[:])
 
+    popped =[]
     for i in mpi.series:
         prop = rp[i]
 #     for _, prop in rp_map.items():
 
         # if prop.label not in [7160]:
         #     continue
+        if prop.label in popped:
+            print('skip popped label {}'.format(prop.label))
+            continue
+
         print(prop.label)
 
         if merge_method == 'neighbours':
@@ -224,13 +229,15 @@ def evaluate_labels(merge_method, mpi, labels, aux, **kwargs):
                                                 kwargs['slicedim'],
                                                 )
         elif merge_method == 'watershed':
-            labelsets = merge_watershed(mo, rp_map, prop, labelsets,
-                                        kwargs['data'],
-                                        kwargs['maskMM'],
-                                        kwargs['maskDS'],
-                                        kwargs['min_labelsize'],
-                                        kwargs['searchradius'],
-                                        )
+            labelsets, popped = merge_watershed(
+                mo, rp_map, prop, labelsets,
+                kwargs['data'],
+                kwargs['maskMM'],
+                kwargs['maskDS'],
+                kwargs['min_labelsize'],
+                kwargs['searchradius'],
+                popped=popped,
+                )
         elif merge_method == 'conncomp':
             labelsets = merge_conncomp(labels, prop, labelsets)
 
@@ -338,74 +345,98 @@ def merge_conncomp(labels, prop, labelsets={}):
 
 def merge_watershed(labels, rp_map, prop, labelsets={},
                     data=None, maskMM=None, maskWS=None,
-                    min_labelsize=10, searchradius=[100, 30, 30]):
+                    min_labelsize=10, searchradius=[100, 30, 30], popped=[]):
     """Find candidates for label merge based on watershed."""
+
+    has_merged = False
+    found_candidates = True
+
+    while found_candidates:
+
+        labelsets, popped, found_candidates = merge_watershed_iter(
+            labels, rp_map, prop, labelsets,
+            data, maskWS,
+            min_labelsize, searchradius, popped)
+
+        if found_candidates:
+            prop = rp_this_label(labels, prop.label)
+    
+        has_merged = has_merged or found_candidates
+
+    if has_merged:
+        connect_split_label(prop, labels, labels, data, maskMM, searchradius, axons=None)
+#         prop = rp_this_label(labels, prop.label)
+#         check_split_label(prop, labels, checkonly=False)
+
+    return labelsets, popped
+
+
+def rp_this_label(labels, current_label):
+
+    this_label = np.copy(labels.ds[:])
+    this_label[labels.ds[:] != current_label] = 0
+    rp = regionprops(this_label)
+    prop = rp[0]
+    # TODO: most time-efficient solution
+
+    return prop
+
+
+def merge_watershed_iter(
+        labels, rp_map, prop, labelsets={},
+        data=None, maskWS=None,
+        min_labelsize=10, searchradius=[100, 30, 30], popped=[],
+        ):
+    """Find candidates for label merge based on watershed."""
+
+    found_candidates = False
 
     # investigate image region above and below bbox
     for direction in ['down', 'up']:
 
-        slices = get_region_slices_projected(direction, labels, prop,
-                                             searchradius, z_extent=10)[0]
-
-        # print(prop.label, direction, slices)
-
-        if ((slices[0].start == 0) or (slices[0].start == labels.dims[0] - 1)):
-            # print('skipping', prop.label, direction, slices)
+        slices = get_region_slices_projected(direction, labels, prop, searchradius, z_extent=10)[0]
+        if slices is None:
             continue
 
-        labels.slices = data.slices = slices
-        labels_ds = labels.slice_dataset(squeeze=False)
-        data_ds = data.slice_dataset(squeeze=False)
-        if maskMM is not None:
-            maskMM.slices = slices
-            maskMM_ds = maskMM.slice_dataset(squeeze=False)
-            maskMM_ds = ~maskMM_ds.astype('bool')
-        else:
-            maskMM_ds = np.ones_like(labels_ds[:], dtype='bool')
-        if maskWS is not None:
-            maskWS.slices = slices
-            maskWS_ds = maskWS.slice_dataset(squeeze=False)
-            maskWS_ds = maskWS_ds.astype('bool')
-        else:
-            maskWS_ds = np.ones_like(labels_ds[:], dtype='bool')
+        if ((slices[0].start == 0) or (slices[0].start == labels.dims[0] - 1)):
+            continue
+
+        labels_ds, data_ds, maskWS_ds = slice_data(slices, labels, data, maskWS)
 
         if len(np.unique(labels_ds)) < 2:
             continue  # label 0 and prop.label assumed to be there
 
-        # TODO: erode maskMM? doesn't help much;
-        # actually loses quite some fills, but haven't dilated the borderslice label
-#         mask = binary_dilation(~maskMM_ds.astype('bool'))
-        # TODO: add tv to maskMM?? and other labels?
-        # TODO: remove mito from maskMM
-
         if maskWS is not None:
-            # TODO: might mark as separate labelset (with key -1)
-            # imregion_mask = imregion > 0
             pass
 
         seeds = create_seeds(labels_ds, prop.label, prop.label, cylinder=0, labval=prop.label)
         ws = watershed(-data_ds, seeds, mask=maskWS_ds)
-        labelsets, picked = find_candidate_ws(direction, labelsets, rp_map, prop,
-                                                labels_ds, ws, min_labelsize)
+        labelsets, picked = find_candidate_ws(direction, labelsets, rp_map, prop, labels_ds, ws, min_labelsize)
 
-        if picked is not None:
-            # update labels
-            labels.ds[labels.ds[:]==picked] = prop.label
-            # update rp_map and prop!
-#             label_imgN = np.copy(labels.ds)
-#             label_imgN[label_imgN != prop.label] = 0
+        if picked is None:
+            continue  # with up
 
-#             rp_N = regionprops(labels.ds)
-#             rp_map_N = {region.label: region for region in rp_N}
-#             rp_map[prop.label] = rp_map_N[prop.label]
-            rp_map.pop(picked)
+        print("{} merged with {}".format(prop.label, picked))
+        popped.append(picked)
+        found_candidates = True
+        labels.ds[labels.ds[:]==picked] = prop.label
 
-            # fill between labels prop.label and picked
-            connect_split_label(prop, labels, labels, data, maskMM_ds, searchradius, axons=None)
-            # make sure new label is contiguous
-            check_split_label(prop, labels, checkonly=False)
+    return labelsets, popped, found_candidates
 
-    return labelsets
+
+def slice_data(slices, labels, data, maskWS):
+
+    labels.slices = data.slices = slices
+    labels_ds = labels.slice_dataset(squeeze=False)
+    data_ds = data.slice_dataset(squeeze=False)
+    if maskWS is not None:
+        maskWS.slices = slices
+        maskWS_ds = maskWS.slice_dataset(squeeze=False)
+        maskWS_ds = maskWS_ds.astype('bool')
+    else:
+        maskWS_ds = np.ones_like(labels_ds[:], dtype='bool')
+
+    return labels_ds, data_ds, maskWS_ds
 
 
 def find_candidate_ws(direction, labelsets, rp_map, prop, imregion, ws,
@@ -591,7 +622,7 @@ def connect_split_label_pair(im, prop, prop_bot, prop_top, searchradius, data, m
     if slices[0].start >= slices[0].stop:  # FIXME
         return
 
-    data.slices = mask.slices = mo.slices = slices
+    data.slices = mo.slices = mask.slices = slices
     if axons is not None:
         axons.slices = slices
 
@@ -610,11 +641,11 @@ def fill_between_labels(prop, mo, data, mask, axons):
     else:
         axons_ds = None
 
-    mask = ~mask_ds.astype('bool')
+    mask_ds = ~mask_ds.astype('bool')
 
     seeds = create_seeds(im_ds, prop.label, prop.label, axons_ds, cylinder=1)
 
-    ws = watershed(-data_ds, seeds, mask=mask)
+    ws = watershed(-data_ds, seeds, mask=mask_ds)
 
     mask_label = ws == 1
     wsout = im_ds
@@ -916,6 +947,8 @@ def get_borderslice(direction, prop):
 def get_centroid(mask):
 
     rp = regionprops(mask.astype('i'))
+    if len(rp) == 0:
+        return None, None
     centroid = rp[0].centroid
     eq_diam = rp[0].equivalent_diameter
 
@@ -971,6 +1004,8 @@ def get_region_slices(direction, im, prop, searchradius=[20, 20, 20]):
     b_idx = get_borderslice(direction, prop)
     mask_label = im.ds[b_idx, :, :] == prop.label
     centroid, _ = get_centroid(mask_label)
+    if centroid is None:
+        return None, None
     x, X, y, Y = get_xXyY_from_centroid(im, centroid, searchradius)
 
     dataslices = [z, Z, 1, y, Y, 1, x, X, 1]
