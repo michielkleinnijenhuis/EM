@@ -73,7 +73,7 @@ def merge_labels(
         merge_method, mpi, im, slicedim, offsets,
         overlap_threshold,
         h5path_data, h5path_mmm,  h5path_mds,
-        min_labelsize, searchradius
+        min_labelsize, searchradius, outputpath,
         )
 
     comps = im.split_path(outputpath)
@@ -87,7 +87,7 @@ def merge_labels(
 
         labelsets = utils.combine_labelsets(labelsets, comps)
 
-        do_map_labels = True
+        do_map_labels = False
         if do_map_labels:
             im.slices = None
             im.set_slices()
@@ -135,7 +135,8 @@ def merge_labels_by_method(merge_method, mpi, labels,
                            slicedim=0, offsets=2,
                            overlap_threshold=0.50,
                            h5path_data='', h5path_mmm='', h5path_mds='',
-                           min_labelsize=10, searchradius=[100, 30, 30]):
+                           min_labelsize=10, searchradius=[100, 30, 30],
+                           outputpath=''):
     """Find candidate labelsets."""
 
     # find connection candidates
@@ -166,7 +167,6 @@ def merge_labels_by_method(merge_method, mpi, labels,
         else:
             maskDS = None
 
-        outputpath = 'testoutNOh5'  # labels.path + '_testout'
         labelsets = evaluate_labels(merge_method, mpi, labels, None,
                                     data=data,
                                     maskMM=maskMM,
@@ -205,10 +205,9 @@ def evaluate_labels(merge_method, mpi, labels, aux, **kwargs):
         mo.create()
         mo.write(labels.ds[:])
 
-#     for i in mpi.series:
-#         prop = rp[i]
-    for _, prop in rp_map.items():
-        print(len(rp_map))
+    for i in mpi.series:
+        prop = rp[i]
+#     for _, prop in rp_map.items():
 
         # if prop.label not in [7160]:
         #     continue
@@ -235,13 +234,7 @@ def evaluate_labels(merge_method, mpi, labels, aux, **kwargs):
         elif merge_method == 'conncomp':
             labelsets = merge_conncomp(labels, prop, labelsets)
 
-    if 'outputpath' in kwargs.keys():
-        outputpath = labels.path + '_testout'
-        mo2 = LabelImage(outputpath, **labels.get_props())
-        mo2.create
-        mo2.write(mo.ds[:])
-        mo2.close()
-        mo.close()
+    mo.close()
 
     return labelsets
 
