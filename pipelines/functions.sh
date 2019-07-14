@@ -95,7 +95,7 @@ function prep_environment {
     elif [ "$compute_env" == "RIOS013" ]
     then
         DATA="$HOME/oxdata/P01"
-        PATH="$HOME/anaconda2/bin:$PATH"
+        PATH="$HOME/anaconda3/bin:$PATH"
         CONDA_PATH="$( conda info --root )"
         PYTHONPATH="$scriptdir"
         PYTHONPATH="$PYTHONPATH:$HOME/workspace/pyDM3reader"
