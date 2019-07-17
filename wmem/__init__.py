@@ -4,8 +4,16 @@ import glob
 import pickle
 import random
 import numpy as np
-import nibabel as nib
-from skimage.io import imread, imsave
+
+try:
+    import nibabel as nib
+except ImportError:
+    print("nibabel could not be loaded")
+
+try:
+    from skimage.io import imread, imsave
+except ImportError:  # , AttributeError
+    print("scikit-image io could not be loaded")
 
 try:
     import javabridge
