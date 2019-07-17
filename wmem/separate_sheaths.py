@@ -348,7 +348,7 @@ def get_rim(prop, MA_region, MM_region):
 
     MFregion = MA_region + MM_region
     maskMF = MFregion == prop.label
-    rim = maskMF - binary_erosion(maskMF, border_value=1)
+    rim = np.logical_xor(maskMF, binary_erosion(maskMF, border_value=1))
 
     return rim
 
