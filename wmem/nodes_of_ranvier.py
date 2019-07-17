@@ -7,13 +7,16 @@
 import sys
 import argparse
 import os
+from operator import itemgetter
+from itertools import groupby
 
 from scipy.ndimage.morphology import binary_dilation as scipy_binary_dilation
 import numpy as np
 from skimage.measure import label, regionprops
 from skimage.morphology import binary_dilation, binary_erosion, ball, watershed
 
-from wmem import parse, utils
+from wmem import parse, utils, LabelImage
+from wmem.merge_labels import get_region_slices_around
 
 
 # TODO: write elsize and axislabels
@@ -506,6 +509,88 @@ def correct_NoR(image_in):
         write_vol(outputpath, im, ls)
 
     im.close()
+
+
+def detect_NoR(image_in, maskMM, encapsulate_threshold=1.0, min_node_length=10, outputpath=''):
+
+    # Read inputs
+    axons = utils.get_image(image_in, imtype='Label')
+    mask = utils.get_image(maskMM, imtype='Mask')
+
+    # Create outputs
+    props = axons.get_props(protective=False)
+    outpaths = {'out': outputpath, 'seg': '', 'rim': '', 'nonodes': ''}
+    outpaths = utils.gen_steps(outpaths, save_steps=True)
+    nodes = LabelImage(outpaths['out'], **props)
+    nodes.create()
+    nonodes = LabelImage(outpaths['nonodes'], **props)
+    nonodes.create()
+    im_rim = LabelImage(outpaths['rim'], **props)
+    im_rim.create()
+    im_seg = LabelImage(outpaths['seg'], **props)
+    im_seg.create()
+
+    for prop in regionprops(axons.ds):
+        print(prop.label)
+
+        # Slice the axon region.
+        slices = get_region_slices_around(axons, prop, searchradius=[1, 1, 1])[0]
+        axons.slices = mask.slices = im_seg.slices = im_rim.slices = slices
+        axons_slcd = axons.slice_dataset(squeeze=False) == prop.label
+        mask_slcd = mask.slice_dataset(squeeze=False).astype('bool')
+        im_seg_slcd = im_seg.slice_dataset(squeeze=False)
+        im_rim_slcd = im_rim.slice_dataset(squeeze=False)
+
+        # Find labels not surrounded by myelin.
+        slc_idxs = []
+        iter_imgs = zip(axons_slcd, mask_slcd, im_seg_slcd, im_rim_slcd)
+        for i, (slc, slc_aux, slc_out, slc_rim) in enumerate(iter_imgs):
+            rim = np.logical_xor(binary_dilation(slc), slc)
+            slc_rim[rim] = prop.label
+
+            if encapsulate_threshold == 1.0:
+                is_encapsulated = slc_aux[rim].all()
+            else:
+                encapsulate_ratio = np.sum(slc_aux[rim]) / np.sum(rim)
+                is_encapsulated = encapsulate_ratio >= encapsulate_threshold
+
+            if not is_encapsulated:
+                slc_idxs.append(i)
+                slc_out[slc==True] = 1
+                # TODO: fill to mask OR add to mask
+            else:
+                slc_out[slc==True] = 2
+
+        # Extract the nodes (more than <min_node_length> consecutive slices).
+        for _, g in groupby(enumerate(slc_idxs), lambda x: x[1]-x[0]):
+            consecutive = list(map(itemgetter(1), g))
+            iter_imgs = zip(axons_slcd, im_seg_slcd)
+            for i, (slc, slc_out) in enumerate(iter_imgs):
+                if i in consecutive:
+                    if len(consecutive) > min_node_length:
+                        slc_out[slc==True] = 3
+
+        im_seg.write(im_seg_slcd)
+        im_rim.write(im_rim_slcd)
+
+    # Output the segmented nodes.
+    nodes_mask = im_seg.ds[:] == 3
+    nodes_data = np.zeros_like(nodes_mask, dtype='uint16')
+    nodes_data[nodes_mask] = axons.ds[nodes_mask]
+    nodes.write(nodes_data)
+    nodeless = np.copy(axons.ds[:])
+    nodeless[nodes_mask] = 0
+    nonodes.write(nodeless)
+
+    # Close images.
+    nodes.close()
+    nonodes.close()
+    im_rim.close()
+    im_seg.close()
+    mask.close()
+    axons.close()
+
+    return nodes
 
 
 if __name__ == "__main__":
