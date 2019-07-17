@@ -111,7 +111,7 @@ def separate_sheaths(
 
         mask_ws = construct_wsmask(outpaths['wsmask'], props, dist,
                                    h5path_mds, h5path_mmm,
-                                   MAdilation, dist_thr=dist_thr)
+                                   dist_thr=dist_thr)
 
         label_mm = ws(outpaths['sheaths'], props, mask_ma, seeds, mask_ws, dist)
 
@@ -121,7 +121,7 @@ def separate_sheaths(
         dsname = 'wsmask_sigmoid_{}'.format(sigmoidweighting)
         mask_ws = construct_wsmask(outpaths[dsname], props, None,
                                    h5path_mds, h5path_mmm,
-                                   MAdilation=[], dist_thr=0.0)
+                                   dist_thr=0.0)
         # TODO: remove MA seeds from mask
         label_mm = separate_sheaths_sigmoid(outpaths, props, ma, seeds,
                                             label_mm,
@@ -235,7 +235,7 @@ def get_outpaths(h5path_out, save_steps, weight):
 
 def construct_wsmask(outpath, props, mask_ma,
                      h5path_mds='', h5path_mmm='',
-                     MAdilation=[1, 7, 7], dist_thr=0.0):
+                     MAdilation=[], dist_thr=0.0):
     """Construct a mask of valid myelin voxels."""
 
     mask = np.ones(props['shape'], dtype='bool')
