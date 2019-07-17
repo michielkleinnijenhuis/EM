@@ -83,7 +83,7 @@ def stack2stack(
     mo = Image(outputpath, protective=protective, **props)
     mo.create(comm=mpi.comm)
 
-    data = im.slice_dataset()
+    data = im.slice_dataset(squeeze=False)
     data = np.transpose(data, in2out)
 
     # TODO: proper general writing astype
