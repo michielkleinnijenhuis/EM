@@ -236,6 +236,24 @@ function coordsXYZ_to_slicesZYX {
 }
 
 
+function coordsXYZ_to_sform {
+    # Convert coordinate set to python slices form.
+
+    local start_x=$1
+    local stop_x=$2
+    local start_y=$3
+    local stop_y=$4
+    local start_z=$5
+    local stop_z=$6
+
+	xos=$(echo "scale=10; ${xe} * $start_x" | bc)
+	yos=$(echo "scale=10; ${ye} * $start_y" | bc)
+	zos=$(echo "scale=10; ${ze} * $start_z" | bc)
+	
+	sform="$xe 0 0 $xos 0 $ye 0 $yos 0 0 $ze $zos 0 0 0 1"
+	
+    echo "$sform"
+
 }
 
 
