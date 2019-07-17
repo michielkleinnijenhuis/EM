@@ -211,7 +211,7 @@ def write_medwidths(comps, medwidths):
         pickle.dump(medwidths, f)
 
     filepath = '{}_{}.txt'.format(comps['base'], comps['dset'])
-    with open(filepath, "wb") as f:
+    with open(filepath, "w") as f:
         for lsk, lsv in medwidths.items():
             f.write("%8d: " % lsk)
             f.write("%8f " % lsv)
