@@ -343,7 +343,7 @@ class Image(object):
                    '.nii': self.nii_load,
                    '.dm3': self.dm3_load,
                    '.pbf': self.pbf_load,
-                   '.tif': self.tif_load,
+                   '.tif': self.pbf_load,
                    '.tifs': self.tifs_load}
 
         formats[self.format](comm, load_data)
