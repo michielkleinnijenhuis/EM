@@ -812,10 +812,10 @@ def fill_connected_labels(image_in,
         prop = rp_main[i]
 
         if between:
-            connect_split_label(prop, svoxs, mo, data, mask, searchradius, axons=None)
+            connect_split_label(prop, svoxs, mo, data, mask, searchradius)
             
         if to_border:
-            connect_to_borders(prop, svoxs, mo, data, mask, searchradius, axons=None)
+            connect_to_borders(prop, svoxs, mo, data, mask, searchradius)
         if check_split:
             check_split_label(prop, mo, checkonly=checkonly)
 
@@ -890,6 +890,7 @@ def create_seeds_cylinder(seeds, mask_bot=None, mask_top=None,
     disk_ed = disk(int(disk_radius))
 
     # project line from one centroid to the other
+    # TODO: fast marching or Dijkstra's
     n_slices = seeds.shape[0]
     xs = np.linspace(ctr_bot[1], ctr_top[1], n_slices)
     ys = np.linspace(ctr_bot[0], ctr_top[0], n_slices)
