@@ -793,7 +793,7 @@ def classify_label_set(labelsets, labelset, lskey=None):
     """Add labels to a labelset or create a new set."""
 
     found = False
-    for lsk in sorted(labelsets.iterkeys()):
+    for lsk in sorted(labelsets.keys()):
         lsv = labelsets[lsk]
         for l in labelset:
             if l in lsv:
@@ -911,7 +911,7 @@ def write_labelsets(labelsets, filestem, filetypes='txt'):
 def write_labelsets_to_txt(labelsets, filepath):
     """Write labelsets to a textfile."""
 
-    with open(filepath, "wb") as f:
+    with open(filepath, "w") as f:
         for lsk, lsv in labelsets.items():
             f.write("%8d: " % lsk)
             ls = sorted(list(lsv))
@@ -1287,7 +1287,7 @@ def combine_labelsets(labelsets, comps):
     match = "{}_host*_rank*.pickle".format(lsroot)
     infiles = glob.glob(match)
     for ppath in infiles:
-        with open(ppath, "r") as f:
+        with open(ppath, "rb") as f:
             newlabelsets = pickle.load(f)
         for lsk, lsv in newlabelsets.items():
             labelsets = classify_label_set(labelsets, lsv, lsk)
