@@ -221,10 +221,23 @@ def fill_holes_m3(labels, selem=[3, 3, 3]):
 
     rp = regionprops(labels)
     for prop in rp:
-        print(prop.label)
+
         z, y, x, Z, Y, X = tuple(prop.bbox)
+
         mask = prop.image
+
+        if z == 0:
+            mask = np.insert(mask, 0, True, axis=0)
+        if Z == labels.shape[0]:
+            mask = np.insert(mask, mask.shape[0], True, axis=0)
+
         mask = binary_fill_holes(mask)
+
+        if Z == labels.shape[0]:
+            mask = mask[:-1, :, :]
+        if z == 0:
+            mask = mask[1:, :, :]
+
         imregion = labels[z:Z, y:Y, x:X]
         imregion[mask] = prop.label
 
