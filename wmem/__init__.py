@@ -414,25 +414,59 @@ class Image(object):
         self.dtype = self.pbf_load_dtype()
 
         if load_data:
-            self.pbf_load_data()
+            self.set_slices()
+            self.elsize = self.get_elsize()
+            self.axlab = self.get_axlab()
+            self.ds = self.pbf_load_data()
+            print(self.ds.shape)
+
+#     def pbf_load_data(self):
+# 
+#         axlab = 'zyxct'
+# 
+#         self.ds = np.empty([0] + self.dims[1:], dtype=self.dtype)
+# 
+#         for z_idx in range(0, self.dims[axlab.index('z')]):
+# 
+# #             read(c=None, z=0, t=0, series=None, index=None, rescale=True, wants_max_intensity=False, channel_names=None, XYWH=None
+#             slc = bioformats.load_image(self.path, z=z_idx, series=self.series, rescale=False)
+# 
+#             slc = np.expand_dims(slc, axis=0)
+#             if self.dims[axlab.index('c')] == 1:
+#                 slc = np.expand_dims(slc, axis=3)
+#             if self.dims[axlab.index('t')] == 1:
+#                 slc = np.expand_dims(slc, axis=4)
+# 
+#             self.ds = np.append(self.ds, slc, axis=0)
 
     def pbf_load_data(self):
 
-        axlab = 'zyxct'
+        reader = bioformats.get_image_reader('foo', self.path)
 
-        self.ds = np.empty([0] + self.dims[1:], dtype=self.dtype)
+#         dims = [dim for dim in self.slices2shape()]  # FIXME: step not implemented
+        data = np.empty(self.dims)
 
-        for z_idx in range(0, self.dims[axlab.index('z')]):
+        z_dim = self.axlab.index('z')
+        y_dim = self.axlab.index('y')
+        x_dim = self.axlab.index('x')
+        c_dim = self.axlab.index('c')
+        t_dim = self.axlab.index('t')
 
-            slc = bioformats.load_image(self.path, z=z_idx, series=self.series, rescale=False)
+        xywh = (self.slices[x_dim].start,
+                self.slices[y_dim].start,
+                self.slices[x_dim].stop - self.slices[x_dim].start,
+                self.slices[y_dim].stop - self.slices[y_dim].start)
 
-            slc = np.expand_dims(slc, axis=0)
-            if self.dims[axlab.index('c')] == 1:
-                slc = np.expand_dims(slc, axis=3)
-            if self.dims[axlab.index('t')] == 1:
-                slc = np.expand_dims(slc, axis=4)
+        for c_idx in range(self.slices[c_dim].start, self.slices[c_dim].stop, self.slices[c_dim].step):
+            for z_idx in range(self.slices[z_dim].start, self.slices[z_dim].stop, self.slices[z_dim].step):
+                for t_idx in range(self.slices[t_dim].start, self.slices[t_dim].stop, self.slices[t_dim].step):
 
-            self.ds = np.append(self.ds, slc, axis=0)
+                    slc = reader.read(c=c_idx, z=z_idx, t=t_idx, rescale=False, XYWH=xywh)
+                    data[z_idx, :, :, c_idx, t_idx] = slc
+
+        reader.close()
+
+        return data
 
     def pbf_get_dims(self):
 
@@ -590,7 +624,7 @@ class Image(object):
         elif self.format == '.nii':
             ndim = len(self.file.header.get_data_shape())
         elif self.format == '.tif':
-            ndim = self.ds.ndim
+            ndim = len(self.dims)
         elif self.format == '.tifs':
             ndim = len(self.dims)
         elif self.format == '.dm3':
@@ -662,6 +696,8 @@ class Image(object):
         """Get the shape of the sliced dataset."""
 
         if slices is None:
+            if self.slices is None:
+                self.set_slices()
             slices = self.slices
 
         return (len(range(*slc.indices(slc.stop))) for slc in slices)
