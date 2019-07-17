@@ -829,7 +829,7 @@ class Image(object):
         """Get the dimension labels from a dataset."""
 
         if 'DIMENSION_LABELS' in self.ds.attrs.keys():
-            axlab = ''.join(self.ds.attrs['DIMENSION_LABELS'])
+            axlab = b''.join(self.ds.attrs['DIMENSION_LABELS']).decode("utf-8")
         else:
             axlab = None
 
