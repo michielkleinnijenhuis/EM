@@ -231,7 +231,10 @@ function coordsXYZ_to_slicesZYX {
     [[ "$stop_y" -eq "$(( ($ymax + k) / ds ))" ]] && stop_y=0
     [[ "$stop_z" -eq "$zmax" ]] && stop_z=0
 
-    echo "$start_z $stop_z 1 $start_y $stop_y 1 $start_x $stop_x"
+    echo "$start_z $stop_z 1 $start_y $stop_y 1 $start_x $stop_x 1"
+
+}
+
 
 }
 
