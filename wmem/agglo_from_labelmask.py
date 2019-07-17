@@ -28,6 +28,7 @@ def main(argv):
         args.inputfile,
         args.oversegmentation,
         args.ratio_threshold,
+        args.axon_mask,
         args.outputfile,
         args.save_steps,
         args.protective,
@@ -39,6 +40,7 @@ def agglo_from_labelmask(
         image_in,
         oversegmentation,
         ratio_threshold=0,
+        axon_mask=True,
         outputpath='',
         save_steps=False,
         protective=False,
@@ -92,7 +94,11 @@ def agglo_from_labelmask(
     if mpi.rank == 0:
 
         labelsets = utils.combine_labelsets({}, comps)
-        mo.write(svoxs.forward_map(labelsets=labelsets, from_empty=True))
+        fwmapped = svoxs.forward_map(labelsets=labelsets, from_empty=True)
+        if axon_mask:
+            mask = axons.ds[:].astype('bool')
+            fwmapped[~mask] = 0
+        mo.write(fwmapped)
 
 #         ls_axons = {lskey: set([lskey]) for lskey in labelsets.keys()}
 #         svoxs_fw = svoxs.forward_map(labelsets=labelsets, from_empty=True)
@@ -106,7 +112,7 @@ def agglo_from_labelmask(
     mo.close()
 #     mo2.close()
 #     mo3.close()
-# 
+#
 #     return mo
 
 

@@ -971,6 +971,12 @@ def parse_agglo_from_labelmask(parser):
         help='...'
         )
 
+    parser.add_argument(
+        '-m', '--axon_mask',
+        action='store_true',
+        help='use axons as output mask'
+        )
+
     return parser
 
 
