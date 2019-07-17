@@ -250,6 +250,7 @@ class Image(object):
 
         if comps['ext'] == '.h5':
             comps_int = self.h5_split_int(filepath.split('.h5')[1])
+            comps['int'] = filepath.split('.h5')[1]
             comps.update(comps_int)
         else:
             pass  # TODO: groups/dset from fname
