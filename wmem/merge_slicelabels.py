@@ -294,7 +294,7 @@ def generate_anisotropic_selem(close):
     for i in range(close[0] + 1):
         xywidth = max(0, close[1] - (close[0] - i))
         xy = disk(xywidth)
-        padsize = (selem_dim[1] - len(xy)) / 2
+        padsize = (selem_dim[1] - len(xy)) // 2
         xy = np.pad(xy, padsize, 'constant')
         selem[i, :, :] = xy
         selem[-(i+1), :, :] = xy
