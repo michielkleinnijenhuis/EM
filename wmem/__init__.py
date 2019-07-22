@@ -1368,7 +1368,8 @@ class LabelImage(Image):
         """Load a dataset."""
 
         super(LabelImage, self).load(comm, load_data)
-        self.set_maxlabel()
+        if load_data:  # TODO: look at downstream
+            self.set_maxlabel()
 
 
     def read_labelsets(self, lsfile):
