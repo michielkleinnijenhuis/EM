@@ -955,6 +955,8 @@ function mergeblocks {
         :  # TODO
     elif [ "$compute_env" == "LOCAL" ]; then
         :
+    elif [ "$compute_env" == "RIOS013" ]; then
+        :
     fi
 
     # TODO separate jobs for infiles array of selections...?
@@ -1919,6 +1921,11 @@ function fill_holes {
         tasks=$n
         njobs=1
 
+    elif [ "$compute_env" == "RIOS013" ]; then
+
+        tasks=20
+        njobs=$(( (n + tasks - 1) / tasks ))
+
     fi
 
     local fun=get_cmd_fill_holes
@@ -1993,3 +2000,62 @@ function merge_labels_ws {
     single_job "$cmd"
 
 }
+
+
+function separate_sheaths {
+    #
+
+    local jobname additions CONDA_ENV njobs nodes tasks memcpu wtime
+    local fun nstems
+
+    local q=$1
+
+    local stemsmode=$2
+    local fun=$3
+
+    local ipf=$4
+    local ids=$5
+    local opf=$6
+    local ods=$7
+    shift 7
+    local args=$*
+
+    set_datastems $stemsmode
+    n=${#datastems[@]}
+
+    jobname="fh_$ods"
+
+    if [[ "$compute_env" == *"ARC"* ]]; then
+
+        additions='array'
+
+        nodes=1
+        mem=8000;
+        wtime='01:10:00';
+        tasks=8
+        njobs=$(( (n + tasks - 1) / tasks ))
+
+    elif [ "$compute_env" == "JAL" ]; then
+
+        additions='array'
+        tasks=$n
+        njobs=1
+
+    elif [ "$compute_env" == "LOCAL" ]; then
+
+        tasks=$n
+        njobs=1
+
+    elif [ "$compute_env" == "RIOS013" ]; then
+
+        tasks=20
+        njobs=$(( (n + tasks - 1) / tasks ))
+
+    fi
+
+    get_command_array_datastems $fun
+    unset JOBS && declare -a JOBS
+    array_job $njobs $tasks
+
+}
+

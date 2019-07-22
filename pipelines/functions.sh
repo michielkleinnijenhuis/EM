@@ -1009,3 +1009,32 @@ function get_cmd_merge_slicelabels {
         "$args"
 
 }
+
+
+function get_cmd_separate_sheaths {
+    # Get the command for .
+
+    dataroot="$1"
+
+	echo python -W ignore "$scriptdir/wmem/separate_sheaths.py" \
+		"${blockdir}/${datastem}us${ipf}.h5/${ids}" \
+		"${blockdir}/${datastem}${opf}.h5/${ods}" \
+		--maskMM "${blockdir}/${datastem}${mpf}.h5/${mds}" \
+		"$args"
+
+}
+
+
+function get_cmd_separate_sheaths_sigmoid {
+    # Get the command for .
+
+    dataroot="$1"
+
+	echo python -W ignore "$scriptdir/wmem/separate_sheaths.py" \
+		"${blockdir}/${datastem}us${ipf}.h5/${ids}" \
+		"${blockdir}/${datastem}${opf}.h5/${ods}" \
+		--maskMM "${blockdir}/${datastem}${mpf}.h5/${mds}" \
+		--labelMM "${blockdir}/${datastem}${lpf}.h5/${lds}" \
+		"$args"
+
+}
