@@ -982,7 +982,7 @@ class Image(object):
 #             self.tifs_load()
 #         except:
         self.file = None
-        self.ds = np.empty(self.dims, self.dtype)
+        self.ds = []  # np.empty(self.dims, self.dtype)
 
     def dat_create(self, comm=None):
         """Write a dataset to dat format."""
