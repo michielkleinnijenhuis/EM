@@ -195,20 +195,22 @@ def fill_holes_m5(labels, selem=[1, 7, 7], mpi=None):
         print(prop.label, labels.slices)
         imregion = labels.slice_dataset()
         mask = imregion == prop.label
-#         print(np.sum(mask))
-#         z, y, x, Z, Y, X = tuple(prop.bbox)
-#         mask = prop.image
 
-        # TODO: implement border reflection
-#         for _ in range(selem[0]):
-#             print('dil')
-#             mask = binary_dilation(mask, structure=struct, border_value=1)
-#             print('ero')
-#             mask = binary_erosion(mask, structure=struct, border_value=0)
+        z, Z = labels.slices[0].start, labels.slices[0].stop
+
+        if z == 0:
+            mask = np.insert(mask, 0, True, axis=0)
+        if Z == labels.ds.shape[0]:
+            mask = np.insert(mask, mask.shape[0], True, axis=0)
+
         mask = binary_closing(mask, structure=struct, iterations=selem[0])
         mask = binary_fill_holes(mask)
 
-#         imregion = labels[z:Z, y:Y, x:X]
+        if Z == labels.ds.shape[0]:
+            mask = mask[:-1, :, :]
+        if z == 0:
+            mask = mask[1:, :, :]
+
         imregion[mask] = prop.label
 
         labels.write(imregion)
