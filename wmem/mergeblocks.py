@@ -85,6 +85,9 @@ def mergeblocks(
         ):
     """Merge blocks of data into a single hdf5 file."""
 
+    if blockrange:
+        images_in = images_in[blockrange[0]:blockrange[1]]
+
     mpi = wmeMPI(usempi)
 
     im = utils.get_image(images_in[0], comm=mpi.comm)
