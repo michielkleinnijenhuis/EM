@@ -15,7 +15,7 @@ import numpy as np
 from skimage.measure import label, regionprops
 from skimage.morphology import binary_dilation, binary_erosion, ball, watershed
 
-from wmem import parse, utils, LabelImage
+from wmem import parse, utils, Image, LabelImage
 from wmem.merge_labels import get_region_slices_around
 
 
@@ -591,6 +591,37 @@ def detect_NoR(image_in, maskMM, encapsulate_threshold=1.0, min_node_length=10, 
     axons.close()
 
     return nodes
+
+
+def cut_NoR(images_in, nodes_in, outputpostfix='_nonodes'):
+
+    nodes = utils.get_image(nodes_in, imtype='Label')
+    rp = regionprops(nodes.ds[:])
+    rp_map = {prop.label: prop for prop in rp}
+    
+    for image_in in images_in:
+        labels = utils.get_image(image_in, imtype='Label')
+        out = np.copy(labels.ds[:])
+        for label in labels.ulabels:
+            if label == 0:
+                continue
+            try:
+                prop = rp_map[label]
+            except KeyError:
+                pass
+            else:
+                slc = slice(prop.bbox[0], prop.bbox[3], 1)
+                hl_cut = out[slc, :, :]
+                mask = hl_cut == label
+                # print(np.sum(out[:, :, :] == label))
+                hl_cut[mask] = 0
+                # print(np.sum(out[:, :, :] == label))
+    
+        outputpath = image_in + outputpostfix
+        mo = Image(outputpath, **labels.get_props())
+        mo.create()
+        mo.write(out)
+        mo.close()
 
 
 if __name__ == "__main__":
