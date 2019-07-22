@@ -10,7 +10,6 @@ import os
 
 import numpy as np
 
-import mpi4py
 try:
     from mpi4py import MPI
 except ImportError:
