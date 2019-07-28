@@ -888,7 +888,7 @@ function get_cmd_watershed_ics {
     echo python -W ignore $scriptdir/wmem/watershed_ics.py \
         $datadir/blocks_$bs/$datastem$ipf.h5/$ids \
         $datadir/blocks_$bs/$datastem$opf.h5/$ods \
-        --masks NOT $datadir/blocks_$bs/$datastem$mpf.h5/$mds \
+        --mask_in $datadir/blocks_$bs/$datastem$mpf.h5/$mds \
         $args
 
 }

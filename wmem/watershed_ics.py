@@ -33,7 +33,7 @@ def main(argv):
         args.blocksize,
         args.blockmargin,
         args.blockrange,
-        args.masks,
+        args.mask_in,
         args.seedimage,
         args.seed_size,
         args.lower_threshold,
@@ -52,7 +52,7 @@ def watershed_ics(
         blocksize=[],
         blockmargin=[],
         blockrange=[],
-        masks=[],
+        mask_in='',
         seeds_in='',
         seed_size=64,
         lower_threshold=0.00,
@@ -80,9 +80,7 @@ def watershed_ics(
     # FIXME: if seeds h5 already exists with different dims it will load and fail
     # load/generate the seeds and mask
     seeds = get_seeds(seeds_in, mpi, outpaths['seeds'], **props)
-    mask_in = ((type(masks) is list and len(masks) == 1) or
-               (type(masks) is Image))
-    mask = get_mask(mask_in, masks, mpi, outpaths['mask'], **props)
+    mask = get_mask(mask_in, mpi, outpaths['mask'], **props)
 
     # Prepare for processing with MPI.
     mpi.set_blocks(im, blocksize, blockmargin, blockrange)
@@ -98,9 +96,10 @@ def watershed_ics(
 
         data = im.slice_dataset()
         if mask_in:
-            maskdata = mask.slice_dataset()
+            maskdata = mask.slice_dataset().astype('bool')
         else:
-            maskdata = calculate_mask(mask, masks)
+            maskdata = np.ones(im.dims, dtype='bool')
+            mask.write(data=maskdata, slices=mask.slices)
 
         if seeds_in:
             seedsdata = seeds.slice_dataset()
@@ -171,13 +170,12 @@ def calculate_seeds(data, lower_threshold, upper_threshold, min_seed_size):
     return seeds
 
 
-def get_mask(mask_in, masks, mpi, outpath='', **kwargs):
+def get_mask(mask_in, mpi, outpath='', **kwargs):
 
     kwargs['dtype'] = 'bool'
 
     if mask_in:
-        mask = utils.get_image(masks[0], comm=mpi.comm,
-                               slices=kwargs['slices'])
+        mask = utils.get_image(mask_in, comm=mpi.comm, slices=kwargs['slices'])
     else:
         mask = MaskImage(outpath, **kwargs)
         mask.create(comm=mpi.comm)
