@@ -71,7 +71,7 @@ def watershed_ics(
     im = utils.get_image(image_in, comm=mpi.comm, dataslices=dataslices)
 
     # Open the outputfiles for writing and create the dataset or output array.
-    props = im.get_props(protective=protective, dtype='uint64', squeeze=True)
+    props = im.get_props(protective=protective, dtype='uint32', squeeze=True)
     outpaths = get_outpaths(outputpath, save_steps)
     mo = LabelImage(outpaths['out'], **props)
     mo.create(comm=mpi.comm)  # FIXME: load if exist
@@ -137,7 +137,7 @@ def get_outpaths(h5path_out, save_steps):
 
 def get_seeds(seeds_in, mpi, outpath='', **kwargs):
 
-    kwargs['dtype'] = 'uint64'
+    kwargs['dtype'] = 'uint32'
 
     if seeds_in:
         seeds = utils.get_image(seeds_in, comm=mpi.comm,
