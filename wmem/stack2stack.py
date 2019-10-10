@@ -59,6 +59,9 @@ def stack2stack(
         ):
     """Convert/select/downscale/transpose/... an hdf5 dataset."""
 
+    # TODO: optional squeeze
+    squeeze = True
+
     mpi = wmeMPI(usempi)
 
     # Open the inputfile for reading.
@@ -75,6 +78,13 @@ def stack2stack(
              'chunks': chunksize or im.chunks,
              'elsize': elsize or im.elsize,
              'shape': list(im.slices2shape())}
+
+    if squeeze:
+        for dim, dimsize in enumerate(props['shape']):
+            if dimsize < 2:
+    #     if squeeze and (len(im.dims) == 5):  # FIXME: generalize
+                props = im.squeeze_props(props, dim=dim)
+
     in2out = [im.axlab.index(l) for l in props['axlab']]
     for prop in ['elsize', 'shape', 'chunks']:
         props[prop] = utils.transpose(props[prop], in2out)
@@ -82,8 +92,15 @@ def stack2stack(
     # Open the outputfile for writing and create the dataset or output array.
     mo = Image(outputpath, protective=protective, **props)
     mo.create(comm=mpi.comm)
+    mo.set_slices()
 
-    data = im.slice_dataset(squeeze=False)
+    if im.format == '.pbf':  # already sliced on read
+        if squeeze:
+            data = np.squeeze(im.ds)
+        else:
+            data = im.ds
+    else:
+        data = im.slice_dataset(squeeze=squeeze)
     data = np.transpose(data, in2out)
 
     # TODO: proper general writing astype
