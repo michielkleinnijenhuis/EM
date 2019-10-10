@@ -16,7 +16,11 @@ import glob
 
 import numpy as np
 
-from skimage.io import imread, imsave
+try:
+    from skimage.io import imread, imsave
+except ImportError:
+    print("scikit image could not be loaded")
+
 
 try:
     import nibabel as nib
