@@ -308,7 +308,7 @@ function sbatch_directives {
 
     echo "#SBATCH --nodes=$nodes"
     echo "#SBATCH --ntasks-per-node=$tasks"
-    echo "#SBATCH --mem-per-cpu=$memcpu"
+    echo "#SBATCH --mem=$memcpu"
     [ "$q" = "d" ] &&
         echo "#SBATCH --time=00:10:00" ||
             echo "#SBATCH --time=$wtime"
