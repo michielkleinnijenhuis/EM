@@ -59,6 +59,7 @@ def combine_vols(
     # Open the outputfile for writing and create the dataset or output array.
     props = im.get_props(protective=protective, squeeze=True)
     mo = Image(outputpath, **props)
+    nvols = len(vol_idxs)
     mo.create(comm=mpi.comm)
     in2out_offset = -np.array([slc.start for slc in mo.slices])
 
@@ -70,7 +71,9 @@ def combine_vols(
         block = mpi.blocks[i]
 
         out = add_volumes(im, block, vol_idxs)
-
+        mean = True
+        if mean:
+            out = out / nvols
         slcs_out = squeeze_slices(im.slices, im.axlab.index('c'))
         slcs_out = im.get_offset_slices(in2out_offset)
         mo.write(data=out, slices=slcs_out)
