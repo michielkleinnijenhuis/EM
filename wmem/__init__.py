@@ -504,21 +504,28 @@ class Image(object):
         if props is None:
             props = self.get_props()
 
+        # FIXME: make it all with shape=1
         if dim is None:
-            if 'c' in self.axlab:
-                dim = self.axlab.index('c')
-            else:
-                return props
+            for ax in 'ct':
+                if ax in props['axlab']:
+                    props = self.squeeze_dim(props, props['axlab'].index(ax))
+        else:
+            props = self.squeeze_dim(props, dim)
+
+        return props
+
+    def squeeze_dim(self, props, dim):
 
         squeezable = ['shape', 'elsize', 'axlab', 'chunks', 'slices']
         for prop in squeezable:
 
-            val = props[prop]
-            if val is not None:
-                props[prop] = list(val)
-                del props[prop][dim]
-            else:
-                props[prop] = val
+            if prop in props.keys():
+                val = props[prop]
+                if val is not None:
+                    props[prop] = list(val)
+                    del props[prop][dim]
+                else:
+                    props[prop] = val
 
         return props
 
