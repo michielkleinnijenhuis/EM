@@ -84,7 +84,7 @@ class Image(object):
                 self.format = ext
                 return
 
-        for ext in ['.czi', '.lif']:  # ETC
+        for ext in ['.czi', '.lif', '.ims']:  # ETC
             if ext in path:
                 self.format = '.pbf'
                 return
@@ -336,8 +336,8 @@ class Image(object):
         if not self.path:
             pass
 
-#         if self.format == '.pbf':
-#             javabridge.start_vm(class_path=bioformats.JARS, run_headless=True)
+        if self.format == '.pbf':
+            javabridge.start_vm(class_path=bioformats.JARS, run_headless=True)
 
         formats = {'.h5': self.h5_load,
                    '.nii': self.nii_load,
@@ -353,8 +353,8 @@ class Image(object):
         self.elsize = self.get_elsize()
         self.axlab = self.get_axlab()
 
-#         if self.format == '.pbf':
-#             javabridge.kill_vm()
+        if self.format == '.pbf':
+            javabridge.kill_vm()
 
     def h5_load(self, comm=None, load_data=True):
         """Load a h5 dataset."""
