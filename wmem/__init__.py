@@ -418,32 +418,12 @@ class Image(object):
             self.elsize = self.get_elsize()
             self.axlab = self.get_axlab()
             self.ds = self.pbf_load_data()
-            print(self.ds.shape)
-
-#     def pbf_load_data(self):
-# 
-#         axlab = 'zyxct'
-# 
-#         self.ds = np.empty([0] + self.dims[1:], dtype=self.dtype)
-# 
-#         for z_idx in range(0, self.dims[axlab.index('z')]):
-# 
-# #             read(c=None, z=0, t=0, series=None, index=None, rescale=True, wants_max_intensity=False, channel_names=None, XYWH=None
-#             slc = bioformats.load_image(self.path, z=z_idx, series=self.series, rescale=False)
-# 
-#             slc = np.expand_dims(slc, axis=0)
-#             if self.dims[axlab.index('c')] == 1:
-#                 slc = np.expand_dims(slc, axis=3)
-#             if self.dims[axlab.index('t')] == 1:
-#                 slc = np.expand_dims(slc, axis=4)
-# 
-#             self.ds = np.append(self.ds, slc, axis=0)
 
     def pbf_load_data(self):
 
         reader = bioformats.get_image_reader('foo', self.path)
 
-#         dims = [dim for dim in self.slices2shape()]  # FIXME: step not implemented
+        self.dims = [dim for dim in self.slices2shape()]  # FIXME: step not implemented
         data = np.empty(self.dims)
 
         z_dim = self.axlab.index('z')
@@ -461,12 +441,15 @@ class Image(object):
             for z_idx in range(self.slices[z_dim].start, self.slices[z_dim].stop, self.slices[z_dim].step):
                 for t_idx in range(self.slices[t_dim].start, self.slices[t_dim].stop, self.slices[t_dim].step):
 
-                    slc = reader.read(c=c_idx, z=z_idx, t=t_idx, rescale=False, XYWH=xywh)
-                    data[z_idx, :, :, c_idx, t_idx] = slc
+                    slc = reader.read(c=c_idx, z=z_idx, t=t_idx, series=self.series, wants_max_intensity=False, rescale=False, XYWH=xywh)
+                    c_idx_n = c_idx - self.slices[c_dim].start
+                    z_idx_n = z_idx - self.slices[z_dim].start
+                    t_idx_n = t_idx - self.slices[t_dim].start
+                    data[z_idx_n, :, :, c_idx_n, t_idx_n] = slc
 
         reader.close()
 
-        return data
+        return np.array(data)
 
     def pbf_get_dims(self):
 
