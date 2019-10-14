@@ -1038,3 +1038,16 @@ function get_cmd_separate_sheaths_sigmoid {
 		"$args"
 
 }
+
+
+function get_cmd_np_agglomerate {
+    # Get the command for .
+
+	echo "$NPdir/NeuroProof_stack" \
+		-watershed "$datadir/blocks_$bs/${datastem}${svoxpf}.h5" "${sds}" \
+		-prediction "$datadir/blocks_$bs/${datastem}_probs.h5" 'volume/predictions' \
+		-output "$datadir/blocks_$bs/${datastem}${svopxpf}_prediction${classifier}${cltype}_thr${thr}_alg${alg}M.h5" 'stack' \
+		-classifier "$datadir/${trainset}${classifier}.${cltype}" \
+		-threshold "${thr}" -algorithm "${alg}"
+
+}

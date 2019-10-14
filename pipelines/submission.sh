@@ -2059,3 +2059,49 @@ function separate_sheaths {
 
 }
 
+
+function np_agglomerate {
+    #
+
+    local jobname additions CONDA_ENV njobs nodes tasks memcpu wtime
+    local fun nstems
+
+    local q=$1
+
+    local stemsmode=$2
+
+    set_datastems $stemsmode
+    n=${#datastems[@]}
+
+    jobname="ws_$ods"
+
+    if [[ "$compute_env" == *"ARC"* ]]; then
+
+        additions='array'
+
+        nodes=1
+        # memcpu=125000;
+        wtime='03:10:00';
+        tasks=16
+        njobs=$(( (n + tasks - 1) / tasks ))
+
+    elif [ "$compute_env" == "JAL" ]; then
+
+        additions='array'
+        tasks=$n
+        njobs=1
+
+    elif [ "$compute_env" == "LOCAL" ]; then
+
+        tasks=$n
+        njobs=1
+
+    fi
+
+    local fun=get_cmd_np_agglomerate
+    get_command_array_datastems $fun
+    unset JOBS && declare -a JOBS
+    array_job $njobs $tasks
+
+}
+
