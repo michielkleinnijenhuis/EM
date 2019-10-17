@@ -236,6 +236,8 @@ class Image(object):
 
         if self.format == '.tifs':
             comps['ext'] = 'tif'
+        elif self.format == '.pbf':
+            comps['ext'] = os.path.splitext(filepath)[1]
         elif self.format == '.nii':
             comps['ext'] = '.nii.gz'    # TODO: non-zipped
         else:
