@@ -1581,3 +1581,27 @@ class wmeMPI(object):
         stops[stops > shape + offset] = shape + offset
 
         return starts, stops
+
+
+def get_image(image_in, imtype='', **kwargs):
+
+    comm = kwargs.pop('comm', None)
+    load_data = kwargs.pop('load_data', True)
+
+    if isinstance(image_in, Image):
+        im = image_in
+        if 'slices' in kwargs.keys():
+            im.slices = kwargs['slices']
+        if im.format == '.h5':
+            im.h5_load(comm, load_data)
+    else:
+        if imtype == 'Label':
+            im = LabelImage(image_in, **kwargs)
+        elif imtype == 'Mask':
+            im = MaskImage(image_in, **kwargs)
+        else:
+            im = Image(image_in, **kwargs)
+
+        im.load(comm, load_data)
+
+    return im
