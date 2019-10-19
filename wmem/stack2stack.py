@@ -59,55 +59,49 @@ def stack2stack(
         ):
     """Convert/select/downscale/transpose/... an hdf5 dataset."""
 
-    # TODO: optional squeeze
-    squeeze = True
-
     mpi = wmeMPI(usempi)
 
     # Open the inputfile for reading.
-    im = utils.get_image(image_in, comm=mpi.comm, dataslices=dataslices)
+    im = utils.get_image(image_in, comm=mpi.comm, dataslices=dataslices, load_data=False)
 
     if dset_name:
         im.slices = utils.dset_name2slices(dset_name, blockoffset,
                                            axlab=inlayout,
                                            shape=im.dims)
+    props = im.get_props()
 
-    # Determine the properties of the output dataset.
-    props = {'dtype': datatype or im.dtype,
-             'axlab': outlayout or im.axlab,
-             'chunks': chunksize or im.chunks,
-             'elsize': elsize or im.elsize,
-             'shape': list(im.slices2shape())}
+    # Load the data
+    data = im.slice_dataset(squeeze=False)
 
-    if squeeze:
-        for dim, dimsize in enumerate(props['shape']):
-            if dimsize < 2:
-    #     if squeeze and (len(im.dims) == 5):  # FIXME: generalize
-                props = im.squeeze_props(props, dim=dim)
-
-    in2out = [im.axlab.index(l) for l in props['axlab']]
-    for prop in ['elsize', 'shape', 'chunks']:
-        props[prop] = utils.transpose(props[prop], in2out)
-
-    # Open the outputfile for writing and create the dataset or output array.
-    mo = Image(outputpath, protective=protective, **props)
-    mo.create(comm=mpi.comm)
-    mo.set_slices()
-
-    if im.format == '.pbf':  # already sliced on read
-        if squeeze:
-            data = np.squeeze(im.ds)
-        else:
-            data = im.ds
-    else:
-        data = im.slice_dataset(squeeze=squeeze)
-    data = np.transpose(data, in2out)
-
-    # TODO: proper general writing astype
+    # Convert datatype  # TODO: proper general writing astype
     if uint8conv:
         from skimage import img_as_ubyte
         data = utils.normalize_data(data)[0]
         data = img_as_ubyte(data)
+
+    # Remove singletons if not in outlayout
+    # TODO: singleton-check
+    outlayout = outlayout or props['axlab']
+    for al in props['axlab']:
+        if al not in outlayout:
+            dim = props['axlab'].index(al)
+            props = im.remove_singleton_props(props, dim)
+            data = np.squeeze(data, dim)
+
+    # Permute axes
+    in2out = [props['axlab'].index(l) for l in outlayout]
+    for prop in ['elsize', 'shape', 'chunks', 'axlab', 'slices']:
+        props[prop] = utils.transpose(props[prop], in2out)
+    data = np.transpose(data, in2out)
+
+    # Open the outputfile for writing and create the dataset or output array.
+    props['dtype'] = datatype or props['dtype']
+    props['chunks'] = chunksize or props['chunks']
+    props['elsize'] = elsize or props['elsize']
+
+    mo = Image(outputpath, **props)
+    mo.create(comm=mpi.comm)
+    mo.set_slices()
 
     if mo.format == '.nii':
         # TODO: properly implement translation of cutouts
