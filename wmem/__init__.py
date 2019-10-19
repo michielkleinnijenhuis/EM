@@ -4,6 +4,7 @@ import glob
 import pickle
 import random
 import numpy as np
+from xml import etree as et
 
 try:
     import nibabel as nib
@@ -16,8 +17,8 @@ except ImportError:  # , AttributeError
     print("scikit-image io could not be loaded")
 
 try:
-    import javabridge
-    import bioformats
+    import javabridge as jv
+    import bioformats as bf
 except ImportError:
     print("bioformats could not be loaded")
 
@@ -32,6 +33,10 @@ try:
     import DM3lib as dm3
 except ImportError:
     print("dm3lib could not be loaded")
+
+
+VM_STARTED = False
+VM_KILLED = False
 
 
 class Image(object):
@@ -89,7 +94,6 @@ class Image(object):
                 self.format = '.pbf'
                 return
 
-#         self.format = '.tifs'
         self.format = '.dat'
 
     def output_check(self, outpaths, save_steps=True, protective=False):
@@ -314,7 +318,7 @@ class Image(object):
 #         h5path_int_comp = h5path['int'].split('/')
 #         h5path['groups'] = h5path_int_comp[1:-1]
 #         h5path['dset'] = h5path_int_comp[-1]
-# 
+#
 #         h5path['file'] = h5path['base'] + '.h5'
 
         return path_comps
@@ -338,14 +342,11 @@ class Image(object):
         if not self.path:
             pass
 
-        if self.format == '.pbf':
-            javabridge.start_vm(class_path=bioformats.JARS, run_headless=True)
-
         formats = {'.h5': self.h5_load,
                    '.nii': self.nii_load,
                    '.dm3': self.dm3_load,
                    '.pbf': self.pbf_load,
-                   '.tif': self.tif_load,
+                   '.tif': self.pbf_load,
                    '.tifs': self.tifs_load}
 
         formats[self.format](comm, load_data)
@@ -354,9 +355,6 @@ class Image(object):
 
         self.elsize = self.get_elsize()
         self.axlab = self.get_axlab()
-
-        if self.format == '.pbf':
-            javabridge.kill_vm()
 
     def h5_load(self, comm=None, load_data=True):
         """Load a h5 dataset."""
@@ -409,62 +407,74 @@ class Image(object):
     def pbf_load(self, comm=None, load_data=True):
         """Load a dataset with python bioformats."""
 
-        md = bioformats.OMEXML(bioformats.get_omexml_metadata(self.path))
-        self.file = md.image(index=self.series)
+        if not VM_STARTED:
+            start()
+        if VM_KILLED:
+            raise RuntimeError("The Java Virtual Machine has already been "
+                               "killed, and cannot be restarted. See the "
+                               "python-javabridge documentation for more "
+                               "information. You must restart your program "
+                               "and try again.")
+
+        md = bf.get_omexml_metadata(self.path)
+        names, sizes, elsizes, axlabs, dtypes = parse_xml_metadata(md)
+        self.file = bf.ImageReader(self.path)
         self.ds = []
-        self.dims = self.pbf_get_dims()
-        self.dtype = self.pbf_load_dtype()
+        self.dims = sizes[0]
+        self.dtype = dtypes[0]
 
         if load_data:
             self.set_slices()
-            self.elsize = self.get_elsize()
-            self.axlab = self.get_axlab()
+            self.elsize = list(elsizes[0])
+            self.axlab = axlabs[0]
             self.ds = self.pbf_load_data()
 
     def pbf_load_data(self):
 
-        reader = bioformats.get_image_reader('foo', self.path)
+        # FIXME: same as h5 etc
+        self.dims = [dim for dim in self.slices2shape()]
+        data = np.empty(self.dims, self.dtype)
 
-        self.dims = [dim for dim in self.slices2shape()]  # FIXME: step not implemented
-        data = np.empty(self.dims)
+        i = {al: self.axlab.index(al) for al in self.axlab}
+        slices = {al: self.slices[i[al]] for al in self.axlab}
+        iterators = {al: range(slices[al].start, slices[al].stop, 1) for al in self.axlab}
 
-        z_dim = self.axlab.index('z')
-        y_dim = self.axlab.index('y')
-        x_dim = self.axlab.index('x')
-        c_dim = self.axlab.index('c')
-        t_dim = self.axlab.index('t')
+        xywh = (slices['x'].start,
+                slices['y'].start,
+                slices['x'].stop - slices['x'].start,
+                slices['y'].stop - slices['y'].start)
 
-        xywh = (self.slices[x_dim].start,
-                self.slices[y_dim].start,
-                self.slices[x_dim].stop - self.slices[x_dim].start,
-                self.slices[y_dim].stop - self.slices[y_dim].start)
+        dims_dict = {'x': xywh[2], 'y': xywh[3], 'z': 1, 'c': 1, 't': 1}
+        shape_xy = [dims_dict[al] for al in self.axlab]
 
-        for c_idx in range(self.slices[c_dim].start, self.slices[c_dim].stop, self.slices[c_dim].step):
-            for z_idx in range(self.slices[z_dim].start, self.slices[z_dim].stop, self.slices[z_dim].step):
-                for t_idx in range(self.slices[t_dim].start, self.slices[t_dim].stop, self.slices[t_dim].step):
+        for c_idx in iterators['c']:
+            for z_idx in iterators['z']:
+                for t_idx in iterators['t']:
 
-                    slc = reader.read(c=c_idx, z=z_idx, t=t_idx, series=self.series, wants_max_intensity=False, rescale=False, XYWH=xywh)
-                    c_idx_n = c_idx - self.slices[c_dim].start
-                    z_idx_n = z_idx - self.slices[z_dim].start
-                    t_idx_n = t_idx - self.slices[t_dim].start
-                    data[z_idx_n, :, :, c_idx_n, t_idx_n] = slc
+                    c_idx_n = c_idx - slices['c'].start
+                    z_idx_n = z_idx - slices['z'].start
+                    t_idx_n = t_idx - slices['t'].start
+                    slc_dict = {
+                        'x': slice(0, xywh[2], 1),
+                        'y': slice(0, xywh[3], 1),
+                        'z': slice(z_idx_n, z_idx_n + 1, 1),
+                        'c': slice(c_idx_n, c_idx_n + 1, 1),
+                        't': slice(t_idx_n, t_idx_n + 1, 1),
+                    }
+                    slcs = [slc_dict[al] for al in self.axlab]
 
-        reader.close()
+                    data_xy = self.file.read(c=c_idx, z=z_idx, t=t_idx, series=self.series,
+                                             wants_max_intensity=False, rescale=False, XYWH=xywh)
+                    data[tuple(slcs)] = np.reshape(data_xy, shape_xy)
 
         return np.array(data)
 
     def pbf_get_dims(self):
 
-        md = bioformats.OMEXML(bioformats.get_omexml_metadata(self.path))
-        pixels = md.image(self.series).Pixels
+        md = bf.get_omexml_metadata(self.path)
+        names, dims, elsizes, axlabs, dtypes = parse_xml_metadata(md)
 
-        z = pixels.SizeZ
-        y = pixels.SizeY
-        x = pixels.SizeX
-        c = pixels.SizeC
-        t = pixels.SizeT
-
-        return [z, y, x, c, t]
+        return dims
 
     def dm3_load(self, comm=None, load_data=True):
         """Load a stack of dm3s."""
@@ -562,26 +572,29 @@ class Image(object):
             self.set_slices()
         slices = self.slices
 
-        if ndim == 1:
-            data = self.ds[slices[0]]
-        elif ndim == 2:
-            data = self.ds[slices[0],
-                           slices[1]]
-        elif ndim == 3:
-            data = self.ds[slices[0],
-                           slices[1],
-                           slices[2]]
-        elif ndim == 4:
-            data = self.ds[slices[0],
-                           slices[1],
-                           slices[2],
-                           slices[3]]
-        elif ndim == 5:
-            data = self.ds[slices[0],
-                           slices[1],
-                           slices[2],
-                           slices[3],
-                           slices[4]]
+        if self.format == '.pbf':
+            data = self.pbf_load_data()
+        else:
+            if ndim == 1:
+                data = self.ds[slices[0]]
+            elif ndim == 2:
+                data = self.ds[slices[0],
+                               slices[1]]
+            elif ndim == 3:
+                data = self.ds[slices[0],
+                               slices[1],
+                               slices[2]]
+            elif ndim == 4:
+                data = self.ds[slices[0],
+                               slices[1],
+                               slices[2],
+                               slices[3]]
+            elif ndim == 5:
+                data = self.ds[slices[0],
+                               slices[1],
+                               slices[2],
+                               slices[3],
+                               slices[4]]
 
 #         self.ds = np.squeeze(data)  # FIXME?
 
@@ -607,6 +620,38 @@ class Image(object):
         data *= 1/(datamax-datamin)
 
         return data, [datamin, datamax]
+
+    def remove_singleton_props(self, props, dim):
+
+        del props['shape'][dim]
+        del props['elsize'][dim]
+
+        props['axlab'] = props['axlab'].replace(props['axlab'][dim], '')
+
+        if props['chunks'] is not None:
+            del props['chunks'][dim]
+
+        if props['slices'] is not None:
+            del props['slices'][dim]
+
+        return props
+
+    def remove_singleton(self, dim):
+
+        del self.dims[dim]
+
+        del self.elsize[dim]
+
+        self.axlab = self.axlab.replace(self.axlab[dim], '')
+
+        if self.chunks is not None:
+            del self.chunks[dim]
+
+        if self.slices is not None:
+            del self.slices[dim]
+
+        #FIXME
+#         self.ds = np.squeeze(self.ds, dim)
 
     def get_ndim(self):
         """Return the cardinality of the dataset."""
@@ -708,7 +753,7 @@ class Image(object):
 #                      len(range(*slices[1].indices(slices[1].stop))),
 #                      len(range(*slices[2].indices(slices[2].stop))),
 #                      len(range(*slices[3].indices(slices[3].stop))))
-# 
+#
 #         return shape
 
     def get_elsize(self):
@@ -770,14 +815,10 @@ class Image(object):
 
     def pbf_load_elsize(self):
 
-        md = bioformats.OMEXML(bioformats.get_omexml_metadata(self.path))
-        pixels = md.image(self.series).Pixels
-        elsize_x = pixels.PhysicalSizeX  # pixels.PhysicalSizeXUnit
-        elsize_y = pixels.PhysicalSizeY  # pixels.PhysicalSizeYUnit
-        elsize_z = pixels.PhysicalSizeZ  # pixels.PhysicalSizeZUnit
-        # TODO: units
+        md = bf.get_omexml_metadata(self.path)
+        elsizes = parse_xml_metadata(md)[2]
 
-        return [elsize_z, elsize_y, elsize_x, 1 , 1]
+        return list(elsizes[0])
 
     def tif_load_elsize(self):
         """Get the element sizes from a dataset."""
@@ -843,12 +884,10 @@ class Image(object):
 
     def pbf_load_axlab(self):
 
-        md = bioformats.OMEXML(bioformats.get_omexml_metadata(self.path))
-        pixels = md.image(self.series).Pixels
-        axlab = pixels.DimensionOrder.lower()
-        axlab = 'zyxct'  # wmem will read it like this for now 
+        md = bf.get_omexml_metadata(self.path)
+        axlabs = parse_xml_metadata(md)[3]
 
-        return axlab
+        return axlabs[0]
 
     def tif_load_axlab(self):
         """Get the dimension labels from a dataset."""
@@ -1123,6 +1162,10 @@ class Image(object):
         if isinstance(self.file, h5py.File):
             self.file.close()
 
+        if isinstance(self.file, bf.ImageReader):
+            self.file.close()
+            done()
+
     def get_metadata(self, files, datatype, outlayout, elsize):
         """Get metadata from a dm3 file."""
 
@@ -1282,22 +1325,22 @@ class Image(object):
     def pbf_load_dtype(self):
         """Get the datatype from a czi file."""
 
-        md = bioformats.OMEXML(bioformats.get_omexml_metadata(self.path))
+        md = bf.OMEXML(bf.get_omexml_metadata(self.path))
         pixels = md.image(self.series).Pixels
         datatype = pixels.PixelType
 
         return datatype
 
 #     def get_image(self, index):
-# 
+#
 #         fpath = self.file[index]
-# 
+#
 #         if fpath.endswith('.dm3'):
 #             dm3f = dm3.DM3(fpath, debug=0)
 #             im = dm3f.imagedata
 #         else:
 #             im = imread(fpath)
-# 
+#
 #         return im
 
     def get_image(self, fpath):
@@ -1605,3 +1648,70 @@ def get_image(image_in, imtype='', **kwargs):
         im.load(comm, load_data)
 
     return im
+
+
+def parse_xml_metadata(xml_string, array_order='tzyxc'):
+    """Get interesting metadata from the LIF file XML string.
+    Parameters
+    ----------
+    xml_string : string
+        The string containing the XML data.
+    array_order : string
+        The order of the dimensions in the multidimensional array.
+        Valid orders are a permutation of "tzyxc" for time, the three
+        spatial dimensions, and channels.
+    Returns
+    -------
+    names : list of string
+        The name of each image series.
+    sizes : list of tuple of int
+        The pixel size in the specified order of each series.
+    resolutions : list of tuple of float
+        The resolution of each series in the order given by
+        `array_order`. Time and channel dimensions are ignored.
+    """
+
+    names, sizes, resolutions, dimorders, datatypes = [], [], [], [], []
+
+    datatype_tag = 'Type'
+    axlab_tag = 'DimensionOrder'
+
+    metadata_root = et.ElementTree.fromstring(xml_string)
+
+    for child in metadata_root:
+        if child.tag.endswith('Image'):
+            names.append(child.attrib['Name'])
+            for grandchild in child:
+                if grandchild.tag.endswith('Pixels'):
+                    att = grandchild.attrib
+                    axlab = att[axlab_tag].lower()
+                    dimorders.append(axlab)
+                    sizes.append(tuple([int(att['Size' + c]) for c in axlab.upper()]))
+                    resolutions.append(tuple([float(att['PhysicalSize' + c]) if c in 'XYZ' else 1 for c in axlab.upper()]))
+                    datatypes.append(att[datatype_tag])
+
+    return names, sizes, resolutions, dimorders, datatypes
+
+
+def start(max_heap_size='8G'):
+    """Start the Java Virtual Machine, enabling bioformats IO.
+    Parameters
+    ----------
+    max_heap_size : string, optional
+        The maximum memory usage by the virtual machine. Valid strings
+        include '256M', '64k', and '2G'. Expect to need a lot.
+    """
+    jv.start_vm(class_path=bf.JARS, max_heap_size=max_heap_size)
+    global VM_STARTED
+    VM_STARTED = True
+
+
+def done():
+    """Kill the JVM. Once killed, it cannot be restarted.
+    Notes
+    -----
+    See the python-javabridge documentation for more information.
+    """
+    jv.kill_vm()
+    global VM_KILLED
+    VM_KILLED = True
