@@ -267,7 +267,19 @@ def parse_splitblocks(parser):
         )
 
     parser.add_argument(
-        '-o', '--outputpath',
+        '-s', '--chunksize',
+        type=int,
+        nargs='*',
+        help='hdf5 chunk sizes (in order of outlayout)'
+        )
+    parser.add_argument(
+        '-o', '--outlayout',
+        default=None,
+        help='the data layout for output'
+        )
+
+    parser.add_argument(
+        '--outputpath',
         default='',
         help="""path to the output directory"""
         )
