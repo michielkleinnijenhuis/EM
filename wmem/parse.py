@@ -117,7 +117,7 @@ def parse_series2stack(parser):
         )
     parser.add_argument(
         '-e', '--element_size_um',
-        nargs=3,
+        nargs='*',
         type=float,
         default=[],
         help='dataset element sizes in the order of outlayout'
@@ -125,7 +125,7 @@ def parse_series2stack(parser):
     parser.add_argument(
         '-s', '--chunksize',
         type=int,
-        nargs=3,
+        nargs='*',
         default=[],
         help='hdf5 chunk sizes in the order of outlayout'
         )
