@@ -79,20 +79,10 @@ def stack2stack(
         data = utils.normalize_data(data)[0]
         data = img_as_ubyte(data)
 
-    # Remove singletons if not in outlayout
-    # TODO: singleton-check
     outlayout = outlayout or props['axlab']
-    for al in props['axlab']:
-        if al not in outlayout:
-            dim = props['axlab'].index(al)
-            props = im.remove_singleton_props(props, dim)
-            data = np.squeeze(data, dim)
-
-    # Permute axes
     in2out = [props['axlab'].index(l) for l in outlayout]
-    for prop in ['elsize', 'shape', 'chunks', 'axlab', 'slices']:
-        props[prop] = utils.transpose(props[prop], in2out)
-    data = np.transpose(data, in2out)
+    props, data = remove_singleton(im, props, data, outlayout)
+    props, data = permute_axes(im, props, data, in2out)
 
     # Open the outputfile for writing and create the dataset or output array.
     props['dtype'] = datatype or props['dtype']
@@ -120,6 +110,27 @@ def stack2stack(
     mo.close()
 
     return mo
+
+
+def remove_singleton(im, props, data, outlayout):
+
+    # TODO: singleton-check
+    for al in props['axlab']:
+        if al not in outlayout:
+            dim = props['axlab'].index(al)
+            props = im.remove_singleton_props(props, dim)
+            data = np.squeeze(data, dim)
+
+    return props, data
+
+
+def permute_axes(im, props, data, in2out):
+
+    for prop in ['elsize', 'shape', 'chunks', 'axlab', 'slices']:
+        props[prop] = utils.transpose(props[prop], in2out)
+    data = np.transpose(data, in2out)
+
+    return props, data
 
 
 if __name__ == "__main__":
