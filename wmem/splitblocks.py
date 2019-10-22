@@ -16,6 +16,7 @@ except ImportError:
     print("mpi4py could not be loaded")
 
 from wmem import parse, utils, wmeMPI, Image
+from wmem.stack2stack import remove_singleton, permute_axes
 
 
 def main(argv):
@@ -64,7 +65,7 @@ def splitblocks(
     mpi = wmeMPI(usempi)
 
     # Open data for reading.
-    im = utils.get_image(image_in, comm=mpi.comm, dataslices=dataslices)
+    im = utils.get_image(image_in, comm=mpi.comm, dataslices=dataslices, load_data=False)
 
     # Prepare for processing with MPI.
     tpl = get_template_string(im, blocksize, dset_name, outputpath)
@@ -75,41 +76,47 @@ def splitblocks(
     for i in mpi.series:
         block = mpi.blocks[i]
 
-        write_block(im, block, protective, comm=mpi.comm)
+        write_block(im, block, protective, comm=mpi.comm,
+                    outlayout=outlayout, chunksize=chunksize)
 
     im.close()
 
 
-def write_block(im, block, protective=False, comm=None):
+def write_block(im, block, protective=False, comm=None,
+                outlayout=None, chunksize=[]):
     """Write the block to file."""
 
     im.slices = block['slices']
     im.load()
-    data = im.slice_dataset()
+    props = im.get_props()
+    data = im.slice_dataset(squeeze=False)
 
-    shape = list(im.slices2shape())
-    if im.get_ndim() == 4:
-        shape += [im.ds.shape[3]]
+    props['axlab'] = str(props['axlab'])
+    props['elsize'] = list(props['elsize'])
+    props['shape'] = list(im.slices2shape())
+    props['chunks'] = list(chunksize) or props['chunks']
+    props['slices'] = list(props['slices'])
 
-    chunks = im.chunks
-    if any(np.array(chunks) > np.array(shape)):
-        chunks = True
+    outlayout = outlayout or props['axlab']
+    in2out = [props['axlab'].index(l) for l in outlayout]
 
-    mo = Image(block['path'],
-               elsize=im.elsize,
-               axlab=im.axlab,
-               shape=shape,
-               chunks=im.chunks,
-               dtype=im.dtype,
-               protective=protective)
+    props, data = remove_singleton(im, props, data, outlayout)
+    props, data = permute_axes(im, props, data, in2out)
+
+    if any(np.array(props['chunks']) > np.array(props['shape'])):
+        props['chunks'] = True
+
+    mo = Image(block['path'], **props)
     mo.create(comm)
+    mo.slices = None
+    mo.set_slices()
     mo.write(data=data)
     mo.close()
 
 
 def get_template_string(im, blocksize, dset_name='', outputpath=''):  # FIXME
 
-    comps = im.split_path(outputpath)
+    comps = im.split_path(outputpath, fileformat='.h5')  # FIXME: detect format of output
 
     if '{}' in outputpath:  # template provided
         template_string = outputpath
@@ -117,7 +124,7 @@ def get_template_string(im, blocksize, dset_name='', outputpath=''):  # FIXME
         return template_string
 
     if not outputpath:
-        blockdir = 'blocks_{:04d}'.format(blocksize[0])
+        blockdir = 'blocks_{:04d}'.format(blocksize[0])  # FIXME: this is the z-blocksize
         outputdir = os.path.join(comps['dir'], blockdir)
 
     utils.mkdir_p(outputdir)

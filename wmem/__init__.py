@@ -227,10 +227,11 @@ class Image(object):
         self.chunks = tuple([cs if cs < dim else dim
                              for cs, dim in zip(list(self.chunks), self.dims)])
 
-    def split_path(self, filepath=''):
+    def split_path(self, filepath='', fileformat=''):
         """Split path into components."""
 
         filepath = filepath or self.path
+        fileformat = fileformat or self.format
 
         comps = {}
 
@@ -238,14 +239,14 @@ class Image(object):
             comps['dir'] = filepath
             return comps
 
-        if self.format == '.tifs':
+        if fileformat == '.tifs':
             comps['ext'] = 'tif'
-        elif self.format == '.pbf':
+        elif fileformat == '.pbf':
             comps['ext'] = os.path.splitext(filepath)[1]
-        elif self.format == '.nii':
+        elif fileformat == '.nii':
             comps['ext'] = '.nii.gz'    # TODO: non-zipped
         else:
-            comps['ext'] = self.format
+            comps['ext'] = fileformat
 
         if comps['ext'] not in filepath:
             raise Exception('{} not in path'.format(comps['ext']))
@@ -499,10 +500,10 @@ class Image(object):
                   protective=False, squeeze=False):
 
         props = {'shape': shape or list(self.slices2shape()),
-                 'elsize': elsize or self.elsize,
-                 'axlab': axlab or self.axlab,
-                 'chunks': chunks or self.chunks,
-                 'slices': slices or self.slices,
+                 'elsize': elsize or list(self.elsize),
+                 'axlab': axlab or str(self.axlab),
+                 'chunks': chunks or list(self.chunks),
+                 'slices': slices or list(self.slices),
                  'dtype': dtype or self.dtype,
                  'protective': protective or self.protective}
 
