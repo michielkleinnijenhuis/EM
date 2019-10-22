@@ -65,6 +65,7 @@ class Image(object):
         self.protective = protective
 
         self.file = None
+        self.filereader = None
         self.ds = []
 
         self.set_format()
@@ -84,12 +85,12 @@ class Image(object):
         else:
             path = self.path
 
-        for ext in ['.h5', '.nii', '.dm3', '.tif']:
+        for ext in ['.h5', '.nii', '.dm3', '.tif', '.ims']:
             if ext in path:
                 self.format = ext
                 return
 
-        for ext in ['.czi', '.lif', '.ims']:  # ETC
+        for ext in ['.czi', '.lif']:  # ETC
             if ext in path:
                 self.format = '.pbf'
                 return
@@ -290,7 +291,11 @@ class Image(object):
         if h5path['ext'] not in self.path:
             raise Exception('{} not in path'.format(h5path['ext']))
 
-        h5path['base'], h5path['int'] = self.path.split('.h5')
+        if self.format == '.ims':
+            h5path['base'] = self.path.split(h5path['ext'])[0]
+            h5path['int'] = '/DataSet/ResolutionLevel 0'
+        else:
+            h5path['base'], h5path['int'] = self.path.split(h5path['ext'])
 
         if '/' not in h5path['int']:
             raise Exception('no groups or dataset specified for .h5 path')
@@ -327,7 +332,7 @@ class Image(object):
     def h5_open(self, permission, comm=None):
         """Open a h5 file."""
 
-        h5path = self.h5_split()
+        h5path = self.h5_split(ext=self.format)
 #         if isinstance(self.file, h5py.File):
 #             pass
 #         else:
@@ -346,6 +351,7 @@ class Image(object):
         formats = {'.h5': self.h5_load,
                    '.nii': self.nii_load,
                    '.dm3': self.dm3_load,
+                   '.ims': self.pbf_load,
                    '.pbf': self.pbf_load,
                    '.tif': self.pbf_load,
                    '.tifs': self.tifs_load}
@@ -419,7 +425,11 @@ class Image(object):
 
         md = bf.get_omexml_metadata(self.path)
         names, sizes, elsizes, axlabs, dtypes = parse_xml_metadata(md)
-        self.file = bf.ImageReader(self.path)
+        if self.format == '.ims':
+            self.h5_open('r+', comm)
+        else:
+            self.file = bf.ImageReader(self.path)
+        self.filereader = bf.ImageReader(self.path)
         self.ds = []
         self.dims = sizes[0]
         self.dtype = dtypes[0]
@@ -464,8 +474,8 @@ class Image(object):
                     }
                     slcs = [slc_dict[al] for al in self.axlab]
 
-                    data_xy = self.file.read(c=c_idx, z=z_idx, t=t_idx, series=self.series,
-                                             wants_max_intensity=False, rescale=False, XYWH=xywh)
+                    data_xy = self.filereader.read(c=c_idx, z=z_idx, t=t_idx, series=self.series,
+                                                   wants_max_intensity=False, rescale=False, XYWH=xywh)
                     data[tuple(slcs)] = np.reshape(data_xy, shape_xy)
 
         return np.array(data)
@@ -502,7 +512,7 @@ class Image(object):
         props = {'shape': shape or list(self.slices2shape()),
                  'elsize': elsize or list(self.elsize),
                  'axlab': axlab or str(self.axlab),
-                 'chunks': chunks or list(self.chunks),
+                 'chunks': chunks or list(self.chunks),  # FIXME: can be None
                  'slices': slices or list(self.slices),
                  'dtype': dtype or self.dtype,
                  'protective': protective or self.protective}
@@ -575,6 +585,9 @@ class Image(object):
 
         if self.format == '.pbf':
             data = self.pbf_load_data()
+        elif self.format == '.ims':
+            rs0_group = self.file['/DataSet/ResolutionLevel 0']
+            data = self.slice_dataset_ims(rs0_group, slices)
         else:
             if ndim == 1:
                 data = self.ds[slices[0]]
@@ -601,6 +614,26 @@ class Image(object):
 
         if squeeze:
             data = np.squeeze(data)
+
+        return data
+
+    def slice_dataset_ims(self, rs0_group, slices):
+        """
+        
+        NOTE: this is a zero-padded version of the dataset.
+        """
+
+        slcs = [slices[self.axlab.index('z')],
+                slices[self.axlab.index('y')],
+                slices[self.axlab.index('x')],
+                slices[self.axlab.index('c')],
+                slices[self.axlab.index('t')]]
+        dims = [len(range(*slc.indices(slc.stop))) for slc in slcs]
+        data = np.empty(dims)
+        for tp_idx, (_, tp) in enumerate(rs0_group.items()):
+            for ch_idx, (_, ch) in enumerate(tp.items()):
+                data_tmp = ch['Data'][slcs[0], slcs[1], slcs[2]]  # pbf (xyzct) vs ims Dataset layout (zyxct)??
+                data[..., ch_idx, tp_idx] = data_tmp
 
         return data
 
@@ -668,6 +701,8 @@ class Image(object):
         elif self.format == '.dm3':
             ndim = len(self.dims)
         elif self.format == '.pbf':
+            ndim = len(self.dims)
+        elif self.format == '.ims':
             ndim = len(self.dims)
         elif self.format == '.dat':
             ndim = self.ds.ndim
@@ -769,6 +804,7 @@ class Image(object):
         formats = {'.h5': self.h5_load_elsize,
                    '.nii': self.nii_load_elsize,
                    '.dm3': self.dm3_load_elsize,
+                   '.ims': self.pbf_load_elsize,
                    '.pbf': self.pbf_load_elsize,
                    '.tif': self.tif_load_elsize,
                    '.tifs': self.tifs_load_elsize}
@@ -847,6 +883,7 @@ class Image(object):
         formats = {'.h5': self.h5_load_axlab,
                    '.nii': self.nii_load_axlab,
                    '.dm3': self.dm3_load_axlab,
+                   '.ims': self.pbf_load_axlab,
                    '.pbf': self.pbf_load_axlab,
                    '.tif': self.tif_load_axlab,
                    '.tifs': self.tifs_load_axlab}
@@ -1162,6 +1199,7 @@ class Image(object):
 
         if isinstance(self.file, h5py.File):
             self.file.close()
+            done()
 
         if isinstance(self.file, bf.ImageReader):
             self.file.close()
