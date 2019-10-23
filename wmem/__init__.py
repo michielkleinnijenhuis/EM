@@ -5,6 +5,7 @@ import pickle
 import random
 import numpy as np
 from xml import etree as et
+from itertools import islice
 
 try:
     import nibabel as nib
@@ -351,7 +352,7 @@ class Image(object):
         formats = {'.h5': self.h5_load,
                    '.nii': self.nii_load,
                    '.dm3': self.dm3_load,
-                   '.ims': self.pbf_load,
+                   '.ims': self.ims_load,
                    '.pbf': self.pbf_load,
                    '.tif': self.pbf_load,
                    '.tifs': self.tifs_load}
@@ -411,6 +412,16 @@ class Image(object):
                 self.ds.append(self.get_image(fpath))
             self.ds = np.array(self.ds, dtype=self.dtype)
 
+    def ims_load(self, comm=None, load_data=True):
+
+        self.h5_open('r', comm)
+        h5path = self.h5_split(ext=self.format)
+        self.ds = self.file[h5path['int']]
+        self.dims = self.ims_get_dims()
+        ch0 = self.ds['TimePoint 0/Channel 0/Data']
+        self.dtype = ch0.dtype
+        self.chunks = list(ch0.chunks) + [1, 1]
+
     def pbf_load(self, comm=None, load_data=True):
         """Load a dataset with python bioformats."""
 
@@ -426,7 +437,7 @@ class Image(object):
         md = bf.get_omexml_metadata(self.path)
         names, sizes, elsizes, axlabs, dtypes = parse_xml_metadata(md)
         if self.format == '.ims':
-            self.h5_open('r+', comm)
+            self.h5_open('r', comm)
         else:
             self.file = bf.ImageReader(self.path)
         self.filereader = bf.ImageReader(self.path)
@@ -628,11 +639,22 @@ class Image(object):
                 slices[self.axlab.index('x')],
                 slices[self.axlab.index('c')],
                 slices[self.axlab.index('t')]]
+
         dims = [len(range(*slc.indices(slc.stop))) for slc in slcs]
         data = np.empty(dims)
-        for tp_idx, (_, tp) in enumerate(rs0_group.items()):
-            for ch_idx, (_, ch) in enumerate(tp.items()):
-                data_tmp = ch['Data'][slcs[0], slcs[1], slcs[2]]  # pbf (xyzct) vs ims Dataset layout (zyxct)??
+
+        t_iter_slc = islice(rs0_group.items(),
+                            slcs[4].start,
+                            slcs[4].stop,
+                            slcs[4].step)
+        for tp_idx, (_, tp) in enumerate(t_iter_slc):
+            c_iter_slc = islice(tp.items(),
+                                slcs[3].start,
+                                slcs[3].stop,
+                                slcs[3].step)
+            for ch_idx, (_, ch) in enumerate(c_iter_slc):
+
+                data_tmp = ch['Data'][slcs[0], slcs[1], slcs[2]]
                 data[..., ch_idx, tp_idx] = data_tmp
 
         return data
@@ -804,7 +826,7 @@ class Image(object):
         formats = {'.h5': self.h5_load_elsize,
                    '.nii': self.nii_load_elsize,
                    '.dm3': self.dm3_load_elsize,
-                   '.ims': self.pbf_load_elsize,
+                   '.ims': self.ims_load_elsize,
                    '.pbf': self.pbf_load_elsize,
                    '.tif': self.tif_load_elsize,
                    '.tifs': self.tifs_load_elsize}
@@ -857,6 +879,46 @@ class Image(object):
 
         return list(elsizes[0])
 
+    def ims_load_elsize(self):
+
+        def att2str(att):
+            return ''.join([t.decode('utf-8') for t in att])
+
+        im_info = self.file['/DataSetInfo/Image']
+
+        extmin0 = float(att2str(im_info.attrs['ExtMin0']))
+        extmin1 = float(att2str(im_info.attrs['ExtMin1']))
+        extmin2 = float(att2str(im_info.attrs['ExtMin2']))
+        extmax0 = float(att2str(im_info.attrs['ExtMax0']))
+        extmax1 = float(att2str(im_info.attrs['ExtMax1']))
+        extmax2 = float(att2str(im_info.attrs['ExtMax2']))
+
+        extX = extmax0 - extmin0
+        extY = extmax1 - extmin1
+        extZ = extmax2 - extmin2
+
+        dims = self.ims_get_dims()
+        elsizeX = extX / dims[2]
+        elsizeY = extY / dims[1]
+        elsizeZ = extZ / dims[0]
+
+        return [elsizeZ, elsizeY, elsizeX, 1, 1]
+
+    def ims_get_dims(self):
+
+        def att2str(att):
+            return ''.join([t.decode('utf-8') for t in att])
+
+        im_info = self.file['/DataSetInfo/Image']
+
+        dimZ = int(att2str(im_info.attrs['Z']))
+        dimY = int(att2str(im_info.attrs['Y']))
+        dimX = int(att2str(im_info.attrs['X']))
+        dimC = len(self.file['/DataSet/ResolutionLevel 0/TimePoint 0'])
+        dimT = len(self.file['/DataSet/ResolutionLevel 0'])
+
+        return [dimZ, dimY, dimX, dimC, dimT]
+
     def tif_load_elsize(self):
         """Get the element sizes from a dataset."""
 
@@ -883,7 +945,7 @@ class Image(object):
         formats = {'.h5': self.h5_load_axlab,
                    '.nii': self.nii_load_axlab,
                    '.dm3': self.dm3_load_axlab,
-                   '.ims': self.pbf_load_axlab,
+                   '.ims': self.ims_load_axlab,
                    '.pbf': self.pbf_load_axlab,
                    '.tif': self.tif_load_axlab,
                    '.tifs': self.tifs_load_axlab}
@@ -926,6 +988,10 @@ class Image(object):
         axlabs = parse_xml_metadata(md)[3]
 
         return axlabs[0]
+
+    def ims_load_axlab(self):
+
+        return 'zyxct'
 
     def tif_load_axlab(self):
         """Get the dimension labels from a dataset."""
