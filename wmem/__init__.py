@@ -1265,11 +1265,9 @@ class Image(object):
 
         if isinstance(self.file, h5py.File):
             self.file.close()
-            done()
 
         if isinstance(self.file, bf.ImageReader):
             self.file.close()
-            done()
 
     def get_metadata(self, files, datatype, outlayout, elsize):
         """Get metadata from a dm3 file."""
