@@ -367,8 +367,8 @@ class Image(object):
     def h5_load(self, comm=None, load_data=True):
         """Load a h5 dataset."""
 
-        self.h5_open('r+', comm)
-        h5path = self.h5_split()
+        self.h5_open('r', comm)
+        h5path = self.h5_split(ext=self.format)
         self.ds = self.file[h5path['int']]
         self.dims = self.ds.shape
         self.dtype = self.ds.dtype
