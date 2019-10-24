@@ -643,15 +643,34 @@ class Image(object):
         dims = [len(range(*slc.indices(slc.stop))) for slc in slcs]
         data = np.empty(dims)
 
-        t_iter_slc = islice(rs0_group.items(),
-                            slcs[4].start,
-                            slcs[4].stop,
-                            slcs[4].step)
+        if slcs[4].start is not None:
+            t_start = int(slcs[4].start)
+        else:
+            t_start = None
+        if slcs[4].start is not None:
+            t_stop = int(slcs[4].stop)
+        else:
+            t_stop = None
+        if slcs[4].step is not None:
+            t_step = int(slcs[4].step)
+        else:
+            t_step = None
+        if slcs[3].start is not None:
+            c_start = int(slcs[3].start)
+        else:
+            c_start = None
+        if slcs[3].stop is not None:
+            c_stop = int(slcs[3].stop)
+        else:
+            c_stop = None
+        if slcs[3].step is not None:
+            c_step = int(slcs[3].step)
+        else:
+            c_step = None
+
+        t_iter_slc = islice(rs0_group.items(), t_start, t_stop, t_step)
         for tp_idx, (_, tp) in enumerate(t_iter_slc):
-            c_iter_slc = islice(tp.items(),
-                                slcs[3].start,
-                                slcs[3].stop,
-                                slcs[3].step)
+            c_iter_slc = islice(tp.items(), c_start, c_stop, c_step)
             for ch_idx, (_, ch) in enumerate(c_iter_slc):
 
                 data_tmp = ch['Data'][slcs[0], slcs[1], slcs[2]]
