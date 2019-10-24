@@ -84,6 +84,9 @@ def stack2stack(
     props, data = remove_singleton(im, props, data, outlayout)
     props, data = permute_axes(im, props, data, in2out)
 
+    trans = [es * slc.start for es, slc in zip(im.elsize, im.slices)]
+    im.close()
+
     # Open the outputfile for writing and create the dataset or output array.
 #     props['dtype'] = datatype or props['dtype']
 #     props['chunks'] = chunksize or props['chunks']
@@ -97,7 +100,6 @@ def stack2stack(
         # TODO: properly implement translation of cutouts
         mat = mo.get_transmat()
         if im.slices is not None:
-            trans = [es * slc.start for es, slc in zip(im.elsize, im.slices)]
             trans = np.array(trans)[in2out]
             mat[0][3] = trans[0]
             mat[1][3] = trans[1]
@@ -106,7 +108,6 @@ def stack2stack(
     else:
         mo.write(data=data)
 
-    im.close()
     mo.close()
 
     return mo
