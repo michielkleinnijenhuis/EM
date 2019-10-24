@@ -1,4 +1,5 @@
 import os
+import sys
 import h5py
 import glob
 import pickle
@@ -6,6 +7,8 @@ import random
 import numpy as np
 from xml import etree as et
 from itertools import islice
+
+sys.stdout = open(os.devnull, 'w')
 
 try:
     import nibabel as nib
@@ -35,6 +38,7 @@ try:
 except ImportError:
     print("dm3lib could not be loaded")
 
+sys.stdout = sys.__stdout__
 
 VM_STARTED = False
 VM_KILLED = False
