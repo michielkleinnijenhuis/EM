@@ -68,7 +68,7 @@ def stack2stack(
         im.slices = utils.dset_name2slices(dset_name, blockoffset,
                                            axlab=inlayout,
                                            shape=im.dims)
-    props = im.get_props()
+    props = im.get_props(elsize=elsize, chunks=chunksize, dtype=datatype)
 
     # Load the data
     data = im.slice_dataset(squeeze=False)
@@ -85,9 +85,9 @@ def stack2stack(
     props, data = permute_axes(im, props, data, in2out)
 
     # Open the outputfile for writing and create the dataset or output array.
-    props['dtype'] = datatype or props['dtype']
-    props['chunks'] = chunksize or props['chunks']
-    props['elsize'] = elsize or props['elsize']
+#     props['dtype'] = datatype or props['dtype']
+#     props['chunks'] = chunksize or props['chunks']
+#     props['elsize'] = elsize or props['elsize']
 
     mo = Image(outputpath, **props)
     mo.create(comm=mpi.comm)
