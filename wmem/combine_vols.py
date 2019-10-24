@@ -61,6 +61,14 @@ def combine_vols(
     mpi.set_blocks(im, blocksize, blockmargin, blockrange, tpl)
     mpi.scatter_series()
 
+    print_series_only = blockrange[0] == -1
+    if print_series_only:
+        import math
+        nblocks = [math.ceil(dim/bs) for dim, bs in zip(im.dims, blocksize)]
+        for n in nblocks:
+            print(n)
+        return nblocks
+
     write_to_single_file = False
     # Open the outputfile for writing and create the dataset or output array.
     props = im.get_props(protective=protective)
