@@ -94,6 +94,7 @@ def stack2stack(
 
     mo = Image(outputpath, **props)
     mo.create(comm=mpi.comm)
+    mo.slices = None
     mo.set_slices()
 
     if mo.format == '.nii':
