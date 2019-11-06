@@ -491,7 +491,7 @@ def h5_load(dspath, load_data=False,
     if comm is not None:
         h5file = h5py.File(h5path_file, 'r+', driver='mpio', comm=comm)
     else:
-        h5file = h5py.File(h5path_file, 'r+')
+        h5file = h5py.File(h5path_file, 'r')
 
     ds_in = h5file[h5path_dset]  # proxy
 
