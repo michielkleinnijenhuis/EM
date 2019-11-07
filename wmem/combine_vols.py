@@ -9,7 +9,7 @@ import argparse
 
 import numpy as np
 
-from wmem import parse, utils, Image, wmeMPI, done
+from wmem import parse, utils, Image, wmeMPI, done, get_image
 from wmem.splitblocks import get_template_string
 
 def main(argv):
@@ -54,7 +54,7 @@ def combine_vols(
     mpi = wmeMPI(usempi)
 
     # Open the inputfile for reading.
-    im = utils.get_image(image_in, comm=mpi.comm, dataslices=dataslices, load_data=False)
+    im = get_image(image_in, comm=mpi.comm, dataslices=dataslices, load_data=False)
 
     # Prepare for processing with MPI.
     tpl = get_template_string(im, blocksize=blocksize, dset_name='', outputpath=outputpath)
