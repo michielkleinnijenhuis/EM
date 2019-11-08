@@ -1065,6 +1065,7 @@ class Image(object):
             pass
 
         formats = {'.h5': self.h5_create,
+                   '.ims': self.ims_create,
                    '.nii': self.nii_create,
                    '.tif': self.tif_create,
                    '.tifs': self.tifs_create,
@@ -1112,6 +1113,44 @@ class Image(object):
             self.ds = parent.create_dataset(dset_name,
                                             shape=self.dims,
                                             dtype=self.dtype)
+
+    def ims_create(self, comm=None):
+
+        self.load(comm, load_data=False)
+        self.dims = self.ims_get_dims()
+
+        ch0_idx = 0
+        ch0_name = 'Channel {}'.format(ch0_idx)
+        ch0_info = '/DataSetInfo/{}'.format(ch0_name)
+
+        chn_idx = self.dims[3]
+        chn_name = 'Channel {}'.format(chn_idx)
+        chn_info = '/DataSetInfo/{}'.format(chn_name)
+
+        self.file[ch0_info].copy(ch0_info, chn_info)
+        nr = len(self.file['/DataSet'])
+
+        for tp_idx in range(0, self.dims[4]):
+
+            for rl_idx in range(0, nr):
+
+                rl = self.file['/DataSet/ResolutionLevel {}'.format(rl_idx)]
+                tp = rl['TimePoint {}'.format(tp_idx)]
+        
+                ch0 = tp['Channel {}'.format(ch0_idx)]
+                ds0 = ch0['Data']
+                hg0 = ch0['Histogram']
+
+                chn = tp.create_group(chn_name)
+                dsn = chn.create_dataset_like('Data', ds0)
+                hgn = chn.create_dataset_like('Histogram', hg0)
+
+                for dim in 'XYZ':
+                    isd = 'ImageSize{}'.format(dim)
+                    chn.attrs[isd] = ch0.attrs[isd]
+
+                # TODO?: self.ds = 
+        self.dims[3] += 1
 
     def nii_create(self, comm=None):
         """Write a dataset to nifti format."""
@@ -1170,6 +1209,7 @@ class Image(object):
             slices = self.slices
 
         formats = {'.h5': self.h5_write,
+                   '.ims': self.ims_write,
                    '.nii': self.nii_write,
                    '.tif': self.tif_write,
                    '.tifs': self.tifs_write,
@@ -1181,6 +1221,68 @@ class Image(object):
         """Write data to a hdf5 dataset."""
 
         self.write_block(self.ds, data, slices)
+
+    def ims_write(self, data, slices):
+        # FIXME: timepoints not implemented
+        # data: rl0 unpadded block size (margins removed)
+        # slices: rl0 block slices into full unpadded dataset
+
+        def slices2dsslices(start, step, shape):
+            ds_step = step
+            ds_start = int(start / step)
+            ds_stop = ds_start + int(shape / ds_step)  # + ds_step
+            ds_slice = slice(ds_start, ds_stop, 1)
+            return ds_slice
+
+        def write_attribute(ch, name, val, formatstring='{:.3f}'):
+            arr = [c for c in formatstring.format(val)]
+            ch.attrs[name] = np.array(arr, dtype='|S1')
+
+        chn_idx = self.dims[3] - 1
+        chn_name = 'Channel {}'.format(chn_idx)
+
+        nr = len(self.file['/DataSet'])
+
+        for tp_idx in range(0, self.dims[4]):
+
+            for rl_idx in range(0, nr):
+
+                rl = self.file['/DataSet/ResolutionLevel {}'.format(rl_idx)]
+                tp = rl['TimePoint {}'.format(tp_idx)]
+
+                chn = tp[chn_name]
+                dsn = chn['Data']
+                hgn = chn['Histogram']
+
+                # unpadded shape
+                tags = ['ImageSizeZ', 'ImageSizeY', 'ImageSizeX']
+                if rl_idx == 0:
+                    ZYXt =[int(''.join([c.decode('utf-8') for c in chn.attrs[tag]])) for tag in tags]
+                ZYX =[int(''.join([c.decode('utf-8') for c in chn.attrs[tag]])) for tag in tags]
+
+                # downsample factors (wrt to full resolution)
+                ds_t = [int(t / c) for t, c in zip(ZYXt, ZYX)]
+                target_shape = list(self.slices2shape(slices))
+
+                # downsample data
+                data_rl = data[::ds_t[0],::ds_t[1],::ds_t[2]]
+                data_rl = data_rl[:ZYX[0], :ZYX[1], :ZYX[2]]
+                # define output slices
+                slcs_out = [slices2dsslices(slc.start, step, shape)
+                            for slc, step, shape in zip(slices, ds_t, target_shape)]
+                # write the block
+                self.write_block(dsn, data_rl, slcs_out)
+
+                # write histogram  # FIXME: histogram of full dataset on close only?
+                hist = np.histogram(data, bins=hgn.shape[0])
+                hgn[:] = hist[0]
+                # write histogram attributes
+                attributes = {
+                    'HistogramMin': (np.amin(hist[0]), '{:.3f}'),
+                    'HistogramMax': (np.amax(hist[0]), '{:.3f}'),
+                }
+                for k, v in attributes.items():
+                    write_attribute(chn, k, v[0], v[1])
 
     def nii_write(self, data, slices):
         """Write data to a nifti dataset."""
@@ -1270,6 +1372,8 @@ class Image(object):
             slices = self.slices
 
         ndim = self.get_ndim()
+        if self.format == '.ims':
+            ndim = 3
 
         if ndim == 1:
             ds[slices[0]] = data
