@@ -53,10 +53,10 @@ class Image(object):
                  elsize=None, axlab=None, dtype='float',
                  shape=None, dataslices=None, slices=None,
                  chunks=None, compression='gzip', series=0,
-                 protective=False):
+                 protective=False, permission='r+'):
 
         self.path = path
-        self.elsize = elsize
+        self.elsize = elsize  # TODO: translations / affine
         self.axlab = axlab
         self.dtype = dtype
         self.dims = shape
@@ -68,6 +68,7 @@ class Image(object):
         self.compression = compression
         self.series = series
         self.protective = protective
+        self.permission = permission
 
         self.file = None
         self.filereader = None
@@ -371,8 +372,7 @@ class Image(object):
     def h5_load(self, comm=None, load_data=True):
         """Load a h5 dataset."""
 
-        perm = 'r'
-        self.h5_open(perm, comm)  # TODO: specify permission at __init__ call
+        self.h5_open(self.permission, comm)  # TODO: specify permission at __init__ call
         h5path = self.h5_split(ext=self.format)
         self.ds = self.file[h5path['int']]
         self.dims = self.ds.shape
@@ -419,7 +419,7 @@ class Image(object):
 
     def ims_load(self, comm=None, load_data=True):
 
-        self.h5_open('r', comm)
+        self.h5_open(self.permission, comm)
         h5path = self.h5_split(ext=self.format)
         self.ds = self.file[h5path['int']]
         self.dims = self.ims_get_dims()
