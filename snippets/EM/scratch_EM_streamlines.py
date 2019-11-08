@@ -9,17 +9,20 @@ import pickle
 
 ### parameters ###
 datadir = "/Users/michielk/oxdata/P01/EM/M3/M3_S1_GNU/M3S1GNU/ds7_arc"
-blenddir = os.path.join(datadir, "M3S1GNUds7/dmcsurf_1-1-1/blends/d0.02")
-comp = 'MF'
+datadir = '/Users/mkleinnijenhuis/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00/blender';
+# blenddir = os.path.join(datadir, "M3S1GNUds7/dmcsurf_1-1-1/blends/d0.02")
+blenddir = '/Users/mkleinnijenhuis/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00/blender';
+comp = 'B-NT-S10-2f_ROI_00_labels_labelMF-labelMF'
 filetemp = "_label%s_final_d0.02collapse_s100-0.1_%d.blend"
 suffixes = range(1,7)
 pat = ' label%s final' % comp
 
-xs=1311; ys=1255; zs=430;
-xo=0; yo=0; zo=30;
-xe=0.0511; ye=0.0511; ze=0.05;
-centroid_x = os.path.join(datadir, 'stats', 'stats_%s_slcws_centroid_x.txt' % comp)
-centroid_y = os.path.join(datadir, 'stats', 'stats_%s_slcws_centroid_y.txt' % comp)
+xs=8423; ys=8316; zs=184;
+xo=0; yo=0; zo=0;
+xe=0.007; ye=0.007; ze=0.1;
+# B-NT-S10-2f_ROI_00_labels_labelMF-labelMF_slcws_centroid_x
+centroid_x = os.path.join(datadir, 'stats', '%s_slcws_centroid_x.txt' % comp)
+centroid_y = os.path.join(datadir, 'stats', '%s_slcws_centroid_y.txt' % comp)
 jump_threshold = ze * 20
 
 nverts = 32
@@ -140,6 +143,7 @@ obs = [ob for ob in bpy.data.objects
 info = get_mesh_info(obs)
 with open(os.path.join(blenddir, "%s_info.pickle" % comp), 'wb') as f:
     pickle.dump(info, f)
+
 
 ### centreline analysis
 streamlines = get_streamlines([centroid_x, centroid_y],
