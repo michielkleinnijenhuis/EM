@@ -1,3 +1,5 @@
+conda activate EM
+
 ###=========================================================================###
 ### prepare environment
 ###=========================================================================###
@@ -8,9 +10,9 @@ scriptdir="$HOME/workspace/EM"
 export PYTHONPATH="$PYTHONPATH:$HOME/workspace/pyDM3reader"  # FIXME
 export PYTHONPATH="$PYTHONPATH:$HOME/workspace/maskSLIC"  # FIXME
 
-#compute_env='JAL'
-#compute_env='ARC'
-#compute_env='ARCB'
+# compute_env='JAL'
+# compute_env='ARC'
+# compute_env='ARCB'
 # compute_env='LOCAL'
 compute_env='RIOS013'
 # compute_env='HPC'
@@ -24,7 +26,12 @@ dataset='B-NT-S10-2f_ROI_00'
 # dataset='B-NT-S10-2f_ROI_01'
 # dataset='B-NT-S10-2f_ROI_02'
 
-bs='0500' && prep_dataset "$dataset" "$bs" && echo "${#datastems[@]}"
+#bs='0500' && prep_dataset "$dataset" "$bs" && echo "${#datastems[@]}"
+bs='0700' && prep_dataset $dataset $bs && echo ${#datastems[@]}
+xs=700 ys=700 zs=184  # blocksizes
+xm=35 ym=35 zm=0  # margins
+datastems_blocks && echo ${#datastems[@]}
+blockdir=$datadir/blocks_$bs
 
 #echo -n -e "\033]0;$dataset\007"
 
@@ -34,6 +41,7 @@ export LANG=en_US.UTF-8
 core3D='_labels_labelMA_core3D_test'
 core2D='_labels_labelMA_core2D_test'
 comb='_labels_labelMA_comb_test'
+
 
 ###=========================================================================###
 ### convert and register  # setup for ARCUS-B
@@ -718,20 +726,15 @@ scriptfile=$( combine_labels 'h' $dataset_ds $args )
 . "$scriptfile"
 
 
-
-
-
-
-
-
+# NOTE: do a NoR nt/tv filtering before continuing with watershed stage?
 
 
 
 ###=========================================================================###
-### ....
+### watershed merge of label segments
 ###=========================================================================###
 
-### making sure labels are contiguous
+### making sure labels are contiguous ###
 ipf="$comb"
 ids='labelMA_nt'
 opf="$ipf"
@@ -745,10 +748,9 @@ data_in='$datadir/$dataset_ds.h5/data', \
 maskMM_in='$datadir/${dataset_ds}_masks_maskMM.h5/maskMM_PP', \
 check_split=True, checkonly=False, between=False, to_border=False)" >> "$scriptfile"
 python -W ignore "$scriptfile"
-
 h52nii '' "$dataset_ds" "${opf}" "${ods}" '' '' '-i zyx -o xyz -d uint16'
 
-### making sure labels are contiguous  # OKAY
+### making sure labels are contiguous: already OKAY ###
 ipf="$core3D"
 ids='labelMA_core3D_proofread_NoR_steps/labels_tv'
 opf="$ipf"
@@ -762,22 +764,21 @@ data_in='$datadir/$dataset_ds.h5/data', \
 maskMM_in='$datadir/${dataset_ds}_masks_maskMM.h5/maskMM_PP', \
 check_split=True, checkonly=True, between=False, to_border=False)" >> "$scriptfile"
 python -W ignore "$scriptfile"
-
 h52nii '' "$dataset_ds" "${opf}" "${ods}" '' '' '-i zyx -o xyz -d uint16'
 
 
-srz=10 iter=0 toborder=1
-# srz=20 iter=1 previter=10
+### iterative watershed merge with progressively larger extent in z ###
+
+# srz=10 iter=0 toborder=1
 # srz=40 iter=1 previter=10
 # srz=80 iter=2 previter=40  # mostly finds the right connection, but doesn't result in a clean fill # the cylinder centre fill over to long a linear distance leads to errors
-# srz=81 iter=3 previter=80  # too many things going wrong here;
-
+srz=81 iter=3 previter=80  # too many things going wrong here;
 
 shscript0="$datadir/EM_WSiter${iter}_script.sh"  && > "$shscript0"
 pyscript1="$datadir/EM_WSiter${iter}_pyscript1.py" && > "$pyscript1"
 pyscript2="$datadir/EM_WSiter${iter}_pyscript2.py" && > "$pyscript2"
 
-### create WSmask_iter? ###
+### create WSmask_iter?
 echo "python -W ignore \"$pyscript1\"" >> "$shscript0"
 mpf='_masks_maskWS'
 mds="maskWS_iter$((iter-1))"
@@ -801,12 +802,13 @@ echo "from wmem import merge_labels" > "$pyscript1"
 echo "merge_labels.create_mask('$outputpath', '$image_in', '$mask_in', '$mask_ds')" >> "$pyscript1"
 echo "h52nii '' "$dataset_ds" "${opf}" "${ods}" '' '' '-i zyx -o xyz -d uint16'" >> "$shscript0"
 
-### find connection candidates
+# find connection candidates
 dpf=''
 dds='data'
 mpf='_masks_maskWS'
 mds="maskWS_iter${iter}"
 ods="labelMA_ws$srz"
+# h5copy -i -o -s -d
 if [ "$iter" == "0" ];
 then
     ipf="$comb"
@@ -840,6 +842,7 @@ ipf='_labels_labelMA_WS'
 ids="labelMA_ws$srz"
 opf="$ipf"
 ods="${ids}_between"
+# FIXME: not necessary anymore: changed to direct write of filled labels
 echo "merge_labels.fill_connected_labels(\
 '$datadir/${dataset_ds}${ipf}.h5/${ids}', \
 '$datadir/${dataset_ds}.h5/data', \
@@ -855,7 +858,7 @@ then
     ods="${ids}_toborder"
     echo "merge_labels.fill_connected_labels('$datadir/${dataset_ds}${ipf}.h5/${ids}', \
     '$datadir/${dataset_ds}.h5/data', '$datadir/${dataset_ds}${mpf}.h5/${mds}', \
-    searchradius=[40, 30, 30], between=True, \
+    searchradius=[40, 30, 30], between=True, to_border=True, \
     outputpath='$datadir/${dataset_ds}${opf}.h5/${ods}')" >> "$pyscript2"
     echo "h52nii '' "$dataset_ds" "${opf}" "${ods}" '' '' '-i zyx -o xyz -d uint16'" >> "$shscript0"
     ipf='_labels_labelMA_WS'
@@ -886,32 +889,147 @@ echo "h52nii '' "${dataset_ds}" "${opf}" "${ods}_steps/labels_nt" '' '' '-i zyx 
 
 . "$shscript0"
 
-
-
-
-
-
-
-python -W ignore "/Users/mkleinnijenhuis/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00/EM_WSiter0_pyscript1.py"
-h52nii '' B-NT-S10-2f_ROI_00ds7 _masks_maskWS maskWS_iter0 '' '' '-i zyx -o xyz -d uint16'
-# conda activate h5para
-# mpiexec -n 14
-python -W ignore /Users/mkleinnijenhuis/workspace/EM/wmem/merge_labels.py -S   /Users/mkleinnijenhuis/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00/B-NT-S10-2f_ROI_00ds7_labels_labelMA_comb_test.h5/labelMA_nt_split /Users/mkleinnijenhuis/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00/B-NT-S10-2f_ROI_00ds7_labels_labelMA_WS.h5/labelMA_ws10 --data /Users/mkleinnijenhuis/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00/B-NT-S10-2f_ROI_00ds7.h5/data --maskDS /Users/mkleinnijenhuis/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00/B-NT-S10-2f_ROI_00ds7_masks_maskWS.h5/maskWS_iter0 -m 'watershed' -r 10 10 10
- # -M
-h52nii '' B-NT-S10-2f_ROI_00ds7 _labels_labelMA_WS labelMA_ws10 '' '' '-i zyx -o xyz -d uint16'
-
-python -W ignore /Users/mkleinnijenhuis/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00/EM_WSiter0_pyscript2.py
-h52nii '' B-NT-S10-2f_ROI_00ds7 _labels_labelMA_WS labelMA_ws10_between '' '' '-i zyx -o xyz -d uint16'
-h52nii '' B-NT-S10-2f_ROI_00ds7 _labels_labelMA_WS labelMA_ws10_split '' '' '-i zyx -o xyz -d uint16'
-
-python -W ignore /Users/mkleinnijenhuis/workspace/EM/wmem/nodes_of_ranvier.py -S /Users/mkleinnijenhuis/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00/B-NT-S10-2f_ROI_00ds7_labels_labelMA_WS.h5/labelMA_ws10_split /Users/mkleinnijenhuis/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00/B-NT-S10-2f_ROI_00ds7_labels_labelMA_WS.h5/labelMA_ws10_split_NoR --boundarymask /Users/mkleinnijenhuis/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00/B-NT-S10-2f_ROI_00ds7_masks_maskDS.h5/maskDS -s 500 -R
-h52nii '' B-NT-S10-2f_ROI_00ds7 _labels_labelMA_WS labelMA_ws10_split_NoR_steps/labels_tv '' '' '-i zyx -o xyz -d uint16'
-h52nii '' B-NT-S10-2f_ROI_00ds7 _labels_labelMA_WS labelMA_ws10_split_NoR_steps/labels_nt '' '' '-i zyx -o xyz -d uint16'
-
-
-
 # TODO: force to border
 # TODO: test borderconnect after first iteration
+# FIXME: this section needs work: continue with half-baked MA compartment for now
+
+
+###=========================================================================###
+### add up all MA labels
+###=========================================================================###
+opf='_labels_labelMA_2D3D' ods='labelMA_WS'
+ipf1='_labels_labelMA_WS' ids1='labelMA_ws10_split_NoR_steps/labels_tv'
+ipf2='_labels_labelMA_WS' ids2='labelMA_ws40_split_NoR_steps/labels_tv'
+python $scriptdir/wmem/combine_labels.py \
+    "${datadir}/${dataset_ds}${ipf1}.h5/${ids1}" \
+    "${datadir}/${dataset_ds}${ipf2}.h5/${ids2}" \
+    "${datadir}/${dataset_ds}${opf}.h5/${ods}" -m 'add'
+
+ipf1='_labels_labelMA_2D3D' ids1='labelMA_WS'
+ipf2='_labels_labelMA_WS' ids2='labelMA_ws80_split_NoR_steps/labels_tv'
+python $scriptdir/wmem/combine_labels.py \
+    "${datadir}/${dataset_ds}${ipf1}.h5/${ids1}" \
+    "${datadir}/${dataset_ds}${ipf2}.h5/${ids2}" \
+    "${datadir}/${dataset_ds}${opf}.h5/${ods}" -m 'add'
+
+ipf1='_labels_labelMA_2D3D' ids1='labelMA_WS'
+ipf2='_labels_labelMA_WS' ids2='labelMA_ws81_split_NoR_steps/labels_tv'
+python $scriptdir/wmem/combine_labels.py \
+    "${datadir}/${dataset_ds}${ipf1}.h5/${ids1}" \
+    "${datadir}/${dataset_ds}${ipf2}.h5/${ids2}" \
+    "${datadir}/${dataset_ds}${opf}.h5/${ods}" -m 'add'
+
+ipf1='_labels_labelMA_2D3D' ids1='labelMA_WS'
+ipf2='_labels_labelMA_WS' ids2='labelMA_ws81_split_NoR_steps/labels_nt'
+python $scriptdir/wmem/combine_labels.py \
+    "${datadir}/${dataset_ds}${ipf1}.h5/${ids1}" \
+    "${datadir}/${dataset_ds}${ipf2}.h5/${ids2}" \
+    "${datadir}/${dataset_ds}${opf}.h5/${ods}" -m 'add'
+
+opf='_labels_labelMA_2D3D' ods='labelMA'
+ipf1='_labels_labelMA_2D3D' ids1='labelMA_WS'
+ipf2='_labels_labelMA_core3D_test' ids2='labelMA_core3D_proofread_NoR_steps/labels_tv'
+python $scriptdir/wmem/combine_labels.py \
+    "${datadir}/${dataset_ds}${ipf1}.h5/${ids1}" \
+    "${datadir}/${dataset_ds}${ipf2}.h5/${ids2}" \
+    "${datadir}/${dataset_ds}${opf}.h5/${ods}" -m 'add'
+
+h52nii '' B-NT-S10-2f_ROI_00ds7 _labels_labelMA_2D3D labelMA '' '' '-i zyx -o xyz -d uint16'
+h52nii '' B-NT-S10-2f_ROI_00ds7 _labels_labelMA_2D3D labelMA_WS '' '' '-i zyx -o xyz -d uint16'
+
+
+###=========================================================================###
+### NOTE: there is mismatch between maskMM_PP and the labelMA (holes at mito's: bottom only)
+### this should fix it
+### TODO: identify where this went wrong
+###=========================================================================###
+ipf='_labels_labelMA_2D3D' ids='labelMA'
+opf='_labels_labelMA_2D3D' ods='labelMA_filledm3'
+methods='3'
+python $scriptdir/wmem/fill_holes.py -S \
+    $datadir/${dataset_ds}${ipf}.h5/${ids} \
+    $datadir/${dataset_ds}${opf}.h5/${ods} \
+    -m ${methods}
+h52nii '' "${dataset_ds}" "${opf}" "${ods}" '' '' '-i zyx -o xyz -d uint16'
+### update maskMM
+ipf1='_masks_maskMM' ids1='maskMM_PP'
+ipf2='_labels_labelMA_2D3D' ids2='labelMA_filledm3'
+opf='_masks_maskMM' ods='maskMM_PP_filledm3'
+python $scriptdir/wmem/combine_labels.py \
+    "${datadir}/${dataset_ds}${ipf1}.h5/${ids1}" \
+    "${datadir}/${dataset_ds}${ipf2}.h5/${ids2}" \
+    "${datadir}/${dataset_ds}${opf}.h5/${ods}" -m 'mask'
+h52nii '' "${dataset_ds}" "${opf}" "${ods}" '' '' '-i zyx -o xyz -d uint8'
+
+
+###=========================================================================###
+### detect nodes of Ranvier
+###=========================================================================###
+from wmem import nodes_of_ranvier
+nodes_of_ranvier.detect_NoR(
+    image_in='/Users/mkleinnijenhuis/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00/B-NT-S10-2f_ROI_00ds7_labels_labelMA_2D3D.h5/labelMA_filledm3',
+    maskMM='/Users/mkleinnijenhuis/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00/B-NT-S10-2f_ROI_00ds7_masks_maskMM.h5/maskMM_PP_filledm3',
+    encapsulate_threshold=0.8,
+    outputpath='/Users/mkleinnijenhuis/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00/B-NT-S10-2f_ROI_00ds7_labels_labelMA_2D3D.h5/labelMA_filledm3_nodes_thr0.8')
+opf='_labels_labelMA_2D3D' ods='labelMA_filledm3_nodes_thr0.8'
+h52nii '' "${dataset_ds}" "${opf}" "${ods}" '' '' '-i zyx -o xyz -d uint16'
+opf='_labels_labelMA_2D3D' ods='labelMA_filledm3_nodes_thr0.8_steps/seg'
+h52nii '' "${dataset_ds}" "${opf}" "${ods}" '' '' '-i zyx -o xyz -d uint8'
+opf='_labels_labelMA_2D3D' ods='labelMA_filledm3_nodes_thr0.8_steps/rim'
+h52nii '' "${dataset_ds}" "${opf}" "${ods}" '' '' '-i zyx -o xyz -d uint16'
+opf='_labels_labelMA_2D3D' ods='labelMA_filledm3_nodes_thr0.8_steps/nonodes'
+h52nii '' "${dataset_ds}" "${opf}" "${ods}" '' '' '-i zyx -o xyz -d uint16'
+
+### get a wsmask /sheaths (TODO?: test distance threshold)
+spf='_labels_labelMA_2D3D' sds='labelMA_filledm3_nodes_thr0.8_steps/nonodes'
+mpf='_masks_maskMM' mds='maskMM_PP_filledm3'
+opf='_labels_labelMM' ods="labelMM_nonodes"
+python $scriptdir/wmem/separate_sheaths.py \
+"$datadir/${dataset_ds}${spf}.h5/${sds}" \
+"$datadir/${dataset_ds}${opf}.h5/${ods}" \
+--maskMM "$datadir/${dataset_ds}${mpf}.h5/${mds}" -S
+h52nii '' "${dataset_ds}" "${opf}" "${ods}_steps/sheaths" '' '' '-i zyx -o xyz -d uint16'
+h52nii '' "${dataset_ds}" "${opf}" "${ods}_steps/wsmask" '' '' '-i zyx -o xyz'
+h52nii '' "${dataset_ds}" "${opf}" "${ods}_steps/distance" '' '' '-i zyx -o xyz'
+
+### get medwidths
+weight=10.0; margin=20;
+spf='_labels_labelMA_2D3D' sds='labelMA_filledm3_nodes_thr0.8_steps/nonodes'
+mpf='_masks_maskMM' mds='maskMM_PP_filledm3'  # previous wsmask? it seems too restrictive
+# wpf='_labels_labelMM' wds='labelMM_nonodes_steps/wsmask'
+lpf='_labels_labelMM' lds="labelMM_nonodes_steps/sheaths"
+opf='_labels_labelMM' ods="labelMM_nonodes_sigmoid_iter1"
+python $scriptdir/wmem/separate_sheaths.py \
+"$datadir/${dataset_ds}${spf}.h5/${sds}" \
+"$datadir/${dataset_ds}${opf}.h5/${ods}" \
+--maskMM "$datadir/${dataset_ds}${mpf}.h5/${mds}" \
+--labelMM "$datadir/${dataset_ds}${lpf}.h5/${lds}" \
+-S -w $weight -m $margin
+h52nii '' "${dataset_ds}" "${opf}" "${ods}_steps/sheaths_sigmoid_10.0" '' '' '-i zyx -o xyz -d uint16'
+h52nii '' "${dataset_ds}" "${opf}" "${ods}_steps/distance_sigmoid_10.0" '' '' '-i zyx -o xyz'
+h52nii '' "${dataset_ds}" "${opf}" "${ods}_steps/wsmask_sigmoid_10.0" '' '' '-i zyx -o xyz'  # 1.5 * medwidth
+
+# TODO: iterate
+
+### add MA and MM to create MF
+ipf1='_labels_labelMA_2D3D' ids1='labelMA_filledm3'
+ipf2='_labels_labelMM' ids2="labelMM_nonodes_sigmoid_iter1_steps/sheaths_sigmoid_10.0"
+opf='_labels_labelMF' ods="labelMF_nonodes"
+python $scriptdir/wmem/combine_labels.py \
+"${datadir}/${dataset_ds}${ipf1}.h5/${ids1}" \
+"${datadir}/${dataset_ds}${ipf2}.h5/${ids2}" \
+"${datadir}/${dataset_ds}${opf}.h5/${ods}" -m 'add'
+h52nii '' "${dataset_ds}" "${opf}" "${ods}" '' '' '-i zyx -o xyz -d uint16'
+
+### fill holes in MF
+ipf='_labels_labelMF' ids="labelMF_nonodes"
+opf='_labels_labelMF' ods="labelMF_nonodes_filledm3"
+methods='3'
+python $scriptdir/wmem/fill_holes.py -S \
+$datadir/${dataset_ds}${ipf}.h5/${ids} \
+$datadir/${dataset_ds}${opf}.h5/${ods} \
+-m ${methods}
+h52nii '' "${dataset_ds}" "${opf}" "${ods}" '' '' '-i zyx -o xyz -d uint16'
 
 
 
@@ -921,6 +1039,499 @@ h52nii '' B-NT-S10-2f_ROI_00ds7 _labels_labelMA_WS labelMA_ws10_split_NoR_steps/
 
 
 
+
+
+### WIP: mito
+
+### get mitochondria
+from wmem import utils, Image, LabelImage, MaskImage, nodes_of_ranvier
+import numpy as np
+from scipy.ndimage import distance_transform_edt
+from skimage.measure import regionprops
+from scipy.ndimage.filters import gaussian_filter
+import pickle
+
+def get_coords(prop, margin, dims):
+
+    if len(prop.bbox) > 4:
+        z, y, x, Z, Y, X = tuple(prop.bbox)
+        z = max(0, z - margin)
+        Z = min(dims[0], Z + margin)
+    else:
+        y, x, Y, X = tuple(prop.bbox)
+        z = 0
+        Z = 1
+
+    y = max(0, y - margin)
+    x = max(0, x - margin)
+    Y = min(dims[1], Y + margin)
+    X = min(dims[2], X + margin)
+
+    return x, X, y, Y, z, Z
+
+# FIXME: probably want to use the MF version with NoR removed as it is for extracting the sheaths
+image_in = '/Users/mkleinnijenhuis/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00/B-NT-S10-2f_ROI_00ds7_labels_labelMF.h5/labelMF_nonodes_filledm3'
+mf = utils.get_image(image_in, imtype='Label')
+# image_in = outputpath = '/Users/mkleinnijenhuis/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00/B-NT-S10-2f_ROI_00ds7_labels_labelMA_2D3D.h5/labelMA_filledm2m3'
+# ma = utils.get_image(image_in, imtype='Label')
+# data_smoothed = gaussian_filter(data, sigma)
+
+# ma = np.copy(mf.ds[:])
+mask = np.zeros_like(mf.ds[:], dtype='bool')
+
+do_distsum = False
+if do_distsum:
+    distsum = np.zeros_like(mf.ds[:], dtype='float')
+else:
+    image_in = '/Users/mkleinnijenhuis/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00/B-NT-S10-2f_ROI_00ds7_labels_labelMF.h5/distsum'
+    distsum = utils.get_image(image_in)
+    distsum = distsum.ds[:]
+    # load median sheath widths if provided
+    medwidth_file = '/Users/mkleinnijenhuis/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00/B-NT-S10-2f_ROI_00ds7_labels_labelMM_labelMM_nonodes_sigmoid_iter1.pickle'
+    with open(medwidth_file, 'rb') as f:
+        medwidths = pickle.load(f)
+
+rp = regionprops(mf.ds[:])
+margin = 10
+elsize = np.absolute(mf.elsize)
+dist_thr = 0.25
+for prop in rp:
+    print(prop.label)
+    # get data cutout labels with margin
+    x, X, y, Y, z, Z = get_coords(prop, margin, mf.ds.shape)
+    MF_region = mf.ds[z:Z, y:Y, x:X]
+    distsum_region = distsum[z:Z, y:Y, x:X]
+    mask_region = mask[z:Z, y:Y, x:X]
+
+    # get label distance map
+    maskMF = MF_region == prop.label
+    if do_distsum:
+        dist = distance_transform_edt(maskMF, sampling=elsize)
+        distsum_region = np.maximum(distsum_region, dist)
+        distsum[z:Z, y:Y, x:X] = distsum_region
+    else:
+        # update the mask
+        # dist_thr = 0.25
+        if prop.label in medwidths.keys():
+            dist_thr = medwidths[prop.label] * 0.5  # + 0.05  # * 1.5 # + 0.1
+        else:
+            dist_thr = 0  # TODO: check if this is the desired default
+        dist_mask = np.logical_and(maskMF, distsum_region > dist_thr)
+        np.logical_or(mask_region, dist_mask, mask_region)
+        mask[z:Z, y:Y, x:X] = mask_region
+
+
+if do_distsum:
+    outputpath = '/Users/mkleinnijenhuis/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00/B-NT-S10-2f_ROI_00ds7_labels_labelMF.h5/distsum'
+    mo = Image(outputpath, **mf.get_props(dtype=distsum.dtype))
+    mo.create()
+    mo.write(distsum)
+    mo.close()
+else:
+    outputpath = '/Users/mkleinnijenhuis/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00/B-NT-S10-2f_ROI_00ds7_labels_labelMF.h5/maskMA'
+    outputpath = '/Users/mkleinnijenhuis/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00/B-NT-S10-2f_ROI_00ds7_labels_labelMF.h5/maskMA-0.05'
+    outputpath = '/Users/mkleinnijenhuis/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00/B-NT-S10-2f_ROI_00ds7_labels_labelMF.h5/maskMA-0.1'
+    outputpath = '/Users/mkleinnijenhuis/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00/B-NT-S10-2f_ROI_00ds7_labels_labelMF.h5/maskMAx1.5'
+    outputpath = '/Users/mkleinnijenhuis/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00/B-NT-S10-2f_ROI_00ds7_labels_labelMF.h5/maskMAx0.5'
+    mo = MaskImage(outputpath, **mf.get_props(dtype='uint8'))
+    mo.create()
+    mo.write(mask)
+    mo.close()
+
+    ma = np.copy(mf.ds[:])
+    ma[~mask] = 0
+    outputpath = '/Users/mkleinnijenhuis/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00/B-NT-S10-2f_ROI_00ds7_labels_labelMF.h5/labelMA'
+    mo = Image(outputpath, **mf.get_props())
+    mo.create()
+    mo.write(ma)
+    mo.close()
+
+    mm = np.copy(mf.ds[:])
+    mm[mask] = 0
+    outputpath = '/Users/mkleinnijenhuis/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00/B-NT-S10-2f_ROI_00ds7_labels_labelMF.h5/labelMM'
+    mo = Image(outputpath, **mf.get_props())
+    mo.create()
+    mo.write(mm)
+    mo.close()
+
+    maskUA = ~mf.ds[:].astype('bool')
+    outputpath = '/Users/mkleinnijenhuis/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00/B-NT-S10-2f_ROI_00ds7_labels_labelMF.h5/maskUA'
+    mo = MaskImage(outputpath, **mf.get_props(dtype='uint8'))
+    mo.create()
+    mo.write(maskUA)
+    mo.close()
+
+ipf=_labels_labelMF; ids=distsum
+python -W ignore $scriptdir/wmem/stack2stack.py $datadir/${dataset_ds}${ipf}.h5/$ids $datadir/${dataset_ds}${ipf}_$ids.nii.gz -i zyx -o xyz
+ipf=_labels_labelMF; ids=maskMA
+python -W ignore $scriptdir/wmem/stack2stack.py $datadir/${dataset_ds}${ipf}.h5/$ids $datadir/${dataset_ds}${ipf}_$ids.nii.gz -i zyx -o xyz
+ipf=_labels_labelMF; ids=maskMA-0.05
+python -W ignore $scriptdir/wmem/stack2stack.py $datadir/${dataset_ds}${ipf}.h5/$ids $datadir/${dataset_ds}${ipf}_$ids.nii.gz -i zyx -o xyz
+ipf=_labels_labelMF; ids=maskMA-0.1
+python -W ignore $scriptdir/wmem/stack2stack.py $datadir/${dataset_ds}${ipf}.h5/$ids $datadir/${dataset_ds}${ipf}_$ids.nii.gz -i zyx -o xyz
+ipf=_labels_labelMF; ids=maskMAx1.5
+python -W ignore $scriptdir/wmem/stack2stack.py $datadir/${dataset_ds}${ipf}.h5/$ids $datadir/${dataset_ds}${ipf}_$ids.nii.gz -i zyx -o xyz
+ipf=_labels_labelMF; ids=maskMAx0.5
+python -W ignore $scriptdir/wmem/stack2stack.py $datadir/${dataset_ds}${ipf}.h5/$ids $datadir/${dataset_ds}${ipf}_$ids.nii.gz -i zyx -o xyz
+sipf=_labels_labelMF; ids=labelMA
+python -W ignore $scriptdir/wmem/stack2stack.py $datadir/${dataset_ds}${ipf}.h5/$ids $datadir/${dataset_ds}${ipf}_$ids.nii.gz -i zyx -o xyz
+ipf=_labels_labelMF; ids=labelMM
+python -W ignore $scriptdir/wmem/stack2stack.py $datadir/${dataset_ds}${ipf}.h5/$ids $datadir/${dataset_ds}${ipf}_$ids.nii.gz -i zyx -o xyz
+ipf=_labels_labelMF; ids=maskUA
+python -W ignore $scriptdir/wmem/stack2stack.py $datadir/${dataset_ds}${ipf}.h5/$ids $datadir/${dataset_ds}${ipf}_$ids.nii.gz -i zyx -o xyz
+
+
+
+
+
+
+
+
+
+###=========================================================================###
+### FROM HERE IS WIP / SCRATCH / OLD
+###=========================================================================###
+
+### image gradient  # TODO: check if sigma/2 actually does anything (ggm_sigma1 without anisotropic looks a lot better)
+from wmem import utils, Image
+import numpy as np
+from scipy.ndimage import gaussian_gradient_magnitude
+from scipy.ndimage.filters import gaussian_filter
+
+image_in = '/Users/mkleinnijenhuis/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00/B-NT-S10-2f_ROI_00ds7.h5/data'
+im = utils.get_image(image_in)
+data = im.ds[:].astype('float32')
+
+for sigma in [1, 3, 5]:
+    ggm = gaussian_gradient_magnitude(data, sigma=[sigma/2, sigma, sigma])
+    outputpath = '/Users/mkleinnijenhuis/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00/B-NT-S10-2f_ROI_00ds7.h5/ggm_sigma{}'.format(sigma)
+    mo = Image(outputpath, **im.get_props(dtype='float32'))
+    mo.create()
+    mo.write(ggm)
+    mo.close()
+    im.close()
+
+for sigma in [1, 3, 5]:
+    data_smoothed = gaussian_filter(data, sigma=[sigma/2, sigma, sigma])
+    outputpath = '/Users/mkleinnijenhuis/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00/B-NT-S10-2f_ROI_00ds7.h5/data_sigma{}'.format(sigma)
+    mo = Image(outputpath, **im.get_props(dtype='float32'))
+    mo.create()
+    mo.write(data_smoothed)
+    mo.close()
+
+for sigma in [0, 1]:
+    sigma1 = sigma
+    for sigma2 in [sigma + 1, sigma + 2]:
+        if sigma1 == 0:
+            dog = data - gaussian_filter(data, [sigma2/2, sigma2, sigma2])
+        else:
+            dog = gaussian_filter(data, [sigma1/2, sigma1, sigma1]) - gaussian_filter(data, [sigma2/2, sigma2, sigma2])
+        outputpath = '/Users/mkleinnijenhuis/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00/B-NT-S10-2f_ROI_00ds7.h5/DoG_{}-{}'.format(sigma1, sigma2)
+        mo = Image(outputpath, **im.get_props(dtype='float32'))
+        mo.create()
+        mo.write(dog)
+        mo.close()
+
+im.close()
+
+ipf=
+for ids in ggm_sigma1 ggm_sigma3 ggm_sigma5 data_sigma1 data_sigma3 data_sigma5 DoG_0-1 DoG_0-2 DoG_1-2 DoG_1-3; do
+    python -W ignore $scriptdir/wmem/stack2stack.py $datadir/${dataset_ds}${ipf}.h5/$ids $datadir/${dataset_ds}${ipf}_$ids.nii.gz -i zyx -o xyz
+done
+
+
+
+### detect mitochondria
+from wmem import utils, Image, LabelImage, MaskImage, nodes_of_ranvier
+import numpy as np
+from scipy import ndimage as ndi
+from scipy.ndimage import distance_transform_edt
+from scipy.ndimage.filters import gaussian_filter
+from skimage.measure import regionprops
+from skimage.morphology import watershed, remove_small_objects
+from wmem import utils, Image, LabelImage, MaskImage
+from skimage.morphology import binary_dilation, binary_erosion, cube
+import numpy as np
+
+def find_local_maxima(img, min_dist=1, threshold=0.05):
+
+    size = 2 * min_dist + 1
+    if threshold == -float('Inf'):
+        threshold = img.min()
+
+    image_max = ndi.maximum_filter(img, size=size, mode='constant')
+    mask = img == image_max
+    mask &= img > threshold
+    coordinates = np.column_stack(np.nonzero(mask))[::-1]
+    # coordinates = peak_local_max(dog, min_distance=1, indices=False)
+    out = np.zeros_like(img, dtype=np.bool)
+    out[tuple(coordinates.T)] = True
+
+    return out
+
+
+image_in = '/Users/mkleinnijenhuis/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00/B-NT-S10-2f_ROI_00ds7.h5/data_sigma1'
+im = utils.get_image(image_in)
+data = im.ds[:]
+data_inv = np.absolute(data - np.amax(data))
+outputpath = '/Users/mkleinnijenhuis/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00/B-NT-S10-2f_ROI_00ds7_labels_labelMT.h5/data_inv'
+mo = Image(outputpath, **im.get_props())
+mo.create()
+mo.write(data_inv)
+mo.close()
+
+image_in = '/Users/mkleinnijenhuis/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00/B-NT-S10-2f_ROI_00ds7_labels_labelMF.h5/maskMAx1.5'
+mask01 = utils.get_image(image_in)
+mask = mask01.ds[:].astype('bool')
+data_inv[~mask] = 0
+out = find_local_maxima(data_inv, min_dist=2, threshold=1000)
+outputpath = '/Users/mkleinnijenhuis/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00/B-NT-S10-2f_ROI_00ds7_labels_labelMT.h5/peaks'
+mo = MaskImage(outputpath, **im.get_props(dtype='uint8'))
+mo.create()
+mo.write(out)
+mo.close()
+
+data_inv = np.absolute(data - np.amax(data))
+markers = ndi.label(out)[0]
+mask_ws = np.logical_and(mask, data_inv > 1000)
+labels = watershed(data_inv, markers, mask=mask_ws)
+# remove single voxels (or clusters smaller than ~3)
+remove_small_objects(labels, min_size=3, connectivity=1, in_place=True)  # 3 may already be too much
+outputpath = '/Users/mkleinnijenhuis/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00/B-NT-S10-2f_ROI_00ds7_labels_labelMT.h5/mito'
+mo = Image(outputpath, **im.get_props(dtype=labels.dtype))
+mo.create()
+mo.write(labels)
+mo.close()
+
+ipf=_labels_labelMT; ids=data_inv
+python -W ignore $scriptdir/wmem/stack2stack.py $datadir/${dataset_ds}${ipf}.h5/$ids $datadir/${dataset_ds}${ipf}_$ids.nii.gz -i zyx -o xyz
+ipf=_labels_labelMT; ids=peaks
+python -W ignore $scriptdir/wmem/stack2stack.py $datadir/${dataset_ds}${ipf}.h5/$ids $datadir/${dataset_ds}${ipf}_$ids.nii.gz -i zyx -o xyz
+ipf=_labels_labelMT; ids=mito
+python -W ignore $scriptdir/wmem/stack2stack.py $datadir/${dataset_ds}${ipf}.h5/$ids $datadir/${dataset_ds}${ipf}_$ids.nii.gz -i zyx -o xyz -d uint16
+
+
+
+
+
+
+### snap to gradient magnitude
+## TODO: put these functions somewhere
+
+def find_max_ggm(axon, ggm):
+
+    ggm_rim = [0]
+    patch = np.copy(axon)
+    for ii in range(0, 6):
+        newpatch = binary_erosion(patch)
+        rim = np.logical_xor(newpatch, patch)
+        ggm_rim.append(np.mean(ggm[rim]))
+        patch = newpatch
+
+    neros = np.argmax(ggm_rim)
+
+    patch = np.copy(axon)
+    for ii in range(0, neros):
+        newpatch = binary_erosion(patch)
+        patch = newpatch
+
+    print(ii, ggm_rim, neros)
+
+    return ggm_rim, patch
+
+
+def snap_to_max_gradient(image_in, ggm, go2D=False, outputpath=''):
+
+    # Read inputs
+    axons = utils.get_image(image_in, imtype='Label')
+    ggm = utils.get_image(ggm, imtype='Mask')
+
+    # Create outputs
+    props = axons.get_props(protective=False)
+    outpaths = {'out': outputpath}
+    outpaths = utils.gen_steps(outpaths, save_steps=True)
+    mo = LabelImage(outpaths['out'], **props)
+    mo.create()
+#     mo.ds[:] = axons.ds[:]
+
+    for prop in regionprops(axons.ds):
+#         if prop.label not in [730]:
+#             continue
+        print(prop.label)
+
+        # Slice the axon region.
+        slices = get_region_slices_around(axons, prop, searchradius=[1, 1, 1])[0]
+        axons.slices = ggm.slices = mo.slices = slices
+        axons_slcd = axons.slice_dataset(squeeze=False) == prop.label
+        ggm_slcd = ggm.slice_dataset(squeeze=False)
+        mo_slcd = mo.slice_dataset(squeeze=False)
+
+        if go2D:
+            iter_imgs = zip(axons_slcd, ggm_slcd, mo_slcd)
+            for i, (slc, slc_ggm, slc_mo) in enumerate(iter_imgs):
+                ggm_rim, patch = find_max_ggm(slc, slc_ggm)
+                slc_mo[patch] = prop.label
+        else:
+            ggm_rim, patch = find_max_ggm(axons_slcd, ggm_slcd)
+            mo_slcd[patch] = prop.label
+
+        mo.write(mo_slcd)
+
+    # Close images.
+    ggm.close()
+    axons.close()
+    mo.close()
+
+    return ggm_rim
+
+
+
+from wmem import nodes_of_ranvier
+nodes_of_ranvier.snap_to_max_gradient(
+    image_in='/Users/mkleinnijenhuis/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00/B-NT-S10-2f_ROI_00ds7_labels_labelMF.h5/labelMF_nonodes_filledm3',
+    ggm='/Users/mkleinnijenhuis/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00/B-NT-S10-2f_ROI_00ds7.h5/ggm_sigma1',
+    go2D=True,
+    outputpath='/Users/mkleinnijenhuis/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00/B-NT-S10-2f_ROI_00ds7_labels_labelMF.h5/labelMF_nonodes_filledm3_ero-ggm2D')
+
+opf='_labels_labelMF' ods='labelMF_nonodes_filledm3_ero-ggm'
+h52nii '' "${dataset_ds}" "${opf}" "${ods}" '' '' '-i zyx -o xyz -d uint16'
+
+
+
+# from wmem import utils, Image, LabelImage, MaskImage, nodes_of_ranvier
+# import numpy as np
+# from skimage.segmentation import inverse_gaussian_gradient, morphological_geodesic_active_contour
+# image_in = '/Users/mkleinnijenhuis/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00/B-NT-S10-2f_ROI_00ds7.h5/data'
+# im = utils.get_image(image_in)
+# data = im.ds[:]
+# igg = inverse_gaussian_gradient(data, alpha=20.0, sigma=1.0)
+# outputpath = '/Users/mkleinnijenhuis/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00/B-NT-S10-2f_ROI_00ds7.h5/igg'
+# mo = Image(outputpath, **im.get_props(dtype='float32'))
+# mo.create()
+# mo.write(igg.astype('float32'))
+# mo.close()
+#
+# ipf=; ids=igg
+# python -W ignore $scriptdir/wmem/stack2stack.py $datadir/${dataset_ds}${ipf}.h5/$ids $datadir/${dataset_ds}${ipf}_$ids.nii.gz -i zyx -o xyz
+#
+# image_in = '/Users/mkleinnijenhuis/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00/B-NT-S10-2f_ROI_00ds7.h5/igg'
+# im = utils.get_image(image_in)
+# igg = im.ds[:]
+# morphological_geodesic_active_contour(igg, iterations, init_level_set='circle', smoothing=1, threshold='auto', balloon=0)
+
+
+
+### update labelMA by subtracting sheaths from MF_filled
+ipf1='_labels_labelMF' ids1='labelMF_filledm3'
+ipf2='_labels_labelMM' ids2="labelMM_steps/sheaths"
+opf='_labels_labelMA_2D3D' ods='labelMA_filledm2m3'
+python $scriptdir/wmem/combine_labels.py \
+"${datadir}/${dataset_ds}${ipf1}.h5/${ids1}" \
+"${datadir}/${dataset_ds}${ipf2}.h5/${ids2}" \
+"${datadir}/${dataset_ds}${opf}.h5/${ods}" -m 'mask'
+h52nii '' "${dataset_ds}" "${opf}" "${ods}" '' '' '-i zyx -o xyz -d uint16'
+
+
+
+### making sure labels in 'labelMA_filledm2m3' are contiguous
+from wmem import merge_labels
+merge_labels.fill_connected_labels('/Users/mkleinnijenhuis/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00/B-NT-S10-2f_ROI_00ds7_labels_labelMA_2D3D.h5/labelMA_filledm2m3', check_split=True, outputpath='/Users/mkleinnijenhuis/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00/B-NT-S10-2f_ROI_00ds7_labels_labelMA_2D3D.h5/labelMA_filledm2m3_split')
+
+opf='_labels_labelMA_2D3D' ods='labelMA_filledm2m3_split'
+h52nii '' "${dataset_ds}" "${opf}" "${ods}" '' '' '-i zyx -o xyz -d uint16'
+
+### making sure labels in 'labelMF_filledm3' are contiguous
+from wmem import merge_labels
+merge_labels.fill_connected_labels('/Users/mkleinnijenhuis/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00/B-NT-S10-2f_ROI_00ds7_labels_labelMF.h5/labelMF_filledm3', check_split=True, outputpath='/Users/mkleinnijenhuis/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00/B-NT-S10-2f_ROI_00ds7_labels_labelMF.h5/labelMF_filledm3_split')
+
+opf='_labels_labelMF' ods='labelMF_filledm3_split'
+h52nii '' "${dataset_ds}" "${opf}" "${ods}" '' '' '-i zyx -o xyz -d uint16'
+
+
+
+
+### TODO: implement check for very thick myelin sheath outliers
+
+
+
+
+# ### fill mitochondria
+# ipf='_labels_labelMA_2D3D' ids='labelMA'
+# opf='_labels_labelMA_2D3D' ods='labelMA_filledm2'
+# methods='2'
+# python $scriptdir/wmem/fill_holes.py -S \
+# $datadir/${dataset_ds}${ipf}.h5/${ids} \
+# $datadir/${dataset_ds}${opf}.h5/${ods} \
+# -m ${methods} -s 9 9 9
+# h52nii '' "${dataset_ds}" "${opf}" "${ods}" '' '' '-i zyx -o xyz -d uint16'
+#
+# ### update maskMM
+# ipf1='_masks_maskMM' ids1='maskMM_PP'
+# ipf2='_labels_labelMA_2D3D' ids2='labelMA_filledm2'
+# opf='_masks_maskMM' ods='maskMM_PP_filledm2'
+# python $scriptdir/wmem/combine_labels.py \
+# "${datadir}/${dataset_ds}${ipf1}.h5/${ids1}" \
+# "${datadir}/${dataset_ds}${ipf2}.h5/${ids2}" \
+# "${datadir}/${dataset_ds}${opf}.h5/${ods}" -m 'mask'
+# h52nii '' "${dataset_ds}" "${opf}" "${ods}" '' '' '-i zyx -o xyz -d uint8'
+#
+#
+#
+# ### get a wsmask
+# # FIXME: take out nodes first for proper labelMM??
+# spf='_labels_labelMA_2D3D' sds='labelMA_filledm2'
+# mpf='_masks_maskMM' mds='maskMM_PP_filledm2'
+# opf='_labels_labelMM' ods="labelMM"
+# python $scriptdir/wmem/separate_sheaths.py \
+# "$datadir/${dataset_ds}${spf}.h5/${sds}" \
+# "$datadir/${dataset_ds}${opf}.h5/${ods}" \
+# --maskMM "$datadir/${dataset_ds}${mpf}.h5/${mds}" -S
+# h52nii '' "${dataset_ds}" "${opf}" "${ods}_steps/sheaths" '' '' '-i zyx -o xyz -d uint16'
+# h52nii '' "${dataset_ds}" "${opf}" "${ods}_steps/wsmask" '' '' '-i zyx -o xyz -d uint16'
+#
+# ### add MA and MM to create MF
+# ipf1='_labels_labelMA_2D3D' ids1='labelMA_filledm2'
+# ipf2='_labels_labelMM' ids2="labelMM_steps/sheaths"
+# opf='_labels_labelMF' ods="labelMF"
+# python $scriptdir/wmem/combine_labels.py \
+# "${datadir}/${dataset_ds}${ipf1}.h5/${ids1}" \
+# "${datadir}/${dataset_ds}${ipf2}.h5/${ids2}" \
+# "${datadir}/${dataset_ds}${opf}.h5/${ods}" -m 'add'
+# h52nii '' "${dataset_ds}" "${opf}" "${ods}" '' '' '-i zyx -o xyz -d uint16'
+#
+# ### fill holes in MF (TODO: borders)
+# ipf='_labels_labelMF' ids="labelMF"
+# opf='_labels_labelMF' ods="labelMF_filledm3"
+# methods='3' # scipy.ndimage.morphology.binary_fill_holes
+# python $scriptdir/wmem/fill_holes.py -S \
+# $datadir/${dataset_ds}${ipf}.h5/${ids} \
+# $datadir/${dataset_ds}${opf}.h5/${ods} \
+# -m ${methods}
+# h52nii '' "${dataset_ds}" "${opf}" "${ods}" '' '' '-i zyx -o xyz -d uint16'
+#
+# ### update labelMA by subtracting sheaths from MF_filled
+# ipf1='_labels_labelMF' ids1='labelMF_filledm3'
+# ipf2='_labels_labelMM' ids2="labelMM_steps/sheaths"
+# opf='_labels_labelMA_2D3D' ods='labelMA_filledm2m3'
+# python $scriptdir/wmem/combine_labels.py \
+# "${datadir}/${dataset_ds}${ipf1}.h5/${ids1}" \
+# "${datadir}/${dataset_ds}${ipf2}.h5/${ids2}" \
+# "${datadir}/${dataset_ds}${opf}.h5/${ods}" -m 'mask'
+# h52nii '' "${dataset_ds}" "${opf}" "${ods}" '' '' '-i zyx -o xyz -d uint16'
+#
+# ### making sure labels in 'labelMA_filledm2m3' are contiguous
+# from wmem import merge_labels
+# merge_labels.fill_connected_labels('/Users/mkleinnijenhuis/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00/B-NT-S10-2f_ROI_00ds7_labels_labelMA_2D3D.h5/labelMA_filledm2m3', check_split=True, outputpath='/Users/mkleinnijenhuis/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00/B-NT-S10-2f_ROI_00ds7_labels_labelMA_2D3D.h5/labelMA_filledm2m3_split')
+#
+# opf='_labels_labelMA_2D3D' ods='labelMA_filledm2m3_split'
+# h52nii '' "${dataset_ds}" "${opf}" "${ods}" '' '' '-i zyx -o xyz -d uint16'
+#
+# ### making sure labels in 'labelMF_filledm3' are contiguous
+# from wmem import merge_labels
+# merge_labels.fill_connected_labels('/Users/mkleinnijenhuis/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00/B-NT-S10-2f_ROI_00ds7_labels_labelMF.h5/labelMF_filledm3', check_split=True, outputpath='/Users/mkleinnijenhuis/oxdata/P01/EM/Myrf_01/SET-B/B-NT-S10-2f_ROI_00/B-NT-S10-2f_ROI_00ds7_labels_labelMF.h5/labelMF_filledm3_split')
+#
+# opf='_labels_labelMF' ods='labelMF_filledm3_split'
+# h52nii '' "${dataset_ds}" "${opf}" "${ods}" '' '' '-i zyx -o xyz -d uint16'
 
 
 
