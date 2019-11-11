@@ -21,13 +21,8 @@ import os
 import numpy as np
 from skimage.segmentation import relabel_sequential
 
-try:
-    from mpi4py import MPI
-except:
-    print("mpi4py could not be loaded")
-
 from wmem import parse, utils, downsample_blockwise
-from wmem import wmeMPI, Image, MaskImage, LabelImage
+from wmem import wmeMPI, Image, LabelImage
 
 
 def main(argv):
@@ -90,7 +85,8 @@ def mergeblocks(
 
     mpi = wmeMPI(usempi)
 
-    im = utils.get_image(images_in[0], comm=mpi.comm)
+    im = Image(images_in[0], permission='r')
+    im.load(mpi.comm, load_data=False)
     props = im.get_props(protective=protective, squeeze=True)
     ndim = im.get_ndim()
 
@@ -110,9 +106,12 @@ def mergeblocks(
     if ndim == 4:
         outsize = list(outsize) + [im.ds.shape[3]]  # TODO: flexible insert
 
-    props['shape'] = outsize
-    mo = LabelImage(outputpath, **props)
-    mo.create(comm=mpi.comm)
+    if outputpath.endswith('.ims'):
+        mo = LabelImage(outputpath)
+        mo.create(comm=mpi.comm)
+    else:
+        props['shape'] = outsize
+        mo = LabelImage(outputpath, **props)
 
     mpi.blocks = [{'path': image_in} for image_in in images_in]
     mpi.nblocks = len(images_in)
@@ -121,12 +120,13 @@ def mergeblocks(
     # merge the datasets
     maxlabel = 0
     for i in mpi.series:
+
         block = mpi.blocks[i]
         try:
             maxlabel = process_block(block['path'], ndim, blockreduce, func,
                                      blockoffset, blocksize, blockmargin,
                                      fullsize,
-                                     mo.ds,
+                                     mo,
                                      is_labelimage, relabel,
                                      neighbourmerge, save_fwmap,
                                      maxlabel, mpi)
@@ -139,93 +139,78 @@ def mergeblocks(
     mo.close()
 
 
-def process_block(h5path_in, ndim, blockreduce, func,
+def process_block(image_in, ndim, blockreduce, func,
                   blockoffset, blocksize, margin, fullsize,
-                  ds_out,
+                  mo,
                   is_labelimage, relabel, neighbourmerge, save_fwmap,
                   maxlabel, mpi):
     """Write a block of data into a hdf5 file."""
 
     # open data for reading
-    h5file_in, ds_in, _, _ = utils.h5_load(h5path_in)
+    im = Image(image_in, permission='r')
+    im.load(mpi.comm, load_data=False)
 
     # get the indices into the input and output datasets
     # TODO: get indices from attributes
-    """NOTE:
-    # x, X, y, Y, z, Z are indices into the full dataset
-    # ix, iX, iy, iY, iz, iZ are indices into the input dataset
-    # ox, oX, oy, oY, oz, oZ are indices into the output dataset
-    """
-    _, x, X, y, Y, z, Z = utils.split_filename(h5file_in.filename,
-                                               [blockoffset[2],
-                                                blockoffset[1],
-                                                blockoffset[0]])
-    (oz, oZ), (iz, iZ) = margins(z, Z, blocksize[0],
-                                 margin[0], fullsize[0])
-    (oy, oY), (iy, iY) = margins(y, Y, blocksize[1],
-                                 margin[1], fullsize[1])
-    (ox, oX), (ix, iX) = margins(x, X, blocksize[2],
-                                 margin[2], fullsize[2])
-    ixyz = ix, iX, iy, iY, iz, iZ
-    oxyz = ox, oX, oy, oY, oz, oZ
+    # TODO: get from mpi.get_blocks
+    set_slices_in_and_out(im, mo, blocksize, margin, fullsize)
 
     # simply copy the data from input to output
     """NOTE:
     it is assumed that the inputs are not 4D labelimages
     """
     if ndim == 4:
-        ds_out[oz:oZ, oy:oY, ox:oX, :] = ds_in[iz:iZ, iy:iY, ix:iX, :]
-        h5file_in.close()
+        mo.write(im.slice_dataset())
+        im.close()
         return
     if ((not is_labelimage) or
             ((not relabel) and
              (not neighbourmerge) and
              (not blockreduce))):
-        ds_out[oz:oZ, oy:oY, ox:oX] = ds_in[iz:iZ, iy:iY, ix:iX]
-        h5file_in.close()
+        data = im.slice_dataset()
+        mo.write(data)
+        im.close()
         return
 
     # forward map to relabel the blocks in the output
     if relabel:
-        fw, maxlabel = relabel_block(ds_in, maxlabel, mpi)
+        # FIXME: make sure to get all data in the block
+        fw, maxlabel = relabel_block(im.ds[:], maxlabel, mpi)
         if save_fwmap:
-            root = os.path.splitext(h5file_in.filename)[0]
-            fpath = '{}_{}.npy'.format(root, ds_in.name[1:])
+            comps = im.split_path()
+            fpath = '{}_{}.npy'.format(comps['base'], comps['int'][1:])
             np.save(fpath, fw)
         if (not neighbourmerge) and (not blockreduce):
-            ds_out[oz:oZ, oy:oY, ox:oX] = fw[ds_in[iz:iZ, iy:iY, ix:iX]]
-            h5file_in.close()
+            data = im.slice_dataset()
+            mo.write(fw[data])
+            im.close()
             return
     else:
-        ulabels = np.unique(ds_in[:])
+        ulabels = np.unique(im.ds[:])
         fw = [l for l in range(0, np.amax(ulabels) + 1)]
         fw = np.array(fw)
 
     # blockwise reduction of input datasets
     if blockreduce is not None:
-        data, ixyz, oxyz = blockreduce_datablocks(ds_in, ds_out,
-                                                  ixyz, oxyz,
-                                                  blockreduce, func)
-        ix, iX, iy, iY, iz, iZ = ixyz
-        ox, oX, oy, oY, oz, oZ = oxyz
+        data = blockreduce_datablocks(im, mo, blockreduce, func)
         margin = (int(margin[i]/blockreduce[i]) for i in range(0, 3))
         if (not neighbourmerge):
-            ds_out[oz:oZ, oy:oY, ox:oX] = fw[data]
-            h5file_in.close()
+            mo.write(fw[data])
+            im.close()
             return
     else:
-        data = ds_in[iz:iZ, iy:iY, ix:iX]
+        data = im.slice_dataset()
 
     # merge overlapping labels
-    fw = merge_overlap(fw, data, ds_out, oxyz, ixyz, margin)
-    ds_out[oz:oZ, oy:oY, ox:oX] = fw[data]
-    h5file_in.close()
+    fw = merge_overlap(fw, im, mo, data, margin)
+    mo.write(fw[data])
+    im.close()
 
 
 def relabel_block(ds_in, maxlabel, mpi=None):
-    """Relabel the labelvolume with consecutive labels."""
+    """Relabel the labelvolume with consecutive labels.
 
-    """NOTE:
+    NOTE:
     relabel from 0, because mpi is unaware of maxlabel before gather
     """
     fw = relabel_sequential(ds_in[:])[1]
@@ -256,35 +241,47 @@ def relabel_block(ds_in, maxlabel, mpi=None):
     return fw, maxlabel
 
 
-def blockreduce_datablocks(ds_in, ixyz, oxyz, blockreduce, func):
-    """Blockwise reduction of the input dataset."""
+def blockreduce_datablocks(im, mo, blockreduce, func):
+    """Blockwise reduction of the input dataset.
 
-    ox, oX, oy, oY, oz, oZ = oxyz
-    ix, iX, iy, iY, iz, iZ = ixyz
-
-    # adapt the upper indices
-    """NOTE:
+    NOTE:
     upper indices are adapted to select a datablock from the input dataset
     that results in the right shape after blockreduce
     """
-    aZ = int(np.ceil(iZ / blockreduce[0]) * blockreduce[0])
-    aY = int(np.ceil(iY / blockreduce[1]) * blockreduce[1])
-    aX = int(np.ceil(iX / blockreduce[2]) * blockreduce[2])
 
-    data = downsample_blockwise.block_reduce(ds_in[iz:aZ, iy:aY, ix:aX],
+    for slc, br in zip(im.slices, blockreduce):
+        slc.stop = int(np.ceil(slc.stop / br) * br)
+
+    data = downsample_blockwise.block_reduce(im.slice_dataset(),
                                              block_size=tuple(blockreduce),
                                              func=eval(func))
     if data.ndim == 4:
         data = np.squeeze(data, axis=3)
 
-    # update the indices into the blockreduced input dataset
-    iz, iy, ix = (0, 0, 0)
-    iZ, iY, iX = tuple(data.shape)
-    # calculate new indices into the output dataset
-    oz, oy, ox = (int(c / br) for c, br in zip((oz, oy, ox), blockreduce))
-    oZ, oY, oX = (int(c + d) for c, d in zip((oZ, oY, oX), data.shape))
+    for i_slc, o_slc, br, d in zip(im.slices, mo.slices, blockreduce, data.shape):
+        # update the indices into the blockreduced input dataset
+        i_slc.start = 0
+        i_slc.stop = d
+        # calculate new indices into the output dataset
+        o_slc.start = int(o_slc.start / br)
+        o_slc.stop = int(o_slc.stop + d)
 
-    return data, (ix, iX, iy, iY, iz, iZ), (ox, oX, oy, oY, oz, oZ)
+    return data
+
+
+def set_slices_in_and_out(im, mo, blocksize, margin, fullsize, blockoffset=[0, 0, 0]):
+
+    comps = im.split_path()
+    _, x, X, y, Y, z, Z = utils.split_filename(comps['file'], blockoffset[:3][::-1])
+    (oz, oZ), (iz, iZ) = margins(z, Z, blocksize[0], margin[0], fullsize[0])
+    (oy, oY), (iy, iY) = margins(y, Y, blocksize[1], margin[1], fullsize[1])
+    (ox, oX), (ix, iX) = margins(x, X, blocksize[2], margin[2], fullsize[2])
+    im.slices[0] = slice(iz, iZ, 1)
+    im.slices[1] = slice(iy, iY, 1)
+    im.slices[2] = slice(ix, iX, 1)
+    mo.slices[0] = slice(oz, oZ, 1)
+    mo.slices[1] = slice(oy, oY, 1)
+    mo.slices[2] = slice(ox, oX, 1)
 
 
 def margins(fc, fC, blocksize, margin, fullsize):
@@ -305,7 +302,7 @@ def margins(fc, fC, blocksize, margin, fullsize):
     return (fc, fC), (bc, bC)
 
 
-def get_overlap(side, ds_in, ds_out, ixyz, oxyz, margin=[0, 0, 0]):
+def get_overlap(side, im, mo, data, ixyz, oxyz, margin=[0, 0, 0]):
     """Return boundary slice of block and its neighbour."""
 
     ix, iX, iy, iY, iz, iZ = ixyz
