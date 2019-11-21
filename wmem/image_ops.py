@@ -44,7 +44,7 @@ def image_ops(
         blocksize=[],
         blockmargin=[],
         blockrange=[],
-        sigma=0.0,
+        sigma=[0.0],
         outputpath='',
         save_steps=False,
         protective=False,
