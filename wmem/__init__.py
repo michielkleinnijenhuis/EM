@@ -297,11 +297,11 @@ class Image(object):
         if h5path['ext'] not in self.path:
             raise Exception('{} not in path'.format(h5path['ext']))
 
+        h5path['base'], h5path['int'] = self.path.split(h5path['ext'])
+
         if self.format == '.ims':
-            h5path['base'] = self.path.split(h5path['ext'])[0]
-            h5path['int'] = '/DataSet/ResolutionLevel 0'
-        else:
-            h5path['base'], h5path['int'] = self.path.split(h5path['ext'])
+            if not h5path['int']:
+                h5path['int'] = '/DataSet/ResolutionLevel 0'
 
         if '/' not in h5path['int']:
             raise Exception('no groups or dataset specified for .h5 path')
@@ -602,8 +602,7 @@ class Image(object):
         if self.format == '.pbf':
             data = self.pbf_load_data()
         elif self.format == '.ims':
-            rs0_group = self.file['/DataSet/ResolutionLevel 0']
-            data = self.slice_dataset_ims(rs0_group, slices)
+            data = self.slice_dataset_ims(self.ds, slices)
         else:
             if ndim == 1:
                 data = self.ds[slices[0]]
@@ -935,6 +934,7 @@ class Image(object):
 
         im_info = self.file['/DataSetInfo/Image']
 
+        # TODO: resolution levels
         dimZ = int(att2str(im_info.attrs['Z']))
         dimY = int(att2str(im_info.attrs['Y']))
         dimX = int(att2str(im_info.attrs['X']))
