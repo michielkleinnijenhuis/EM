@@ -932,14 +932,12 @@ class Image(object):
         def att2str(att):
             return ''.join([t.decode('utf-8') for t in att])
 
-        im_info = self.file['/DataSetInfo/Image']
-
-        # TODO: resolution levels
-        dimZ = int(att2str(im_info.attrs['Z']))
-        dimY = int(att2str(im_info.attrs['Y']))
-        dimX = int(att2str(im_info.attrs['X']))
-        dimC = len(self.file['/DataSet/ResolutionLevel 0/TimePoint 0'])
-        dimT = len(self.file['/DataSet/ResolutionLevel 0'])
+        im_info = self.ds['TimePoint 0/Channel 0']
+        dimZ = int(att2str(im_info.attrs['ImageSizeZ']))
+        dimY = int(att2str(im_info.attrs['ImageSizeY']))
+        dimX = int(att2str(im_info.attrs['ImageSizeX']))
+        dimC = len(self.ds['TimePoint 0'])
+        dimT = len(self.ds)
 
         return [dimZ, dimY, dimX, dimC, dimT]
 
