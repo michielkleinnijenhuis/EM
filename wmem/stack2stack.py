@@ -75,9 +75,9 @@ def stack2stack(
 
     # Convert datatype  # TODO: proper general writing astype
     if uint8conv:
-        from skimage import img_as_ubyte
-        data = utils.normalize_data(data)[0]
-        data = img_as_ubyte(data)
+        from skimage.util.dtype import convert
+        data = convert(data, np.dtype(datatype), force_copy=False)
+        props['dtype'] = datatype
 
     outlayout = outlayout or props['axlab']
     in2out = [props['axlab'].index(l) for l in outlayout]
