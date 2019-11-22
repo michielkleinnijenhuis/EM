@@ -69,6 +69,9 @@ def split_filename(filename, blockoffset=[0, 0, 0]):
     datadir, tail = os.path.split(filename)
     fname = os.path.splitext(tail)[0]
     parts = re.findall('([0-9]{5}-[0-9]{5})', fname)
+    id_string = '_'.join(parts)
+    dset_name = fname.split(id_string)[0][:-1]
+    
     x = int(parts[-3].split("-")[0]) - blockoffset[0]
     X = int(parts[-3].split("-")[1]) - blockoffset[0]
     y = int(parts[-2].split("-")[0]) - blockoffset[1]
@@ -76,9 +79,9 @@ def split_filename(filename, blockoffset=[0, 0, 0]):
     z = int(parts[-1].split("-")[0]) - blockoffset[2]
     Z = int(parts[-1].split("-")[1]) - blockoffset[2]
 
-    dset_info = {'datadir': datadir, 'base': parts[0],
+    dset_info = {'datadir': datadir, 'base': dset_name,
                  'nzfills': len(parts[1].split("-")[0]),
-                 'postfix': '_'.join(parts[4:]),
+                 'postfix': id_string,
                  'x': x, 'X': X, 'y': y, 'Y': Y, 'z': z, 'Z': Z}
 
     return dset_info, x, X, y, Y, z, Z
