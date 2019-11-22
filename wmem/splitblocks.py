@@ -118,11 +118,15 @@ def get_template_string(im, blocksize, dset_name='', outputpath=''):  # FIXME
 
     comps = im.split_path(outputpath, fileformat=im.find_format(outputpath))
 
+    outputdir = comps['dir']
     if not outputpath:
-        blockdir = 'blocks_{:04d}'.format(blocksize[0])  # FIXME: this is the z-blocksize
-        outputdir = os.path.join(comps['dir'], blockdir)
+        blockdir = 'blocks_{:04d}'.format(blocksize[2])
+        outputdir = os.path.join(outputdir, blockdir)
 
     utils.mkdir_p(outputdir)
+
+    if '{}' in outputpath:  # template provided
+        return outputpath
 
     if im.format == '.h5':
         if dset_name:
