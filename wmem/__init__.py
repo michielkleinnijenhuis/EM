@@ -373,7 +373,7 @@ class Image(object):
     def h5_load(self, comm=None, load_data=True):
         """Load a h5 dataset."""
 
-        self.h5_open(self.permission, comm)  # TODO: specify permission at __init__ call
+        self.h5_open(self.permission, comm)
         h5path = self.h5_split(ext=self.format)
         self.ds = self.file[h5path['int']]
         self.dims = self.ds.shape
@@ -1115,9 +1115,14 @@ class Image(object):
 
     def ims_create(self, comm=None):
 
+        # FIXME: datatype needs to be equal to the other channels
+        datatype = self.dtype
+        if datatype == 'float64':
+            datatype = 'float32'
         self.load(comm, load_data=False)
         self.dims = self.ims_get_dims()
 
+        # TODO: create new file, copy all but channel data, and use ref from other??
         ch0_idx = 0
         ch0_name = 'Channel {}'.format(ch0_idx)
         ch0_info = '/DataSetInfo/{}'.format(ch0_name)
@@ -1786,13 +1791,15 @@ class wmeMPI(object):
                             self.mpi_dtype],
                            self.series, root=0)
 
-    def set_blocks(self, im, blocksize, margin=[], blockrange=[], path_tpl=''):
+    def set_blocks(self, im, blocksize, margin=[], blockrange=[], path_tpl='', imslices=[]):
         """Create a list of dictionaries with data block info.
 
         TODO: step?
         """
 
-        shape = list((len(range(*slc.indices(slc.stop))) for slc in im.slices))
+        imslices = imslices or im.slices
+
+        shape = list((len(range(*slc.indices(slc.stop))) for slc in imslices))
 
         if not blocksize:
             blocksize = [dim for dim in shape]
@@ -1804,7 +1811,7 @@ class wmeMPI(object):
 
         starts, stops, = {}, {}
         for i, dim in enumerate(im.axlab):
-            starts[dim], stops[dim] = self.get_blockbounds(im.slices[i].start,
+            starts[dim], stops[dim] = self.get_blockbounds(imslices[i].start,
                                                            shape[i],
                                                            blocksize[i],
                                                            margin[i])
