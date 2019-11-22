@@ -116,12 +116,7 @@ def write_block(im, block, protective=False, comm=None,
 
 def get_template_string(im, blocksize, dset_name='', outputpath=''):  # FIXME
 
-    comps = im.split_path(outputpath, fileformat='.h5')  # FIXME: detect format of output
-
-    if '{}' in outputpath:  # template provided
-        template_string = outputpath
-        utils.mkdir_p(comps['dir'])
-        return template_string
+    comps = im.split_path(outputpath, fileformat=im.find_format(outputpath))
 
     if not outputpath:
         blockdir = 'blocks_{:04d}'.format(blocksize[0])  # FIXME: this is the z-blocksize

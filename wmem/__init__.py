@@ -79,29 +79,30 @@ class Image(object):
     def set_format(self):
         """Set the format of the image."""
 
-        if os.path.isdir(self.path):
-            files = sorted(glob.glob(os.path.join(self.path, '*')))
+        self.format = self.find_format(self.path)
+
+    def get_format(self, path_in):
+        """Set the format of the image."""
+
+        if os.path.isdir(path_in):
+            files = sorted(glob.glob(os.path.join(path_in, '*')))
             if files:
                 path = files[0]
             else:
-                path = self.path
-#             if '.tif' in path:
-            self.format = '.tifs'
-            return
+                path = path_in
+            return '.tifs'
         else:
-            path = self.path
+            path = path_in
 
         for ext in ['.h5', '.nii', '.dm3', '.tif', '.ims']:
             if ext in path:
-                self.format = ext
-                return
+                return ext
 
         for ext in ['.czi', '.lif']:  # ETC
             if ext in path:
-                self.format = '.pbf'
-                return
+                return '.pbf'
 
-        self.format = '.dat'
+        return '.dat'
 
     def output_check(self, outpaths, save_steps=True, protective=False):
         """Check output paths for writing."""
