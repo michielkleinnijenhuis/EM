@@ -116,7 +116,7 @@ def write_block(im, block, protective=False, comm=None,
 
 def get_template_string(im, blocksize, dset_name='', outputpath=''):  # FIXME
 
-    comps = im.split_path(outputpath, fileformat=im.find_format(outputpath))
+    comps = im.split_path(outputpath, fileformat=im.get_format(outputpath))
 
     outputdir = comps['dir']
     if not outputpath:
