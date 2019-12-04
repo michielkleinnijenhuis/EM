@@ -9,6 +9,8 @@ import argparse
 
 import numpy as np
 
+from skimage.transform import resize
+
 from wmem import parse, utils, Image, wmeMPI, done, get_image
 from wmem.splitblocks import get_template_string
 
@@ -30,6 +32,7 @@ def main(argv):
         args.blockmargin,
         args.blockrange,
         args.volidxs,
+        args.bias_image,
         args.outputfile,
         args.save_steps,
         args.protective,
@@ -44,6 +47,7 @@ def combine_vols(
         blockmargin=[],
         blockrange=[],
         vol_idxs=[],
+        bias_image='',
         outputpath='',
         save_steps=False,
         protective=False,
@@ -55,6 +59,12 @@ def combine_vols(
 
     # Open the inputfile for reading.
     im = get_image(image_in, comm=mpi.comm, dataslices=dataslices, load_data=False)
+
+    if bias_image:
+        bf = Image(bias_image, permission='r')
+        bf.load(load_data=False)
+    else:
+        bf = None
 
     # Prepare for processing with MPI.
     tpl = get_template_string(im, blocksize=blocksize, dset_name='', outputpath=outputpath)
@@ -84,7 +94,7 @@ def combine_vols(
         block = mpi.blocks[i]
         print('Processing blocknr {:4d} with id: {}'.format(i, block['id']))
 
-        out = add_volumes(im, block, vol_idxs)
+        out = add_volumes(im, block, vol_idxs, bf)
         mean = True
         if mean:
             out = out / len(vol_idxs)
@@ -110,7 +120,7 @@ def combine_vols(
     return mo
 
 
-def add_volumes(im, block, vol_idxs):
+def add_volumes(im, block, vol_idxs, bf=None):
     """"""
 
     c_axis = im.axlab.index('c')
@@ -123,11 +133,28 @@ def add_volumes(im, block, vol_idxs):
     if vol_idxs:
         for volnr in vol_idxs:
             im.slices[c_axis] = slice(volnr, volnr + 1, 1)
-            out += im.slice_dataset()
+            data = im.slice_dataset()
+            if bf is not None:
+                bias = get_bias_field_block(bf, im.slices)
+                bias = np.reshape(bias, data.shape)
+                data /= bias
+                data = np.nan_to_num(data, copy=False)
+            out += data
     else:
         out = np.sum(im.slice_dataset(), axis=c_axis)
 
     return out
+
+
+def get_bias_field_block(bf, slices, dsfacs=[1, 64, 64, 1]):
+
+    bf.slices = [slice(int(slc.start / ds), int(slc.stop / ds), 1)
+                 for slc, ds in zip(slices, dsfacs)]
+    bf_block = bf.slice_dataset()
+    outdims = list(bf.slices2shape(slices))
+    bias = resize(bf_block, outdims, preserve_range=True)
+
+    return bias
 
 
 def squeeze_slices(slices, axis):

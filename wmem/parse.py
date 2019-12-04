@@ -1272,6 +1272,13 @@ def parse_combine_vols(parser):
         help="""indices to the volumes"""
         )
 
+    parser.add_argument(
+        '--bias_image',
+        default='',
+        help="""path to hdf5 dataset <filepath>.h5/<...>/<dataset>:
+                """
+        )
+
     return parser
 
 
