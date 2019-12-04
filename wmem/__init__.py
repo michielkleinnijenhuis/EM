@@ -79,7 +79,7 @@ class Image(object):
     def set_format(self):
         """Set the format of the image."""
 
-        self.format = self.find_format(self.path)
+        self.format = self.get_format(self.path)
 
     def get_format(self, path_in):
         """Set the format of the image."""
