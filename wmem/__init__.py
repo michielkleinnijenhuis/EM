@@ -1395,11 +1395,13 @@ class Image(object):
     def close(self):
         """Close a file."""
 
-        if isinstance(self.file, h5py.File):
-            self.file.close()
-
-        if isinstance(self.file, bf.ImageReader):
-            self.file.close()
+        try:
+            if isinstance(self.file, h5py.File):
+                self.file.close()
+            if isinstance(self.file, bf.ImageReader):
+                self.file.close()
+        except:
+            pass
 
     def get_metadata(self, files, datatype, outlayout, elsize):
         """Get metadata from a dm3 file."""
