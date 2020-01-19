@@ -133,7 +133,7 @@ def add_volumes(im, block, vol_idxs, bf=None):
             im.slices[c_axis] = slice(volnr, volnr + 1, 1)
             data = im.slice_dataset()
             if bf is not None:
-                bias = get_bias_field_block(bf, im.slices)
+                bias = get_bias_field_block(bf, im.slices, data.shape)
                 bias = np.reshape(bias, data.shape)
                 data /= bias
                 data = np.nan_to_num(data, copy=False)
@@ -144,7 +144,7 @@ def add_volumes(im, block, vol_idxs, bf=None):
     return out
 
 
-def get_bias_field_block(bf, slices, dsfacs=[1, 64, 64, 1]):
+def get_bias_field_block(bf, slices, outdims, dsfacs=[1, 64, 64, 1]):
 
     bf.slices = [slice(int(slc.start / ds), int(slc.stop / ds), 1)
                  for slc, ds in zip(slices, dsfacs)]
