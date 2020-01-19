@@ -55,6 +55,8 @@ def combine_vols(
         ):
     """Combine volumes by addition."""
 
+    write_to_single_file = False  # TODO?: make argument option
+
     mpi = wmeMPI(usempi)
 
     # Open the inputfile for reading.
@@ -72,15 +74,6 @@ def combine_vols(
     mpi.set_blocks(im, blocksize, blockmargin, blockrange, tpl)
     mpi.scatter_series()
 
-    print_series_only = blockrange[0] == -1
-    if print_series_only:
-        import math
-        nblocks = [math.ceil(dim/bs) for dim, bs in zip(im.dims, blocksize)]
-        for n in nblocks:
-            print(n)
-        return nblocks
-
-    write_to_single_file = False
     # Open the outputfile for writing and create the dataset or output array.
     props = im.get_props(protective=protective)
     props = im.squeeze_props(props=props, dim=4)
@@ -127,7 +120,6 @@ def add_volumes(im, block, vol_idxs, bf=None):
     c_axis = im.axlab.index('c')
     size = get_outsize(im, block['slices'])
 #     size = list(im.slices2shape(block['slices']))
-    print(size)
     out = np.zeros(size, dtype='float64')
 
     im.slices = block['slices']
