@@ -70,7 +70,10 @@ def combine_vols(
         bf = None
 
     # Prepare for processing with MPI.
-    tpl = get_template_string(im, blocksize=blocksize, dset_name='', outputpath=outputpath)
+    if not write_to_single_file:
+        tpl = get_template_string(im, blocksize=blocksize, dset_name='', outputpath=outputpath)
+    else:
+        tpl = ''
     mpi.set_blocks(im, blocksize, blockmargin, blockrange, tpl)
     mpi.scatter_series()
 
