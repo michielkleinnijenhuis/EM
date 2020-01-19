@@ -79,8 +79,10 @@ def combine_vols(
 
     # Open the outputfile for writing and create the dataset or output array.
     props = im.get_props(protective=protective)
-    props = im.squeeze_props(props=props, dim=4)
-    props = im.squeeze_props(props=props, dim=3)
+    if len(props['shape']) == 5:
+        props = im.squeeze_props(props=props, dim=4)
+    if len(props['shape']) == 4:
+        props = im.squeeze_props(props=props, dim=3)
 #     props['shape'] = get_outsize(im, mpi.blocks[0]['slices'])
     if write_to_single_file:
         mo = Image(outputpath, **props)
