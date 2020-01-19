@@ -143,7 +143,7 @@ def get_bias_field_block(bf, slices, dsfacs=[1, 64, 64, 1]):
 
     bf.slices = [slice(int(slc.start / ds), int(slc.stop / ds), 1)
                  for slc, ds in zip(slices, dsfacs)]
-    bf_block = bf.slice_dataset()
+    bf_block = bf.slice_dataset().astype('float32')
     outdims = list(bf.slices2shape(slices))
     bias = resize(bf_block, outdims, preserve_range=True)
 
