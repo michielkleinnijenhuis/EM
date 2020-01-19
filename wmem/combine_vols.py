@@ -160,8 +160,11 @@ def squeeze_slices(slices, axis):
 
 def get_outsize(im, slices):
 
-    slcs = squeeze_slices(slices, im.axlab.index('t'))
-    slcs = squeeze_slices(slcs, im.axlab.index('c'))
+    slcs = list(slices)
+    if 't' in im.axlab:
+        slcs = squeeze_slices(slices, im.axlab.index('t'))
+    if 'c' in im.axlab:
+        slcs = squeeze_slices(slcs, im.axlab.index('c'))
     size = list(im.slices2shape(slcs))
 
     return size
