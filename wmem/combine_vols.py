@@ -58,7 +58,8 @@ def combine_vols(
     mpi = wmeMPI(usempi)
 
     # Open the inputfile for reading.
-    im = get_image(image_in, comm=mpi.comm, dataslices=dataslices, load_data=False)
+    im = Image(image_in, permission='r')
+    im.load(load_data=False)
 
     if bias_image:
         bf = Image(bias_image, permission='r')
