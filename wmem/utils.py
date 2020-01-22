@@ -16,6 +16,8 @@ import glob
 
 import numpy as np
 
+sys.stdout = open(os.devnull, 'w')
+
 try:
     from skimage.io import imread, imsave
 except ImportError:
@@ -31,6 +33,8 @@ try:
     from mpi4py import MPI
 except ImportError:
     print("mpi4py could not be loaded")
+
+sys.stdout = sys.__stdout__
 
 import h5py
 
