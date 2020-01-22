@@ -247,6 +247,8 @@ class Image(object):
             comps['dir'] = filepath
             return comps
 
+        if fileformat == '.dat':
+            return {'dir': '', 'ext': '.dat', 'base': '', 'fname': '', 'file': ''}
         if fileformat == '.tifs':
             comps['ext'] = 'tif'
         elif fileformat == '.pbf':
@@ -361,7 +363,9 @@ class Image(object):
                    '.ims': self.ims_load,
                    '.pbf': self.pbf_load,
                    '.tif': self.pbf_load,
-                   '.tifs': self.tifs_load}
+                   '.tifs': self.tifs_load,
+                   '.dat': self.dat_load,
+                   }
 
         formats[self.format](comm, load_data)
 
@@ -369,6 +373,11 @@ class Image(object):
 
         self.elsize = self.get_elsize()
         self.axlab = self.get_axlab()
+
+    def dat_load(self, comm=None, load_data=True):
+        """Load a h5 dataset."""
+
+        pass
 
     def h5_load(self, comm=None, load_data=True):
         """Load a h5 dataset."""
@@ -751,7 +760,7 @@ class Image(object):
         elif self.format == '.ims':
             ndim = len(self.dims)
         elif self.format == '.dat':
-            ndim = self.ds.ndim
+            ndim = len(self.dims)
 
         return ndim
 
