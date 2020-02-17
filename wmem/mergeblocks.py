@@ -139,6 +139,8 @@ def mergeblocks(
     im.close()
     mo.close()
 
+    return mo
+
 
 def process_block(image_in, ndim, blockreduce, func,
                   blockoffset, blocksize, margin, fullsize,
