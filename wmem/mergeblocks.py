@@ -112,6 +112,7 @@ def mergeblocks(
     else:
         props['shape'] = outsize
         mo = LabelImage(outputpath, **props)
+        mo.create(comm=mpi.comm)
 
     mpi.blocks = [{'path': image_in} for image_in in images_in]
     mpi.nblocks = len(images_in)
