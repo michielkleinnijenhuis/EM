@@ -1236,7 +1236,6 @@ class Image(object):
         self.write_block(self.ds, data, slices)
 
     def ims_write(self, data, slices):
-        # FIXME: timepoints not implemented
         # data: rl0 unpadded block size (margins removed)
         # slices: rl0 block slices into full unpadded dataset
 
@@ -1251,11 +1250,12 @@ class Image(object):
             arr = [c for c in formatstring.format(val)]
             ch.attrs[name] = np.array(arr, dtype='|S1')
 
-        chn_idx = self.dims[3] - 1
+        chn_idx = slices[3].start
         chn_name = 'Channel {}'.format(chn_idx)
 
         nr = len(self.file['/DataSet'])
 
+        # FIXME: timepoints not implemented
         for tp_idx in range(0, self.dims[4]):
 
             for rl_idx in range(0, nr):
@@ -1264,8 +1264,7 @@ class Image(object):
                 tp = rl['TimePoint {}'.format(tp_idx)]
 
                 chn = tp[chn_name]
-                dsn = chn['Data']
-                hgn = chn['Histogram']
+                dsn = chn['Data']  # padded dataset
 
                 # unpadded shape
                 tags = ['ImageSizeZ', 'ImageSizeY', 'ImageSizeX']
@@ -1278,21 +1277,25 @@ class Image(object):
                 target_shape = list(self.slices2shape(slices))
 
                 # downsample data
+                  # TODO: downsample_blockwise?
                 data_rl = data[::ds_t[0],::ds_t[1],::ds_t[2]]
                 data_rl = data_rl[:ZYX[0], :ZYX[1], :ZYX[2]]
+
                 # define output slices
                 slcs_out = [slices2dsslices(slc.start, step, shape)
                             for slc, step, shape in zip(slices, ds_t, target_shape)]
                 # write the block
                 self.write_block(dsn, data_rl, slcs_out)
 
-                # write histogram  # FIXME: histogram of full dataset on close only?
-                hist = np.histogram(data, bins=hgn.shape[0])
+                # write histogram
+                # FIXME!: histogram of full dataset on close only
+                hgn = chn['Histogram']
+                hist = np.histogram(data_rl, bins=hgn.shape[0])
                 hgn[:] = hist[0]
                 # write histogram attributes
                 attributes = {
-                    'HistogramMin': (np.amin(hist[0]), '{:.3f}'),
-                    'HistogramMax': (np.amax(hist[0]), '{:.3f}'),
+                    'HistogramMin': (np.amin(hist[1]), '{:.3f}'),
+                    'HistogramMax': (np.amax(hist[1]), '{:.3f}'),
                 }
                 for k, v in attributes.items():
                     write_attribute(chn, k, v[0], v[1])
