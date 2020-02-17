@@ -746,7 +746,7 @@ class Image(object):
         """Return the cardinality of the dataset."""
 
         if self.format == '.h5':
-            ndim = self.ds.ndim
+            ndim = len(self.dims)
         elif self.format == '.nii':
             ndim = len(self.file.header.get_data_shape())
         elif self.format == '.tif':
