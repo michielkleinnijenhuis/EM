@@ -1,6 +1,9 @@
-/bin
 *.pyc
+/bin
+/snippets
 /EM.egg-info/
 /.settings/
 /.DS_Store
+/.project
 /.pydevproject
+/.pylintrc
