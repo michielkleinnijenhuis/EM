@@ -1314,6 +1314,17 @@ class Image(object):
                 for k, v in attributes.items():
                     write_attribute(chn, k, v[0], v[1])
 
+                #hgn1024 = chn['Histogram1024']
+                #hist1024 = np.histogram(data_rl, bins=hgn1024.shape[0])
+                #hgn1024[:] = hist1024[0]
+                # write histogram attributes
+                #attributes = {
+                #    'HistogramMin1024': (np.amin(hist1024[1]), '{:.3f}'),
+                #    'HistogramMax1024': (np.amax(hist1024[1]), '{:.3f}'),
+                #}
+                #for k, v in attributes.items():
+                #    write_attribute(chn, k, v[0], v[1])
+
     def nii_write(self, data, slices):
         """Write data to a nifti dataset."""
 
