@@ -1263,14 +1263,15 @@ class Image(object):
         chn_idx = slices[3].start
         chn_name = 'Channel {}'.format(chn_idx)
 
-        nr = len(self.file['/DataSet'])
+        ds = self.ds.parent
+        nr = len(ds)
 
         # FIXME: timepoints not implemented
         for tp_idx in range(0, self.dims[4]):
 
             for rl_idx in range(0, nr):
 
-                rl = self.file['/DataSet/ResolutionLevel {}'.format(rl_idx)]
+                rl = ds['ResolutionLevel {}'.format(rl_idx)]
                 tp = rl['TimePoint {}'.format(tp_idx)]
 
                 chn = tp[chn_name]
@@ -1294,6 +1295,9 @@ class Image(object):
                 # define output slices
                 slcs_out = [slices2dsslices(slc.start, step, shape)
                             for slc, step, shape in zip(slices, ds_t, target_shape)]
+                slcs_out = [slice(slc_out.start, slc_out.start + dr, 1)
+                            for slc_out, dr in zip(slcs_out, data_rl.shape)]
+
                 # write the block
                 self.write_block(dsn, data_rl, slcs_out)
 
