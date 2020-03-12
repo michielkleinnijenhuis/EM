@@ -538,7 +538,7 @@ class Image(object):
         props = {'shape': shape or list(self.slices2shape()),
                  'elsize': elsize or list(self.elsize),
                  'axlab': axlab or str(self.axlab),
-                 'chunks': chunks or list(self.chunks),  # FIXME: can be None
+                 'chunks': chunks or self.chunks,  # FIXME: can be None
                  'slices': slices or list(self.slices),
                  'dtype': dtype or self.dtype,
                  'protective': protective or self.protective}
@@ -550,10 +550,10 @@ class Image(object):
 
     def squeeze_props(self, props=None, dim=None):
 
+        # FIXME: list returned for axlab
         if props is None:
             props = self.get_props()
 
-        # FIXME: make it all with shape=1
         if dim is None:
             for ax in 'ct':
                 if ax in props['axlab']:
@@ -644,7 +644,7 @@ class Image(object):
 
     def slice_dataset_ims(self, rs0_group, slices):
         """
-        
+
         NOTE: this is a zero-padded version of the dataset.
         """
 
@@ -682,9 +682,13 @@ class Image(object):
         else:
             c_step = None
 
-        t_iter_slc = islice(rs0_group.items(), t_start, t_stop, t_step)
+        tp_names = ['TimePoint {}'.format(i) for i in range(len(rs0_group))]
+        timepoints_sorted = [(tp_name, rs0_group[tp_name]) for tp_name in tp_names]
+        t_iter_slc = islice(timepoints_sorted, t_start, t_stop, t_step)
         for tp_idx, (_, tp) in enumerate(t_iter_slc):
-            c_iter_slc = islice(tp.items(), c_start, c_stop, c_step)
+            ch_names = ['Channel {}'.format(i) for i in range(len(tp))]
+            channels_sorted = [(ch_name, tp[ch_name]) for ch_name in ch_names]
+            c_iter_slc = islice(channels_sorted, c_start, c_stop, c_step)
             for ch_idx, (_, ch) in enumerate(c_iter_slc):
 
                 data_tmp = ch['Data'][slcs[0], slcs[1], slcs[2]]
