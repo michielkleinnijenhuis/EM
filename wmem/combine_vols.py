@@ -85,6 +85,7 @@ def combine_vols(
         props = im.squeeze_props(props=props, dim=3)
 #     props['shape'] = get_outsize(im, mpi.blocks[0]['slices'])
     if write_to_single_file:
+        props['axlab'] = ''.join(props['axlab'])
         mo = Image(outputpath, **props)
         mo.create(comm=mpi.comm)
         in2out_offset = -np.array([slc.start for slc in mo.slices])
@@ -149,7 +150,7 @@ def get_bias_field_block(bf, slices, outdims, dsfacs=[1, 64, 64, 1]):
     bf.slices = [slice(int(slc.start / ds), int(slc.stop / ds), 1)
                  for slc, ds in zip(slices, dsfacs)]
     bf_block = bf.slice_dataset().astype('float32')
-    outdims = list(bf.slices2shape(slices))
+#     outdims = list(bf.slices2shape(slices))
     bias = resize(bf_block, outdims, preserve_range=True)
 
     return bias
