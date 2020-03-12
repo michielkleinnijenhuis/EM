@@ -1128,7 +1128,6 @@ class Image(object):
 
     def ims_create(self, comm=None):
 
-        # FIXME: datatype needs to be equal to the other channels
         datatype = self.dtype
         if datatype == 'float64':
             datatype = 'float32'
@@ -1153,20 +1152,27 @@ class Image(object):
 
                 rl = self.file['/DataSet/ResolutionLevel {}'.format(rl_idx)]
                 tp = rl['TimePoint {}'.format(tp_idx)]
-        
+
                 ch0 = tp['Channel {}'.format(ch0_idx)]
                 ds0 = ch0['Data']
                 hg0 = ch0['Histogram']
+                #hg00 = ch0['Histogram1024']
 
                 chn = tp.create_group(chn_name)
-                dsn = chn.create_dataset_like('Data', ds0)
+                dsn = chn.create_dataset('Data',
+                                         shape=ds0.shape,
+                                         dtype=datatype,
+                                         chunks=ds0.chunks,
+                                         compression=ds0.compression,
+                                         )
                 hgn = chn.create_dataset_like('Histogram', hg0)
+                #hgn = chn.create_dataset_like('Histogram1024', hg00)
 
                 for dim in 'XYZ':
                     isd = 'ImageSize{}'.format(dim)
                     chn.attrs[isd] = ch0.attrs[isd]
 
-                # TODO?: self.ds = 
+                # TODO?: self.ds =
         self.dims[3] += 1
 
     def nii_create(self, comm=None):
