@@ -655,7 +655,7 @@ class Image(object):
                 slices[self.axlab.index('t')]]
 
         dims = [len(range(*slc.indices(slc.stop))) for slc in slcs]
-        data = np.empty(dims)
+        data = np.empty(dims, dtype=self.dtype)
 
         if slcs[4].start is not None:
             t_start = int(slcs[4].start)
