@@ -477,8 +477,8 @@ function deployed_eed {
 function get_cmd_dm3convert {
     # Get the command for converting dm3 files.
 
-    echo python -W ignore $scriptdir/wmem/series2stack.py \
-        $dm3dir $datadir \
+    echo python -W ignore "$scriptdir/wmem/series2stack.py" \
+        "$dm3dir" "$datadir" \
         -r '*.dm3' -O '.tif' -d 'uint16' -M
 
 }
@@ -487,8 +487,8 @@ function get_cmd_dm3convert {
 function get_cmd_downsample_slices {
     # Get the command for in-plane downsampling of tifs.
 
-    echo python -W ignore $scriptdir/wmem/downsample_slices.py \
-        $datadir/$subdir $datadir/${subdir}_$dspf$ds \
+    echo python -W ignore "$scriptdir/wmem/downsample_slices.py" \
+        "$datadir/$subdir" "$datadir/${subdir}_$dspf$ds" \
         -r '*.tif' -f $ds -M
 
 }
@@ -743,10 +743,10 @@ function get_cmd_h52nii {
 
     dataroot=$1
 
-    echo python -W ignore $scriptdir/wmem/stack2stack.py \
-        $datadir/$dataroot$ipf.h5/$ids \
-        $datadir/$dataroot${ipf}_$ods.nii.gz \
-        $args
+    echo python -W ignore "$scriptdir/wmem/stack2stack.py" \
+        "$datadir/$dataroot$ipf.h5/$ids" \
+        "$datadir/$dataroot${ipf}_$ods.nii.gz" \
+        "$args"
 
 }
 
@@ -885,11 +885,11 @@ function get_cmd_smooth {
 function get_cmd_watershed_ics {
     # Get the command for .
 
-    echo python -W ignore $scriptdir/wmem/watershed_ics.py \
-        $datadir/blocks_$bs/$datastem$ipf.h5/$ids \
-        $datadir/blocks_$bs/$datastem$opf.h5/$ods \
-        --mask_in $datadir/blocks_$bs/$datastem$mpf.h5/$mds \
-        $args
+    echo python -W ignore "$scriptdir/wmem/watershed_ics.py" \
+        "$datadir/blocks_$bs/$datastem$ipf.h5/$ids" \
+        "$datadir/blocks_$bs/$datastem$opf.h5/$ods" \
+        --mask_in "$datadir/blocks_$bs/$datastem$mpf.h5/$mds" \
+        "$args"
 
 }
 

@@ -76,11 +76,18 @@ def stack2stack(
     # Convert datatype  # TODO: proper general writing astype
     if uint8conv:
         from skimage.util.dtype import convert
+        #from skimage.util.dtype import convert, img_as_float, img_as_ubyte
+        # if data.dtype == np.float:
+        #     print('got floats')
+        #     data = img_as_float(data)
+        #data = data.astype('uint32')
         data = convert(data, np.dtype(datatype), force_copy=False)
         props['dtype'] = datatype
 
     outlayout = outlayout or props['axlab']
     in2out = [props['axlab'].index(l) for l in outlayout]
+#     props['chunks'] = list(props['chunks'])
+#     print(props)
     props, data = remove_singleton(im, props, data, outlayout)
     props, data = permute_axes(im, props, data, in2out)
 

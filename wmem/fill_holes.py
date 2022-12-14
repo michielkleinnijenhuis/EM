@@ -187,9 +187,20 @@ def fill_holes_m5(labels, selem=[1, 7, 7], mpi=None):
     mpi.nblocks = len(rp)
     mpi.scatter_series()  # randomize=True
 
+    # FIXME: don't write each label seperately; NOTE mpi
+    out = np.zeros_like(labels.ds)
+
 #     for prop in rp:
     for i in mpi.series:
         prop = rp[i]
+
+        # FIXME: these were somehow bad labels for B-NT-S10-2f_ROI_00
+        # binary_closing gives memory_alloc error
+        # skipping hole-filling for now
+        # NOTE: might be fixed by not writing after each label???
+        if 'B-NT-S10-2f_ROI_00' in labels.path:
+            if prop.label in [873, 2415, 9578, 9794]:
+                continue
 
         labels.slices = get_region_slices_around(labels, prop, selem)[0]
         print(prop.label, labels.slices)

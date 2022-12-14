@@ -82,6 +82,9 @@ def combine_labels(
             labels = labels1 - labels2
         elif method == 'mask':
             mask = labels2.astype('bool')
+            invert = False
+            if invert:
+                mask = ~mask
             labels = np.copy(labels1)
             labels[mask] = 0
 

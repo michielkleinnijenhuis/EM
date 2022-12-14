@@ -107,8 +107,17 @@ def mergeblocks(
         outsize = list(outsize) + [im.ds.shape[3]]  # TODO: flexible insert
 
     if outputpath.endswith('.ims'):
-        mo = LabelImage(outputpath)
-        mo.create(comm=mpi.comm)
+        mo = LabelImage(outputpath, permission='r+')
+        mo.load(comm=mpi.comm, load_data=False)
+        channel = 0
+        if channel >= 0 and channel < mo.dims[3]:
+            ch = channel
+        else:
+            mo.create(comm=mpi.comm)
+            ch = mo.dims[3] - 1
+        mo.slices[3] = slice(ch, ch + 1, 1)
+        #cpath = 'DataSetInfo/Channel {}'.format(ch)
+        #mo.file[cpath].attrs['Name'] = np.array([c for c in name], dtype='|S1')
     else:
         props['shape'] = outsize
         mo = LabelImage(outputpath, **props)
@@ -171,6 +180,9 @@ def process_block(image_in, ndim, blockreduce, func,
              (not neighbourmerge) and
              (not blockreduce))):
         data = im.slice_dataset()
+        #datatype = 'uint16'
+        #from skimage.util.dtype import convert
+        #data = convert(data, np.dtype(datatype), force_copy=False)
         mo.write(data)
         im.close()
         return
@@ -297,7 +309,12 @@ def margins(fc, fC, blocksize, margin, fullsize):
         fc += margin
 
     if fC == fullsize:
-        bC = bc + blocksize  # FIXME
+        bC = bc + blocksize + (fullsize % blocksize)
+#         bC = bc + blocksize + 8 ==>>
+#         failed block 001: /Users/mkleinnijenhuis/PMCdata/Kidney/190909_RL57_FUnGI_16Bit_25x_zstack1-Masked_T001_Z001_C01/blocks_0500/190909_RL57_FUnGI_16Bit_25x_zstack1-Masked_T001_Z001_C01_00000-00564_00436-01024_00000-00150.h5/memb/sum
+#         Can't broadcast (150, 508, 500) -> (150, 524, 500)
+#         WHY 24??? ==>> fullsize is 1024; blocksize is 500; 3x3=9 blocks are created; blocks that fail are 1 3 4 5 7, block sthat succeeed are 0 2 6 8;
+
     else:
         bC = bc + blocksize
         fC -= margin
@@ -314,35 +331,69 @@ def get_overlap(side, im, mo, data, ixyz, oxyz, margin=[0, 0, 0]):
 
     data_section = None
     nb_section = None
+    ds_in = data
+    ds_out = mo.ds
 
     if (side == 'xmin') & (ox > 0):
         data_section = ds_in[iz:iZ, iy:iY, :margin[2]]
         nb_section = ds_out[oz:oZ, oy:oY, ox-margin[2]:ox]
+
+#         im.slices[0] = slice(iz, iZ, 1)
+#         im.slices[1] = slice(iy, iY, 1)
+#         im.slices[2] = slice(0, margin[2], 1)
+#
+#         mo.slices[0] = slice(oz, oZ, 1)
+#         mo.slices[1] = slice(oy, oY, 1)
+#         mo.slices[2] = slice(ox-margin[2], ox, 1)
+
     elif (side == 'xmax') & (oX < ds_out.shape[2]):
+
         data_section = ds_in[iz:iZ, iy:iY, -margin[2]:]
         nb_section = ds_out[oz:oZ, oy:oY, oX:oX+margin[2]]
+
     elif (side == 'ymin') & (oy > 0):
         data_section = ds_in[iz:iZ, :margin[1], ix:iX]
         nb_section = ds_out[oz:oZ, oy-margin[1]:oy, ox:oX]
+
     elif (side == 'ymax') & (oY < ds_out.shape[1]):
         data_section = ds_in[iz:iZ, -margin[1]:, ix:iX]
         nb_section = ds_out[oz:oZ, oY:oY+margin[1], ox:oX]
+
     elif (side == 'zmin') & (oz > 0):
         data_section = ds_in[:margin[0], iy:iY, ix:iX]
         nb_section = ds_out[oz-margin[0]:oz, oy:oY, ox:oX]
+
     elif (side == 'zmax') & (oZ < ds_out.shape[0]):
         data_section = ds_in[-margin[0]:, iy:iY, ix:iX]
         nb_section = ds_out[oZ:oZ+margin[0], oy:oY, ox:oX]
 
+#     data_section = im.slice_dataset()
+#     nb_section = im.slice_dataset()
+
     return data_section, nb_section
 
 
-def merge_overlap(fw, ds_in, ds_out, ixyz, oxyz, margin=[0, 0, 0]):
+def merge_overlap(fw, im, mo, data, margin=[0, 0, 0]):
     """Adapt the forward map to merge neighbouring labels."""
+
+    ixyz = (im.slices[2].start,
+            im.slices[2].stop,
+            im.slices[1].start,
+            im.slices[1].stop,
+            im.slices[0].start,
+            im.slices[0].stop,
+            )
+    oxyz = (im.slices[2].start,
+            im.slices[2].stop,
+            im.slices[1].start,
+            im.slices[1].stop,
+            im.slices[0].start,
+            im.slices[0].stop,
+            )
 
     for side in ['xmin', 'xmax', 'ymin', 'ymax', 'zmin', 'zmax']:
 
-        ds, ns = get_overlap(side, ds_in, ds_out, ixyz, oxyz, margin)
+        ds, ns = get_overlap(side, im, mo, data, ixyz, oxyz, margin)
 
         if ns is None:
             continue

@@ -15,7 +15,7 @@ try:
 except ImportError:
     print("mpi4py could not be loaded")
 
-from wmem import parse, utils, wmeMPI, Image
+from wmem import parse, utils, wmeMPI, Image, done
 from wmem.stack2stack import remove_singleton, permute_axes
 
 
@@ -75,37 +75,49 @@ def splitblocks(
     # Write blocks to the outputfile(s).
     for i in mpi.series:
         block = mpi.blocks[i]
+        print('Processing blocknr {:4d} with id: {}'.format(i, block['id']))
 
-        write_block(im, block, protective, comm=mpi.comm,
-                    outlayout=outlayout, chunksize=chunksize)
+        props = {}
+        props['axlab'] = outlayout or str(im.axlab)
+        props['elsize'] = list(im.elsize)
+        if chunksize is not None:
+            props['chunks'] = list(chunksize)
+        else: 
+            props['chunks'] = list(im.chunks)
+
+        write_block(im, block, props, comm=mpi.comm)
 
     im.close()
+    done()
 
 
-def write_block(im, block, protective=False, comm=None,
-                outlayout=None, chunksize=[]):
+def write_block(im, block, props, comm=None):
     """Write the block to file."""
 
     im.slices = block['slices']
-    im.load()
-    props = im.get_props()
     data = im.slice_dataset(squeeze=False)
 
-    props['axlab'] = str(props['axlab'])
-    props['elsize'] = list(props['elsize'])
-    props['shape'] = list(im.slices2shape())
-    props['chunks'] = list(chunksize) or props['chunks']
-    props['slices'] = list(props['slices'])
+    if im.format == '.ims':
+        axlab = 'zyxct'
+    else:
+        axlab = str(im.axlab)
 
-    outlayout = outlayout or props['axlab']
-    in2out = [props['axlab'].index(l) for l in outlayout]
+    in2out_data = [axlab.index(l) for l in props['axlab']]
+    data = np.transpose(data, in2out_data)
+    props['shape'] = list(data.shape)
 
-    props, data = remove_singleton(im, props, data, outlayout)
-    props, data = permute_axes(im, props, data, in2out)
+    in2out_props = [im.axlab.index(l) for l in props['axlab']]
+    for prop in ['elsize', 'chunks']:
+        if props[prop] is not None:
+            props[prop] = [props[prop][i] for i in in2out_props]
 
-    if any(np.array(props['chunks']) > np.array(props['shape'])):
-        props['chunks'] = True
+    props, data = remove_singleton(im, props, data, props['axlab'])
 
+    for i, (ch, sh) in enumerate(zip(props['chunks'], props['shape'])):
+        if ch > sh:
+            props['chunks'][i] = sh
+
+    props['dtype'] = data.dtype
     mo = Image(block['path'], **props)
     mo.create(comm)
     mo.slices = None

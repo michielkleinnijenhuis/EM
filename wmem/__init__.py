@@ -555,26 +555,20 @@ class Image(object):
             props = self.get_props()
 
         if dim is None:
-            for ax in 'ct':
-                if ax in props['axlab']:
-                    props = self.squeeze_dim(props, props['axlab'].index(ax))
-        else:
-            props = self.squeeze_dim(props, dim)
-
-        return props
-
-    def squeeze_dim(self, props, dim):
+            if 'c' in self.axlab:
+                dim = self.axlab.index('c')
+            else:
+                return props
 
         squeezable = ['shape', 'elsize', 'axlab', 'chunks', 'slices']
         for prop in squeezable:
 
-            if prop in props.keys():
-                val = props[prop]
-                if val is not None:
-                    props[prop] = list(val)
-                    del props[prop][dim]
-                else:
-                    props[prop] = val
+            val = props[prop]
+            if val is not None:
+                props[prop] = list(val)
+                del props[prop][dim]
+            else:
+                props[prop] = val
 
         return props
 
@@ -1375,6 +1369,9 @@ class Image(object):
         slcoffset = slices[slicedim].start
 
         self.mkdir_p()
+#         ch = slices[3].start
+#         tile=0
+#         chstring = '_ch{:02d}_tile{:04d}'.format(ch, tile)
         fstring = '{{:0{0}d}}'.format(nzfills)
 
         if data.dtype == 'bool':
@@ -1399,6 +1396,7 @@ class Image(object):
                 slcdata = data[:, :, slc]
 
             filepath = os.path.join(self.path, fstring.format(slcno) + ext)
+#             filepath = os.path.join(self.path, fstring.format(slcno) + chstring + ext)
             imsave(filepath, slcdata)
 
     def dat_write(self, data, slices):

@@ -123,7 +123,7 @@ def vol2im(vol, load_data=False):
 
     fname = '{}{}.h5'.format(vol['dataset'], vol['ipf'])
     inputfile = os.path.join(vol['datadir'], '{}'.format(fname))
-    inputpath = '{}/{}'.format(fname, vol['ids'])
+    inputpath = '{}/{}'.format(inputfile, vol['ids'])
     im = utils.get_image(inputpath, imtype=vol['imtype'], load_data=load_data)
 
     return im
@@ -165,19 +165,30 @@ def get_datarange_from_vol(vol):
     return datarange, ulabels
 
 
-def create_neuroblender_texture(vol, fw=[], relabel=False,
+def create_neuroblender_textures(vol, fw=[], relabel=False,
                                 translations=[0, 0, 0],
                                 zslices=0):
 
     # read input
     im = vol2im(vol)
 
+    if len(im.dims) == 4:
+        for vol_idx in range(0, im.dims[3]):
+            create_neuroblender_texture(vol, im, fw, relabel, translations, zslices, vol_idx)
+
+    im.close()
+
+
+def create_neuroblender_texture(vol, im, fw=[], relabel=False,
+                                translations=[0, 0, 0],
+                                zslices=0, vol_idx=-1):
+
     # prep output
     comps = im.split_path()
     props = im.get_props(protective=False)
     fname = '{}.h5'.format(comps['fname'])
     outputpath = os.path.join(comps['dir'], 'blender', fname, comps['int'][1:])
-    datapath = os.path.join(outputpath, 'IMAGE_SEQUENCE', 'vol0000')
+    datapath = os.path.join(outputpath, 'IMAGE_SEQUENCE', 'vol{:04d}'.format(vol_idx))
     utils.mkdir_p(datapath)
     mo = LabelImage(datapath, **props)
     mo.format = '.tifs'
@@ -190,6 +201,8 @@ def create_neuroblender_texture(vol, fw=[], relabel=False,
 
         slc_max = min(slc_min + zslices, im.dims[0])
         im.slices[0] = mo.slices[0] = slice(slc_min, slc_max, 1)
+        if vol_idx > -1:
+            im.slices[3] = mo.slices[3] = slice(vol_idx, vol_idx+1, 1)
         data = im.slice_dataset()
 
         if vol['imtype'] == 'Label':
@@ -225,7 +238,7 @@ def create_neuroblender_texture(vol, fw=[], relabel=False,
         translations = vol['translations']
     texdict['affine'] = quickrigid(im, translations)
 
-    im.close()
+#     im.close()
 
     for pf in ('affine', 'dims', 'datarange', 'labels', 'fwmap'):
         np.save(os.path.join(outputpath, pf), np.array(texdict[pf]))
@@ -233,16 +246,17 @@ def create_neuroblender_texture(vol, fw=[], relabel=False,
     return fw
 
 
-def import_vvol(name, texdir, as_overlay=False, type=''):
+def import_vvol(name, texdir, as_overlay=False, imtype='', vol_idx=0):
     """"""
 
     nb = bpy.context.scene.nb
 
+    print(name)
     # import data
-    dir = os.path.join(texdir, 'IMAGE_SEQUENCE', 'vol0000')
+    dir = os.path.join(texdir, 'IMAGE_SEQUENCE', 'vol{:04d}'.format(vol_idx))
     is_label = False
     if as_overlay:
-        if type == 'Label':
+        if imtype == 'Label':
             is_label = True
     bpy.ops.nb.import_voxelvolumes(
         name=name,
@@ -263,6 +277,7 @@ def import_vvol(name, texdir, as_overlay=False, type=''):
     carveob = carver.carveobjects[-1]
     carveob.slicethickness = [0.8, 0.8, 0.8]
     return vvol, carver, carveob
+
 
 def setup_material(vvol, type='data'):
     vvol.rendertype = 'SURFACE'
@@ -348,6 +363,21 @@ def load_vol(vol):
     return vvol
 
 
+def load_channels(vol, ch=0):
+
+    h5_fname = '{}{}.h5'.format(vol['dataset'], vol['ipf'])
+    texdir = os.path.join(vol['datadir'], 'blender', h5_fname, vol['ids'])
+
+    name = '{}_ch{:02d}'.format(vol['name'], ch)
+    print(name)
+    vvol = import_vvol(name, texdir, vol_idx=ch)
+    print(vvol)
+
+    setup_material(vvol[0], type=vol['imtype'])
+
+    return vvol
+
+
 def blend_masks(mask1, mask2):
     # FIXME: assuming carver here with default name
     bpy.data.objects['{}.Carver'.format(mask1)].hide = True
@@ -403,6 +433,14 @@ def get_vols(these_vols, datadir, dataset):
             'dataset': dataset,
             'ipf': '',
             'ids': 'data',
+            'imtype': 'Data',
+            },
+        'ggm_sigma1_ds7': {
+            'name': 'ggm_sigma1_ds7',
+            'datadir': datadir,
+            'dataset': dataset,
+            'ipf': '',
+            'ids': 'ggm_sigma1',
             'imtype': 'Data',
             },
         'maskMM_ds7': {
@@ -504,6 +542,14 @@ def get_vols(these_vols, datadir, dataset):
             'dataset': dataset,
             'ipf': '_labels_labelMA_2D3D',
             'ids': 'labelMA_filledm3',
+            'imtype': 'Label',
+            },
+        'labelMAx0.5': {
+            'name': 'labelMAx0.5',
+            'datadir': datadir,
+            'dataset': dataset,
+            'ipf': '_labels_labelMF',
+            'ids': 'labelMAx0.5',
             'imtype': 'Label',
             },
         # Nodes of ranvier
